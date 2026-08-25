@@ -8,11 +8,16 @@
 // ─────────────────────────────────────────────
 
 import type {
+  BomItemRow,
   ConsumptionEntryRow,
+  CreateMrpResult,
+  FinishedGoodTargetRow,
   MrpRow,
   ProcurementRow,
   ProductionInProgressRow,
   ProductionTargetRow,
+  RawMaterialNeedRow,
+  RawMaterialStockRow,
 } from "../types";
 
 declare global {
@@ -32,6 +37,21 @@ export const CONFIG = {
   PURCHASE_RECEIVE_REPORT: "Purchase_Receive_Report",
   PRODUCTION_INPROGRESS_REPORT: "Production_Inprogress",
   CONSUMPTION_ENTRY_REPORT: "Consumption_Entry_Report",
+
+  // ⚠️ Create MRP additions — confirm every report AND form name below
+  // against Creator → Reports / Creator → Forms (case sensitive) before
+  // relying on this in production; these are transcribed from the .ds
+  // export and not yet click-verified against the live app.
+  FINISHED_GOODS_REPORT: "Finished_Goods_Report",
+  FINISHED_GOODS_FORM: "Finished_Goods",
+  BOM_MASTER_REPORT: "BOM_Master_Report",
+  BOM_ITEMS_REPORT: "BOM_Items_Report",
+  MAIN_WAREHOUSE_STOCK_REPORT: "Main_Warehouse_Stock_Details_Report",
+  SEQUENCE_MASTER_REPORT: "Sequence_Master_Report",
+  SEQUENCE_MASTER_FORM: "Sequence_Master",
+  WAREHOUSE_REPORT: "Warehouse_Report",
+  MRP_FORM: "Material_Requirement_Planning",
+  RAW_MATERIALS_FORM: "Raw_Materials",
 };
 
 function display(value: any): string {
@@ -41,6 +61,15 @@ function display(value: any): string {
     return value.zc_display_value || value.display_value || value.Name || "";
   }
   return "";
+}
+
+// Pulls the raw record ID out of a lookup field's response shape
+// ({ ID, zc_display_value, ... }), falling back to the raw value itself
+// when the field already comes back as a bare ID string.
+function lookupId(value: any): string {
+  if (value == null) return "";
+  if (typeof value === "object") return value.ID != null ? String(value.ID) : "";
+  return String(value);
 }
 
 // Generic fetch — every read on this page goes through this one function.
@@ -64,6 +93,41 @@ function getRecords(reportName: string, criteria?: string, maxRecords = 200): Pr
       console.error("getRecords failed for " + reportName, err);
       return [];
     });
+}
+
+// Generic create — every write this widget does (MRP header, Finished_Goods
+// links, Raw_Materials rows) goes through this one function.
+function addRecord(formName: string, data: Record<string, any>): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.addRecords({
+    app_name: CONFIG.APP_NAME,
+    form_name: formName,
+    payload: {
+      data: data,
+    },
+  }).then(function (resp: any) {
+    if (!resp || resp.code !== 3000 || !resp.data) {
+      return Promise.reject(new Error("Failed to create a record in " + formName + "."));
+    }
+    return resp.data;
+  });
+}
+
+// Generic update — used to bump Sequence_Master's counter and to link an
+// existing Finished_Goods row to the MRP that was just created for it.
+function updateRecord(formName: string, recordId: string, data: Record<string, any>): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.updateRecords({
+    app_name: CONFIG.APP_NAME,
+    form_name: formName,
+    id: recordId,
+    payload: {
+      data: data,
+    },
+  }).then(function (resp: any) {
+    if (!resp || resp.code !== 3000) {
+      return Promise.reject(new Error("Failed to update record " + recordId + " in " + formName + "."));
+    }
+    return resp.data;
+  });
 }
 
 // ───────────── Production Target ─────────────
@@ -175,6 +239,247 @@ export function fetchConsumptionEntries(productionTargetId: string): Promise<Con
         status: display(r.Status),
         consumedQty: display(r.Consumed_Qty),
       };
+    });
+  });
+}
+
+// ───────────── Create MRP ─────────────
+
+// Finished-good lines already attached to the Production Target (added when
+// the target itself was created). These are what get exploded through their
+// BOM below, and later get their MRP_ID set once the new MRP exists.
+export function fetchFinishedGoodsForTarget(productionTargetId: string): Promise<FinishedGoodTargetRow[]> {
+  const criteria = `Production_Target_ID == "${productionTargetId}"`;
+  return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(function (rows) {
+    return rows.map(function (r: any) {
+      return {
+        id: r.ID,
+        productionTargetRecordId: lookupId(r.Production_Target_ID),
+        itemId: lookupId(r.Item),
+        itemName: display(r.Item),
+        uomId: lookupId(r.UOM),
+        uomName: display(r.UOM),
+        targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
+      };
+    });
+  });
+}
+
+// A finished good's BOM_Master row has a single BOM_Items grid — look up the
+// BOM by its Product (the finished good), then read that BOM's items.
+function fetchBomItemsForProduct(itemId: string): Promise<BomItemRow[]> {
+  if (!itemId) return Promise.resolve([]);
+
+  const bomCriteria = `Product == ${itemId}`;
+  return getRecords(CONFIG.BOM_MASTER_REPORT, bomCriteria).then(function (bomRows) {
+    if (!bomRows.length) return [];
+    const bomId = bomRows[0].ID;
+
+    const itemsCriteria = `BOM_ID == ${bomId}`;
+    return getRecords(CONFIG.BOM_ITEMS_REPORT, itemsCriteria).then(function (itemRows) {
+      return itemRows.map(function (r: any) {
+        return {
+          bomId: display(bomId),
+          productId: lookupId(r.Product),
+          productName: display(r.Product),
+          quantityRequired: parseFloat(display(r.Quantity_Required)) || 0,
+          uomId: lookupId(r.UOM),
+          uomName: display(r.UOM),
+        };
+      });
+    });
+  });
+}
+
+// Available_Stocks is the source of truth for current stock — sum it across
+// every Main_Warehouse_Stock_Details row for this raw material (normally
+// just one, since there's a single Main Warehouse).
+function fetchStockOnHand(productId: string): Promise<number> {
+  if (!productId) return Promise.resolve(0);
+
+  const criteria = `Product_Master == ${productId}`;
+  return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
+    const stockRows: RawMaterialStockRow[] = rows.map(function (r: any) {
+      return {
+        productId: lookupId(r.Product_Master) || productId,
+        availableStock: parseFloat(display(r.Available_Stocks)) || 0,
+      };
+    });
+    return stockRows.reduce(function (sum, row) {
+      return sum + row.availableStock;
+    }, 0);
+  });
+}
+
+// Explodes every finished good through its BOM × Target_Quantity, aggregates
+// duplicate raw materials across multiple finished-good lines, then compares
+// the aggregated requirement to current stock to work out what's short.
+function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promise<RawMaterialNeedRow[]> {
+  const bomPromises = finishedGoods.map(function (fg) {
+    return fetchBomItemsForProduct(fg.itemId).then(function (bomItems) {
+      return bomItems.map(function (item) {
+        return {
+          productId: item.productId,
+          productName: item.productName,
+          uom: item.uomName,
+          requiredQuantity: item.quantityRequired * fg.targetQuantity,
+        };
+      });
+    });
+  });
+
+  return Promise.all(bomPromises).then(function (perFinishedGood) {
+    const aggregated = new Map<string, { productId: string; productName: string; uom: string; stockRequired: number }>();
+
+    perFinishedGood.forEach(function (lines) {
+      lines.forEach(function (line) {
+        const existing = aggregated.get(line.productId);
+        if (existing) {
+          existing.stockRequired += line.requiredQuantity;
+        } else {
+          aggregated.set(line.productId, {
+            productId: line.productId,
+            productName: line.productName,
+            uom: line.uom,
+            stockRequired: line.requiredQuantity,
+          });
+        }
+      });
+    });
+
+    const aggregatedList = Array.from(aggregated.values());
+
+    return Promise.all(
+      aggregatedList.map(function (rm) {
+        return fetchStockOnHand(rm.productId);
+      })
+    ).then(function (stockLevels) {
+      return aggregatedList.map(function (rm, index) {
+        const stockOnHand = stockLevels[index];
+        const allocateQuantity = Math.min(stockOnHand, rm.stockRequired);
+        const neededQuantity = Math.max(0, rm.stockRequired - stockOnHand);
+        return {
+          productId: rm.productId,
+          productName: rm.productName,
+          uom: rm.uom,
+          stockOnHand: stockOnHand,
+          stockRequired: rm.stockRequired,
+          allocateQuantity: allocateQuantity,
+          neededQuantity: neededQuantity,
+          status: (neededQuantity > 0 ? "Needs Purchase" : "Stock Available") as RawMaterialNeedRow["status"],
+        };
+      });
+    });
+  });
+}
+
+// Sequence_Master holds a single row of running counters. MRP_ID is that
+// row's MRP_Name prefix + MRP_No zero-padded to 3 digits (e.g. "MRP-045"),
+// mirroring the app's native Deluge "Generate MRP ID" workflow.
+function fetchSequenceMasterRow(): Promise<any> {
+  return getRecords(CONFIG.SEQUENCE_MASTER_REPORT).then(function (rows) {
+    if (!rows.length) return Promise.reject(new Error("Sequence_Master has no row configured."));
+    return rows[0];
+  });
+}
+
+function generateMrpId(sequenceRow: any): string {
+  const prefix = display(sequenceRow.MRP_Name);
+  const currentNo = parseInt(display(sequenceRow.MRP_No), 10) || 0;
+  return prefix + String(currentNo).padStart(3, "0");
+}
+
+// Only call this once the full MRP create has succeeded — bumping the
+// counter first would burn a sequence number on a failed/partial create.
+function bumpMrpSequence(sequenceRow: any): Promise<any> {
+  const currentNo = parseInt(display(sequenceRow.MRP_No), 10) || 0;
+  return updateRecord(CONFIG.SEQUENCE_MASTER_FORM, sequenceRow.ID, {
+    MRP_No: currentNo + 1,
+  });
+}
+
+// Warehouse is a singleton record — the app only ever uses a single
+// Warehouse record, so there's no picker; just resolve its Warehouse_Name
+// lookup, which is what gets written into MRP.Warehouse.
+function fetchDefaultWarehouseId(): Promise<string> {
+  return getRecords(CONFIG.WAREHOUSE_REPORT).then(function (rows) {
+    if (!rows.length) return Promise.reject(new Error("Warehouse has no row configured."));
+    const warehouseId = lookupId(rows[0].Warehouse_Name);
+    if (!warehouseId) {
+      return Promise.reject(new Error("Warehouse record is missing its Warehouse_Name lookup."));
+    }
+    return warehouseId;
+  });
+}
+
+function formatDateForZoho(date: Date): string {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${day}-${months[date.getMonth()]}-${date.getFullYear()}`;
+}
+
+// Creates the MRP for a Production Target: explodes its finished goods
+// through their BOMs, checks stock, writes the MRP header + Raw_Materials
+// rows, links the existing Finished_Goods rows to the new MRP, and bumps
+// the Sequence_Master counter — only after everything else has succeeded.
+export function createMrpForTarget(
+  productionTargetRecordId: string,
+  productionTargetId: string
+): Promise<CreateMrpResult> {
+  return Promise.all([
+    fetchFinishedGoodsForTarget(productionTargetId),
+    fetchSequenceMasterRow(),
+    fetchDefaultWarehouseId(),
+  ]).then(function (results) {
+    const finishedGoods = results[0];
+    const sequenceRow = results[1];
+    const warehouseId = results[2];
+
+    if (!finishedGoods.length) {
+      return Promise.reject(
+        new Error("This Production Target has no finished-good lines yet — add at least one before creating an MRP.")
+      );
+    }
+
+    return computeRawMaterialNeeds(finishedGoods).then(function (rawMaterials) {
+      const mrpId = generateMrpId(sequenceRow);
+
+      return addRecord(CONFIG.MRP_FORM, {
+        MRP_ID: mrpId,
+        Production_Target: productionTargetRecordId,
+        Warehouse: warehouseId,
+        MRP_Date: formatDateForZoho(new Date()),
+        Status: "False",
+      }).then(function (mrpRecord) {
+        const mrpRecordId: string = display(mrpRecord.ID);
+
+        const finishedGoodUpdates = finishedGoods.map(function (fg) {
+          return updateRecord(CONFIG.FINISHED_GOODS_FORM, fg.id, { MRP_ID: mrpRecordId });
+        });
+
+        const rawMaterialInserts = rawMaterials.map(function (rm) {
+          return addRecord(CONFIG.RAW_MATERIALS_FORM, {
+            MRP_ID: mrpRecordId,
+            Product_Name: rm.productId,
+            UOM: rm.uom,
+            Stock_On_hand: rm.stockOnHand,
+            Stock_Required: rm.stockRequired,
+            Allocate_Quantity: rm.allocateQuantity,
+            Needed_Quantity: rm.neededQuantity,
+            Status: rm.status,
+          });
+        });
+
+        return Promise.all(finishedGoodUpdates.concat(rawMaterialInserts)).then(function () {
+          return bumpMrpSequence(sequenceRow).then(function () {
+            return {
+              mrpRecordId: mrpRecordId,
+              mrpId: mrpId,
+              rawMaterials: rawMaterials,
+            };
+          });
+        });
+      });
     });
   });
 }

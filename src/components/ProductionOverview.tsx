@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Box, CircularProgress, Tab, Tabs, Typography, Paper, Alert } from "@mui/material";
+import { Box, CircularProgress, Tab, Tabs, Typography, Paper, Alert, Button } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
-import { fetchProductionOverview } from "../services/productionApi";
+import { createMrpForTarget, fetchProductionOverview } from "../services/productionApi";
 import { computeProgress, isProcurementRequired, stageIndex, stageKeyFromStatus } from "../config/stages.config";
 import type {
   ConsumptionEntryRow,
@@ -33,6 +34,8 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OverviewData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [creatingMrp, setCreatingMrp] = useState(false);
+  const [createMrpError, setCreateMrpError] = useState("");
 
   useEffect(() => {
     setLoading(true);
@@ -41,6 +44,24 @@ export default function ProductionOverview({ productionTargetId }: { productionT
       setLoading(false);
     });
   }, [productionTargetId]);
+
+  function handleCreateMrp() {
+    if (!data || !data.record) return;
+    setCreatingMrp(true);
+    setCreateMrpError("");
+    createMrpForTarget(data.record.id, productionTargetId)
+      .then(function () {
+        return fetchProductionOverview(productionTargetId).then(function (result) {
+          setData(result);
+        });
+      })
+      .catch(function (err: any) {
+        setCreateMrpError((err && err.message) || "Failed to create MRP. Please try again.");
+      })
+      .finally(function () {
+        setCreatingMrp(false);
+      });
+  }
 
   if (loading || !data || !data.record) {
     return (
@@ -102,7 +123,22 @@ export default function ProductionOverview({ productionTargetId }: { productionT
                   <InfoCard label="Stock Status" valueNode={<StatusChip value={mrpRecord.stockStatus} />} />
                 </Box>
               ) : (
-                <Typography color="text.secondary">No MRP record found yet.</Typography>
+                <Box>
+                  <Button
+                    variant="contained"
+                    startIcon={creatingMrp ? <CircularProgress size={16} color="inherit" /> : <AddIcon />}
+                    onClick={handleCreateMrp}
+                    disabled={creatingMrp}
+                    sx={{ borderRadius: "10px", textTransform: "none" }}
+                  >
+                    {creatingMrp ? "Creating MRP…" : "Create MRP"}
+                  </Button>
+                  {createMrpError && (
+                    <Alert severity="error" sx={{ borderRadius: "12px", mt: 2 }}>
+                      {createMrpError}
+                    </Alert>
+                  )}
+                </Box>
               )}
             </Box>
           )}
