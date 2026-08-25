@@ -4,7 +4,7 @@ import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
 import { fetchProductionOverview } from "../services/productionApi";
-import { computeProgress, isProcurementRequired, stageIndex } from "../config/stages.config";
+import { computeProgress, isProcurementRequired, stageIndex, stageKeyFromStatus } from "../config/stages.config";
 import type {
   ConsumptionEntryRow,
   MrpRow,
@@ -52,8 +52,9 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
   const { record, mrpRecord, procurementRecords, productionInProgress, consumptionEntries } = data;
   const procurementSkipped = !!mrpRecord && !isProcurementRequired(mrpRecord.stockStatus);
-  const currentIndex = stageIndex(record.stageStatus);
-  const isFullyComplete = record.stageStatus === "consumption_entry";
+  const stageKey = stageKeyFromStatus(record.status);
+  const currentIndex = stageIndex(stageKey);
+  const isFullyComplete = stageKey === "consumption_entry";
   const progressPercent = computeProgress(currentIndex, procurementSkipped);
 
   return (
@@ -62,7 +63,7 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
       <Paper elevation={0} sx={{ mt: 3, borderRadius: "16px", p: { xs: 1, md: 2 } }}>
         <PipelineStepper
-          currentStageKey={record.stageStatus}
+          currentStageKey={stageKey}
           currentIndex={currentIndex}
           isFullyComplete={isFullyComplete}
           procurementSkipped={procurementSkipped}
@@ -87,7 +88,7 @@ export default function ProductionOverview({ productionTargetId }: { productionT
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" }, gap: 2 }}>
               <InfoCard label="Production Target ID" value={record.productionTargetId} />
               <InfoCard label="Date" value={record.date} />
-              <InfoCard label="Assigned By" value={record.assignedBy} />
+              <InfoCard label="Assigned To" value={record.assignedTo} />
               <InfoCard label="Current Status" valueNode={<StatusChip value={record.status} />} />
             </Box>
           )}

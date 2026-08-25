@@ -15,19 +15,18 @@ export type MrpStockStatus =
 
 export type ProcurementRecordType = "purchase_order" | "purchase_receive";
 
+// Confirmed real values for Production_Target_Report's Status dropdown.
+export type ProductionTargetStatus = "Planned" | "Waiting for Stock" | "In Progress" | "Completed";
+
 export interface ProductionTargetRow {
   id: string;
   productionTargetId: string; // e.g. "PT-105"
   date: string;
-  assignedBy: string;
-  status: string;
+  assignedTo: string;
+  startDate: string;
+  endDate: string;
+  status: ProductionTargetStatus;
   notes: string;
-  stageStatus: StageKey;
-  rawMaterialUsed: string;
-  costPrice: string;
-  directLabours: string;
-  totalCosts: string;
-  factoryOverheads: string;
 }
 
 export interface MrpRow {

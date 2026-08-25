@@ -10,10 +10,10 @@ interface ProjectHeaderProps {
 }
 
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
+  Planned: { bg: 'rgba(255,255,255,0.16)', fg: '#e0e7ff' },
   'Waiting for Stock': { bg: 'rgba(239,68,68,0.18)', fg: '#fecaca' },
-  'Ready For Production': { bg: 'rgba(16,185,129,0.18)', fg: '#a7f3d0' },
-  'Production Inprogress': { bg: 'rgba(14,165,233,0.18)', fg: '#bae6fd' },
-  'Completed Production Target': { bg: 'rgba(16,185,129,0.25)', fg: '#a7f3d0' },
+  'In Progress': { bg: 'rgba(14,165,233,0.18)', fg: '#bae6fd' },
+  Completed: { bg: 'rgba(16,185,129,0.25)', fg: '#a7f3d0' },
 };
 
 function statusPalette(status: string) {

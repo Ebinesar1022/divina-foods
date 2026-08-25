@@ -1,4 +1,4 @@
-import type { MrpStockStatus, StageKey, StageState } from "../types";
+import type { MrpStockStatus, ProductionTargetStatus, StageKey, StageState } from "../types";
 
 export interface StageConfig {
   key: StageKey;
@@ -16,6 +16,23 @@ export const STAGES: StageConfig[] = [
 ];
 
 export const TOTAL_STAGES = STAGES.length;
+
+// Production Target's Status field only has 4 values (Planned, Waiting for
+// Stock, In Progress, Completed) but the pipeline shows 5 stages — there is
+// no distinct signal in Status alone for "sitting at the MRP stage
+// specifically". A record with an MRP entry that hasn't yet resolved to
+// "Waiting for Stock" will currently still read as "production_target"
+// stage. Known limitation — leave as-is unless asked to address it.
+export const STATUS_TO_STAGE: Record<ProductionTargetStatus, StageKey> = {
+  Planned: "production_target",
+  "Waiting for Stock": "procurement",
+  "In Progress": "production_inprogress",
+  Completed: "consumption_entry",
+};
+
+export function stageKeyFromStatus(status: ProductionTargetStatus): StageKey {
+  return STATUS_TO_STAGE[status] ?? "production_target";
+}
 
 export function stageIndex(key: StageKey): number {
   return STAGES.findIndex((s) => s.key === key);

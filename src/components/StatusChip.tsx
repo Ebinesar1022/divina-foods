@@ -1,7 +1,10 @@
 import { Box, Typography } from "@mui/material";
 
 export const STATUS_COLORS: Record<string, string> = {
+  Planned: "#6366F1",
   "Waiting for Stock": "#EF4444",
+  // MRP report's Stock_Status vocabulary (separate field from Production
+  // Target's Status) — kept here since StatusChip is shared across tabs.
   "Ready For Production": "#10B981",
   "Production Inprogress": "#3B82F6",
   "Completed Production Target": "#10B981",

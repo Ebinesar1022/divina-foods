@@ -76,22 +76,18 @@ export function fetchProductionTarget(productionTargetId: string): Promise<Produ
       id: r.ID,
       productionTargetId: display(r.Production_Target_ID),
       date: display(r.Date_field),
-      assignedBy: display(r.Assigned_By6787696),
-      status: display(r.Status),
+      assignedTo: display(r.Assigned_To),
+      startDate: display(r.Start_Date),
+      endDate: display(r.End_Date),
+      status: display(r.Status) as ProductionTargetRow["status"],
       notes: display(r.Notes),
-      stageStatus: display(r.Stage_Status) as any,
-      rawMaterialUsed: display(r.Raw_Material_Used),
-      costPrice: display(r.Cost_Price),
-      directLabours: display(r.Direct_Labours),
-      totalCosts: display(r.Total_Costs),
-      factoryOverheads: display(r.Factory_Overheads),
     };
   });
 }
 
 // ───────────── Material Requirement & Planning ─────────────
 export function fetchMrpRecord(productionTargetId: string): Promise<MrpRow | null> {
-  const criteria = `Production_Target_ID == "${productionTargetId}"`;
+  const criteria = `Production_Target == "${productionTargetId}"`;
   return getRecords(CONFIG.MRP_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
     const r = rows[0];
@@ -168,7 +164,7 @@ export function fetchProductionInProgress(productionTargetId: string): Promise<P
 
 // ───────────── Consumption Entry ─────────────
 export function fetchConsumptionEntries(productionTargetId: string): Promise<ConsumptionEntryRow[]> {
-  const criteria = `Production_Target_ID == "${productionTargetId}"`;
+  const criteria = `Production_Target == "${productionTargetId}"`;
   return getRecords(CONFIG.CONSUMPTION_ENTRY_REPORT, criteria).then(function (rows) {
     return rows.map(function (r: any) {
       return {
