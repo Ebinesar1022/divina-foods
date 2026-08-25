@@ -30,7 +30,7 @@ export const CONFIG = {
   MRP_REPORT: "Material_Requirement_Planning_Report",
   PURCHASE_ORDER_REPORT: "Purchase_Order_Report",
   PURCHASE_RECEIVE_REPORT: "Purchase_Receive_Report",
-  PRODUCTION_INPROGRESS_REPORT: "Production_In_progress_Report",
+  PRODUCTION_INPROGRESS_REPORT: "Production_Inprogress",
   CONSUMPTION_ENTRY_REPORT: "Consumption_Entry_Report",
 };
 
