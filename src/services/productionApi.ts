@@ -432,58 +432,73 @@ function formatDateForZoho(date: Date): string {
 // through their BOMs, checks stock, writes the MRP header + Raw_Materials
 // rows, links the existing Finished_Goods rows to the new MRP, and bumps
 // the Sequence_Master counter — only after everything else has succeeded.
-export function createMrpForTarget(productionTargetRecordId: string): Promise<CreateMrpResult> {
-  return Promise.all([
-    fetchFinishedGoodsForTarget(productionTargetRecordId),
-    fetchSequenceMasterRow(),
-    fetchDefaultWarehouseId(),
-  ]).then(function (results) {
-    const finishedGoods = results[0];
-    const sequenceRow = results[1];
-    const warehouseId = results[2];
-
-    if (!finishedGoods.length) {
-      return Promise.reject(
-        new Error("This Production Target has no finished-good lines yet — add at least one before creating an MRP.")
-      );
+export function createMrpForTarget(
+  productionTargetRecordId: string,
+  productionTargetId: string
+): Promise<CreateMrpResult> {
+  // Guard against duplicate MRPs — a second click after a page reload (or a
+  // second tab) while the first create was still mid-flight would otherwise
+  // race the Sequence_Master read and produce two headers with the same
+  // generated MRP_ID. This doesn't fully close the race (both checks can
+  // still run before either create finishes) but it catches the common case
+  // where the first MRP has already landed by the time this one starts.
+  return fetchMrpRecord(productionTargetId).then(function (existingMrp) {
+    if (existingMrp) {
+      return Promise.reject(new Error(`An MRP (${existingMrp.mrpId}) already exists for this Production Target.`));
     }
 
-    return computeRawMaterialNeeds(finishedGoods).then(function (rawMaterials) {
-      const mrpId = generateMrpId(sequenceRow);
+    return Promise.all([
+      fetchFinishedGoodsForTarget(productionTargetRecordId),
+      fetchSequenceMasterRow(),
+      fetchDefaultWarehouseId(),
+    ]).then(function (results) {
+      const finishedGoods = results[0];
+      const sequenceRow = results[1];
+      const warehouseId = results[2];
 
-      return addRecord(CONFIG.MRP_FORM, {
-        MRP_ID: mrpId,
-        Production_Target: productionTargetRecordId,
-        Warehouse: warehouseId,
-        MRP_Date: formatDateForZoho(new Date()),
-        Status: "False",
-      }).then(function (mrpRecord) {
-        const mrpRecordId: string = display(mrpRecord.ID);
+      if (!finishedGoods.length) {
+        return Promise.reject(
+          new Error("This Production Target has no finished-good lines yet — add at least one before creating an MRP.")
+        );
+      }
 
-        const finishedGoodUpdates = finishedGoods.map(function (fg) {
-          return updateRecord(CONFIG.FINISHED_GOODS_FORM, fg.id, { MRP_ID: mrpRecordId });
-        });
+      return computeRawMaterialNeeds(finishedGoods).then(function (rawMaterials) {
+        const mrpId = generateMrpId(sequenceRow);
 
-        const rawMaterialInserts = rawMaterials.map(function (rm) {
-          return addRecord(CONFIG.RAW_MATERIALS_FORM, {
-            MRP_ID: mrpRecordId,
-            Product_Name: rm.productId,
-            UOM: rm.uom,
-            Stock_On_hand: rm.stockOnHand,
-            Stock_Required: rm.stockRequired,
-            Allocate_Quantity: rm.allocateQuantity,
-            Needed_Quantity: rm.neededQuantity,
-            Status: rm.status,
+        return addRecord(CONFIG.MRP_FORM, {
+          MRP_ID: mrpId,
+          Production_Target: productionTargetRecordId,
+          Warehouse: warehouseId,
+          MRP_Date: formatDateForZoho(new Date()),
+          Status: "False",
+        }).then(function (mrpRecord) {
+          const mrpRecordId: string = display(mrpRecord.ID);
+
+          const finishedGoodUpdates = finishedGoods.map(function (fg) {
+            return updateRecord(CONFIG.FINISHED_GOODS_FORM, fg.id, { MRP_ID: mrpRecordId });
           });
-        });
 
-        return Promise.all(finishedGoodUpdates.concat(rawMaterialInserts)).then(function () {
-          return bumpMrpSequence(sequenceRow).then(function () {
-            return {
-              mrpRecordId: mrpRecordId,
-              mrpId: mrpId,
-              rawMaterials: rawMaterials,
-            };
+          const rawMaterialInserts = rawMaterials.map(function (rm) {
+            return addRecord(CONFIG.RAW_MATERIALS_FORM, {
+              MRP_ID: mrpRecordId,
+              Product_Name: rm.productId,
+              UOM: rm.uom,
+              Stock_On_hand: rm.stockOnHand,
+              Stock_Required: rm.stockRequired,
+              Allocate_Quantity: rm.allocateQuantity,
+              Needed_Quantity: rm.neededQuantity,
+              Status: rm.status,
+            });
+          });
+
+          return Promise.all(finishedGoodUpdates.concat(rawMaterialInserts)).then(function () {
+            return bumpMrpSequence(sequenceRow).then(function () {
+              return {
+                mrpRecordId: mrpRecordId,
+                mrpId: mrpId,
+                rawMaterials: rawMaterials,
+              };
+            });
           });
         });
       });

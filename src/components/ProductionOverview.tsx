@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, CircularProgress, Tab, Tabs, Typography, Paper, Alert, Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import ProjectHeader from "./ProjectHeader";
@@ -36,6 +36,10 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   const [activeTab, setActiveTab] = useState("overview");
   const [creatingMrp, setCreatingMrp] = useState(false);
   const [createMrpError, setCreateMrpError] = useState("");
+  // Refs update synchronously (unlike state), so this closes the gap the
+  // `disabled={creatingMrp}` button prop can't cover on its own — e.g. a
+  // second click landing before React re-renders, or a stale page reload.
+  const creatingMrpRef = useRef(false);
 
   useEffect(() => {
     setLoading(true);
@@ -47,9 +51,11 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
   function handleCreateMrp() {
     if (!data || !data.record) return;
+    if (creatingMrpRef.current) return;
+    creatingMrpRef.current = true;
     setCreatingMrp(true);
     setCreateMrpError("");
-    createMrpForTarget(data.record.id)
+    createMrpForTarget(data.record.id, productionTargetId)
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
           setData(result);
@@ -59,6 +65,7 @@ export default function ProductionOverview({ productionTargetId }: { productionT
         setCreateMrpError((err && err.message) || "Failed to create MRP. Please try again.");
       })
       .finally(function () {
+        creatingMrpRef.current = false;
         setCreatingMrp(false);
       });
   }
