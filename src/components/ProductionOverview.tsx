@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
+import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
@@ -25,12 +26,15 @@ import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
 import CreateMrpDialog from "./CreateMrpDialog";
 import InitiateProductionDialog from "./InitiateProductionDialog";
+import ConsumptionEntryDialog from "./ConsumptionEntryDialog";
 import MrpReportView from "./MrpReportView";
 import FoodProductionLoader from "./FoodProductionLoader";
 import {
   commitMrpDraft,
+  commitConsumptionEntry,
   fetchEmployees,
   fetchProductionOverview,
+  prepareConsumptionDraft,
   prepareMrpDraft,
   startProduction,
   allocateStockOnProductionStart,
@@ -42,6 +46,7 @@ import {
   stageKeyFromStatus,
 } from "../config/stages.config";
 import type {
+  ConsumptionEntryDraft,
   ConsumptionEntryRow,
   EmployeeOption,
   MrpDetailData,
@@ -147,6 +152,17 @@ export default function ProductionOverview({
   const [endDate, setEndDate] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
   const poCommittingRef = useRef(false);
+
+  // Complete Production: dialog prefilled from the Production Target's own
+  // finished goods + the MRP's allocated raw materials (mirrors the native
+  // "Complete Production" custom action, which opens this same form).
+  const [consumptionDialogOpen, setConsumptionDialogOpen] = useState(false);
+  const [consumptionDraft, setConsumptionDraft] = useState<ConsumptionEntryDraft | null>(null);
+  const [consumptionDraftError, setConsumptionDraftError] = useState("");
+  const [consumptionCommitError, setConsumptionCommitError] = useState("");
+  const [consumptionCommitting, setConsumptionCommitting] = useState(false);
+  const preparingConsumptionRef = useRef(false);
+  const committingConsumptionRef = useRef(false);
 
   useEffect(() => {
     setLoading(true);
@@ -298,6 +314,70 @@ export default function ProductionOverview({
       });
   }
 
+  function handleOpenCompleteProduction() {
+    if (!data || !data.record) return;
+    if (preparingConsumptionRef.current) return;
+    preparingConsumptionRef.current = true;
+    setConsumptionDialogOpen(true);
+    setConsumptionDraft(null);
+    setConsumptionDraftError("");
+    setConsumptionCommitError("");
+    prepareConsumptionDraft(data.record.id, productionTargetId, data.mrpRecord?.id || "")
+      .then(function (draft) {
+        setConsumptionDraft(draft);
+      })
+      .catch(function (err: any) {
+        setConsumptionDraftError(
+          (err && err.message) || "Failed to prepare the consumption entry. Please try again.",
+        );
+      })
+      .finally(function () {
+        preparingConsumptionRef.current = false;
+      });
+  }
+
+  function handleCancelConsumptionDraft() {
+    if (committingConsumptionRef.current) return;
+    setConsumptionDialogOpen(false);
+    setConsumptionDraft(null);
+    setConsumptionDraftError("");
+    setConsumptionCommitError("");
+  }
+
+  function handleConfirmConsumptionEntry() {
+    if (!consumptionDraft) return;
+    if (committingConsumptionRef.current) return;
+    committingConsumptionRef.current = true;
+    setConsumptionCommitting(true);
+    setConsumptionCommitError("");
+    const committedDraft = consumptionDraft;
+    commitConsumptionEntry(committedDraft)
+      .then(function (newEntry) {
+        return fetchProductionOverview(productionTargetId).then(function (result) {
+          // Same reasoning as Create MRP's commit: if Creator report
+          // indexing hasn't caught up to the subform rows just written,
+          // fall back to the entry we just built from the confirmed draft
+          // so the tabs reflect it immediately.
+          const entries =
+            result.consumptionEntries && result.consumptionEntries.length ? result.consumptionEntries : [newEntry];
+          setData({ ...result, consumptionEntries: entries });
+        });
+      })
+      .then(function () {
+        setConsumptionDialogOpen(false);
+        setConsumptionDraft(null);
+      })
+      .catch(function (err: any) {
+        setConsumptionCommitError(
+          (err && err.message) || "Failed to complete production. Please try again.",
+        );
+      })
+      .finally(function () {
+        committingConsumptionRef.current = false;
+        setConsumptionCommitting(false);
+      });
+  }
+
   if (loading || !data || !data.record) {
     return (
       <Box
@@ -317,7 +397,7 @@ export default function ProductionOverview({
     );
   }
 
-  const { record, mrpRecord, procurementRecords, productionInProgress, consumptionEntries } = data;
+  const { record, mrpRecord, procurementRecords, consumptionEntries } = data;
   const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
   const neededItems = (data.mrpDetails?.rawMaterials || []).filter((rm) => rm.status === "Needs Purchase");
   const stageKey = stageKeyFromStatus(record.status);
@@ -603,47 +683,164 @@ export default function ProductionOverview({
 
           {activeTab === "in_progress" && (
             <Box>
-              {productionInProgress.length ? (
-                productionInProgress.map((row) => (
-                  <Paper
-                    key={row.id}
-                    variant="outlined"
-                    sx={{ p: 1.5, mb: 1, borderRadius: "12px" }}
+              {record.status === "In Progress" ? (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+                      gap: 2,
+                    }}
                   >
-                    <Typography sx={{ fontWeight: 600 }}>{row.date}</Typography>
-                    <Typography color="text.secondary" sx={{ fontSize: 13 }}>
-                      Assigned to {row.assignedBy}
-                    </Typography>
-                    <StatusChip value={row.productionStatus} />
-                  </Paper>
-                ))
+                    <InfoCard label="Production Target ID" value={record.productionTargetId} />
+                    <InfoCard label="Start Date" value={record.startDate} />
+                    <InfoCard label="End Date" value={record.endDate} />
+                    <InfoCard label="Assigned To" value={record.assignedTo} />
+                    <InfoCard label="Status" valueNode={<StatusChip value={record.status} />} />
+                  </Box>
+
+                  <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      size="large"
+                      startIcon={<TaskAltIcon />}
+                      onClick={handleOpenCompleteProduction}
+                      sx={{
+                        borderRadius: "12px",
+                        textTransform: "none",
+                        fontWeight: 700,
+                        px: 3.5,
+                        py: 1.25,
+                        boxShadow: "0 8px 20px rgba(5, 150, 105, 0.25)",
+                      }}
+                    >
+                      Complete Production
+                    </Button>
+                  </Box>
+                </Box>
+              ) : record.status === "Completed" ? (
+                <CenteredStateCard
+                  icon={<EmojiEventsOutlinedIcon sx={{ fontSize: 28 }} />}
+                  iconBg="#ECFDF5"
+                  iconColor="#059669"
+                  title="Production Completed"
+                  description="Consumption has been logged and this run is fully wrapped up. See the Consumption Entry tab for the full breakdown."
+                />
               ) : (
-                <Typography color="text.secondary">
-                  No production batches logged yet.
-                </Typography>
+                <CenteredStateCard
+                  icon={<PlayCircleIcon sx={{ fontSize: 28 }} />}
+                  title="Not In Progress Yet"
+                  description="Start production from the Initiate Production tab first."
+                />
               )}
             </Box>
           )}
 
           {activeTab === "consumption_entry" && (
-            <Box>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {consumptionEntries.length ? (
-                consumptionEntries.map((row) => (
-                  <Paper
-                    key={row.id}
-                    variant="outlined"
-                    sx={{ p: 1.5, mb: 1, borderRadius: "12px" }}
-                  >
-                    <Typography sx={{ fontWeight: 600 }}>
-                      Qty consumed: {row.consumedQty}
-                    </Typography>
-                    <StatusChip value={row.status} />
+                consumptionEntries.map((entry) => (
+                  <Paper key={entry.id} variant="outlined" sx={{ borderRadius: "14px", overflow: "hidden" }}>
+                    <Box
+                      sx={{
+                        px: 2.5,
+                        py: 1.75,
+                        bgcolor: "#ECFDF5",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 1,
+                      }}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                        <TaskAltIcon sx={{ color: "#059669" }} />
+                        <Box>
+                          <Typography sx={{ fontWeight: 700 }}>{entry.consumptionId}</Typography>
+                          <Typography sx={{ fontSize: 12, color: "#64748B" }}>{entry.date}</Typography>
+                        </Box>
+                      </Box>
+                      {entry.remarks && (
+                        <Typography sx={{ fontSize: 13, color: "#475569", fontStyle: "italic" }}>
+                          "{entry.remarks}"
+                        </Typography>
+                      )}
+                    </Box>
+
+                    <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2.5 }}>
+                      {entry.finishedGoods.length > 0 && (
+                        <Box>
+                          <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>Finished Goods</Typography>
+                          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                  <TableCell>Item</TableCell>
+                                  <TableCell align="right">Target</TableCell>
+                                  <TableCell align="right">Produced</TableCell>
+                                  <TableCell align="right">Scrap</TableCell>
+                                  <TableCell>Batch No</TableCell>
+                                  <TableCell>Expiry</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {entry.finishedGoods.map((fg) => (
+                                  <TableRow key={fg.id}>
+                                    <TableCell>{fg.itemName}</TableCell>
+                                    <TableCell align="right">{fg.targetQuantity}</TableCell>
+                                    <TableCell align="right">{fg.producedQuantity}</TableCell>
+                                    <TableCell align="right">{fg.scrapQuantity}</TableCell>
+                                    <TableCell>{fg.batchNo || "—"}</TableCell>
+                                    <TableCell>{fg.expiryDate || "—"}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Box>
+                      )}
+
+                      {entry.rawMaterials.length > 0 && (
+                        <Box>
+                          <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>
+                            Raw Materials Consumed
+                          </Typography>
+                          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                  <TableCell>Raw Material</TableCell>
+                                  <TableCell>UOM</TableCell>
+                                  <TableCell align="right">Allocated</TableCell>
+                                  <TableCell align="right">Consumed</TableCell>
+                                  <TableCell align="right">Scrap</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {entry.rawMaterials.map((rm) => (
+                                  <TableRow key={rm.id}>
+                                    <TableCell>{rm.productName}</TableCell>
+                                    <TableCell>{rm.uom}</TableCell>
+                                    <TableCell align="right">{rm.allocatedQuantity}</TableCell>
+                                    <TableCell align="right">{rm.consumedQuantity}</TableCell>
+                                    <TableCell align="right">{rm.scrapQuantity}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Box>
+                      )}
+                    </Box>
                   </Paper>
                 ))
               ) : (
-                <Typography color="text.secondary">
-                  No consumption entries yet.
-                </Typography>
+                <CenteredStateCard
+                  icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
+                  title="No Consumption Entries Yet"
+                  description="Once production is completed, the logged consumption details will appear here."
+                />
               )}
             </Box>
           )}
@@ -677,6 +874,17 @@ export default function ProductionOverview({
         onAssignedToChange={setAssignedToId}
         onCancel={handleCancelPoDraft}
         onConfirm={handleConfirmInitiateProduction}
+      />
+
+      <ConsumptionEntryDialog
+        open={consumptionDialogOpen}
+        draft={consumptionDraft}
+        draftError={consumptionDraftError}
+        committing={consumptionCommitting}
+        commitError={consumptionCommitError}
+        onDraftChange={setConsumptionDraft}
+        onCancel={handleCancelConsumptionDraft}
+        onConfirm={handleConfirmConsumptionEntry}
       />
     </Box>
   );

@@ -58,13 +58,79 @@ export interface ProductionInProgressRow {
   productionStatus: string;
 }
 
+// One Finished_Goods_Cunsumptions row — how much of a finished good was
+// actually produced (vs targeted) for this run, plus batch/expiry tracking.
+export interface ConsumptionFinishedGoodRow {
+  id: string;
+  itemId: string;
+  itemName: string;
+  uom: string;
+  targetQuantity: number;
+  producedQuantity: number;
+  scrapQuantity: number;
+  batchNo: string;
+  expiryDate: string;
+}
+
+// One Consumption_Items row — how much of an allocated raw material was
+// actually consumed during the run.
+export interface ConsumptionRawMaterialRow {
+  id: string;
+  productId: string;
+  productName: string;
+  uom: string;
+  allocatedQuantity: number;
+  consumedQuantity: number;
+  scrapQuantity: number;
+}
+
 export interface ConsumptionEntryRow {
   id: string;
-  productionTargetId: string;
+  consumptionId: string; // e.g. "CNE-021"
+  productionTargetId: string; // display id, e.g. "PT-142"
   date: string;
-  createdBy: string;
-  status: string;
-  consumedQty: string;
+  remarks: string;
+  finishedGoods: ConsumptionFinishedGoodRow[];
+  rawMaterials: ConsumptionRawMaterialRow[];
+}
+
+// ───────────── Complete Production (Consumption Entry draft) ─────────────
+// A pre-populated, not-yet-written draft for the "Complete Production"
+// dialog — finished-good lines default from the Production Target's own
+// Finished_Good subform, raw-material lines default from the MRP's
+// allocated quantities, mirroring the native "Fetch Production Target"
+// form-load workflow on Consumption_Entry.
+
+export interface ConsumptionFinishedGoodDraftRow {
+  itemId: string;
+  itemName: string;
+  uom: string;
+  targetQuantity: number;
+  producedQuantity: number;
+  scrapQuantity: number;
+  batchNo: string;
+  expiryDate: string; // "YYYY-MM-DD"
+}
+
+export interface ConsumptionRawMaterialDraftRow {
+  productId: string;
+  productName: string;
+  uom: string;
+  allocatedQuantity: number;
+  consumedQuantity: number;
+  scrapQuantity: number;
+}
+
+export interface ConsumptionEntryDraft {
+  productionTargetRecordId: string;
+  productionTargetId: string;
+  consumptionId: string; // e.g. "CNE-021"
+  date: string; // "YYYY-MM-DD"
+  remarks: string;
+  finishedGoods: ConsumptionFinishedGoodDraftRow[];
+  rawMaterials: ConsumptionRawMaterialDraftRow[];
+  sequenceRowId: string;
+  sequenceConsumptionNo: number;
 }
 
 // ───────────── Create MRP ─────────────

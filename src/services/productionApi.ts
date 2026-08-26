@@ -9,6 +9,7 @@
 
 import type {
   BomItemRow,
+  ConsumptionEntryDraft,
   ConsumptionEntryRow,
   CreateMrpResult,
   EmployeeOption,
@@ -60,6 +61,15 @@ export const CONFIG = {
   RAW_MATERIALS_REPORT: "Raw_Materials_Report",
 
   EMPLOYEE_REPORT: "Employee_Report",
+
+  // Confirmed against the app's .ds export (Divina_Foods_5.ds) —
+  // Consumption_Entry's two grids (Finished_Good, Raw_Material_Consumptions)
+  // are subform-backing forms, same pattern as MRP's Finished_Goods/Raw_Materials.
+  CONSUMPTION_ENTRY_FORM: "Consumption_Entry",
+  FINISHED_GOODS_CONSUMPTIONS_FORM: "Finished_Goods_Cunsumptions",
+  FINISHED_GOODS_CONSUMPTIONS_REPORT: "Finished_Goods_Cunsumptions_Report",
+  CONSUMPTION_ITEMS_FORM: "Consumption_Items",
+  CONSUMPTION_ITEMS_REPORT: "Consumption_Items_Report",
 };
 
 function display(value: any): string {
@@ -249,6 +259,11 @@ export function fetchProcurementRecords(productionTargetId: string): Promise<Pro
 }
 
 // ───────────── Production In-progress ─────────────
+// Confirmed against the app's .ds export — this report is just
+// Production_Targets filtered to Status == "In Progress"; there is no
+// separate Assigned_By/Production_Status field, only the target's own
+// Assigned_To/Status (the fields the "Complete Production" custom action
+// column sits alongside natively).
 export function fetchProductionInProgress(productionTargetId: string): Promise<ProductionInProgressRow[]> {
   const criteria = `Production_Target_ID == "${productionTargetId}"`;
   return getRecords(CONFIG.PRODUCTION_INPROGRESS_REPORT, criteria).then(function (rows) {
@@ -257,28 +272,75 @@ export function fetchProductionInProgress(productionTargetId: string): Promise<P
         id: r.ID,
         productionTargetId: display(r.Production_Target_ID),
         date: display(r.Date_field),
-        assignedBy: display(r.Assigned_By),
-        productionStatus: display(r.Production_Status),
+        assignedBy: display(r.Assigned_To),
+        productionStatus: display(r.Status),
       };
     });
   });
 }
 
 // ───────────── Consumption Entry ─────────────
-export function fetchConsumptionEntries(productionTargetId: string): Promise<ConsumptionEntryRow[]> {
-  const criteria = `Production_Target == "${productionTargetId}"`;
-  return getRecords(CONFIG.CONSUMPTION_ENTRY_REPORT, criteria).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: r.ID,
-        productionTargetId: display(r.Production_Target_ID),
-        date: display(r.Date_field),
-        createdBy: display(r.Created_By),
-        status: display(r.Status),
-        consumedQty: display(r.Consumed_Qty),
-      };
+// Consumption_Entry.Production_Target is a lookup — match by the
+// Production Target's numeric record ID, same rule as every other lookup
+// criteria in this file. Each entry's two grids (Finished_Good,
+// Raw_Material_Consumptions) are separate subform-backing reports
+// (Finished_Goods_Cunsumptions, Consumption_Items), so they're fetched by
+// criteria on their own back-reference lookup, same pattern used for the
+// MRP's Finished_Goods/Raw_Materials.
+export function fetchConsumptionEntries(productionTargetRecordId: string): Promise<ConsumptionEntryRow[]> {
+  if (!productionTargetRecordId) return Promise.resolve([]);
+  const criteria = `Production_Target == ${productionTargetRecordId}`;
+  return getRecords(CONFIG.CONSUMPTION_ENTRY_REPORT, criteria)
+    .then(function (rows) {
+      return Promise.all(
+        rows.map(function (r: any) {
+          const entryId = display(r.ID);
+          return Promise.all([
+            getRecords(CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT, `Consumption_Entry == ${entryId}`),
+            getRecords(CONFIG.CONSUMPTION_ITEMS_REPORT, `Consumption_ID == ${entryId}`),
+          ]).then(function (sub) {
+            const finishedGoods = sub[0].map(function (fg: any) {
+              return {
+                id: display(fg.ID),
+                itemId: lookupId(fg.Finished_Good),
+                itemName: display(fg.Finished_Good),
+                uom: "",
+                targetQuantity: parseFloat(display(fg.Target_Quantity)) || 0,
+                producedQuantity: parseFloat(display(fg.Produced_Quantity)) || 0,
+                scrapQuantity: parseFloat(display(fg.Scrap_Quantity)) || 0,
+                batchNo: display(fg.Batch_No),
+                expiryDate: display(fg.Expiry_Date),
+              };
+            });
+            const rawMaterials = sub[1].map(function (rm: any) {
+              return {
+                id: display(rm.ID),
+                productId: lookupId(rm.Raw_Material),
+                productName: display(rm.Raw_Material),
+                uom: display(rm.UOM),
+                allocatedQuantity: parseFloat(display(rm.Allocated_Quantity)) || 0,
+                consumedQuantity: parseFloat(display(rm.Consumed_Quantity)) || 0,
+                scrapQuantity: parseFloat(display(rm.Scrap_Quantity)) || 0,
+              };
+            });
+            return {
+              id: entryId,
+              consumptionId: display(r.Consumption_ID),
+              productionTargetId: display(r.Production_Target),
+              date: display(r.Date_field),
+              remarks: display(r.Remarks),
+              finishedGoods: finishedGoods,
+              rawMaterials: rawMaterials,
+            };
+          });
+        })
+      );
+    })
+    .then(function (entries) {
+      return entries.sort(function (a, b) {
+        return a.date < b.date ? 1 : -1;
+      });
     });
-  });
 }
 
 // ───────────── Create MRP ─────────────
@@ -775,6 +837,158 @@ export function allocateStockOnProductionStart(productionTargetRecordId: string)
   });
 }
 
+// ───────────── Complete Production (Consumption Entry) ─────────────
+// Mirrors the native "Complete Production" custom action on the
+// Production_Inprogress list: that action just opens the Consumption_Entry
+// form as a popup pre-filled with Production_Target=input.ID. The actual
+// pre-fill (finished goods from the target, raw materials from the MRP's
+// allocated quantities) lives in Consumption_Entry's own "Fetch Production
+// Target" form-load workflow, and the "mark Completed" step lives in its
+// "on add success" workflow — both are UI/record-level Deluge that only
+// fires for Creator's own form, not for records created via the JS SDK, so
+// prepareConsumptionDraft/commitConsumptionEntry replicate them here.
+//
+// NOTE: this deliberately does NOT replicate the native app's downstream
+// Zoho Inventory adjustments or Scrap/Main/Production warehouse stock
+// bookkeeping (Update_the_Scrap_Warehous / Update_Inventory_Adjustme
+// workflows) — those depend on an org-specific "inventory_conn" connection
+// that isn't reachable from widget JS, and are out of scope for this UI.
+
+function generateConsumptionId(sequenceRow: any): string {
+  const prefix = display(sequenceRow.Consumption_Name);
+  const currentNo = parseInt(display(sequenceRow.Consumption_No), 10) || 0;
+  return prefix + String(currentNo).padStart(3, "0");
+}
+
+function bumpConsumptionSequence(sequenceRowId: string, currentConsumptionNo: number): Promise<any> {
+  return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
+    Consumption_No: currentConsumptionNo + 1,
+  });
+}
+
+// Computes the draft; writes nothing to Zoho. Finished-good lines default
+// Produced_Quantity to the full Target_Quantity (edited down by the user if
+// the run fell short); raw-material lines default Consumed_Quantity to the
+// MRP's already-allocated quantity.
+export function prepareConsumptionDraft(
+  productionTargetRecordId: string,
+  productionTargetId: string,
+  mrpRecordId: string
+): Promise<ConsumptionEntryDraft> {
+  return Promise.all([
+    fetchFinishedGoodsForTarget(productionTargetRecordId),
+    mrpRecordId ? fetchRawMaterialsForMrp(mrpRecordId) : Promise.resolve([] as RawMaterialNeedRow[]),
+    fetchSequenceMasterRow(),
+  ]).then(function (results) {
+    const finishedGoods = results[0];
+    const rawMaterials = results[1];
+    const sequenceRow = results[2];
+
+    if (!finishedGoods.length) {
+      return Promise.reject(
+        new Error("This Production Target has no finished-good lines to log production against.")
+      );
+    }
+
+    return {
+      productionTargetRecordId: productionTargetRecordId,
+      productionTargetId: productionTargetId,
+      consumptionId: generateConsumptionId(sequenceRow),
+      date: new Date().toISOString().slice(0, 10),
+      remarks: "",
+      finishedGoods: finishedGoods.map(function (fg) {
+        return {
+          itemId: fg.itemId,
+          itemName: fg.itemName,
+          uom: fg.uomName,
+          targetQuantity: fg.targetQuantity,
+          producedQuantity: fg.targetQuantity,
+          scrapQuantity: 0,
+          batchNo: "",
+          expiryDate: "",
+        };
+      }),
+      rawMaterials: rawMaterials.map(function (rm) {
+        return {
+          productId: rm.productId,
+          productName: rm.productName,
+          uom: rm.uom,
+          allocatedQuantity: rm.allocateQuantity,
+          consumedQuantity: rm.allocateQuantity,
+          scrapQuantity: 0,
+        };
+      }),
+      sequenceRowId: sequenceRow.ID,
+      sequenceConsumptionNo: parseInt(display(sequenceRow.Consumption_No), 10) || 0,
+    };
+  });
+}
+
+// Writes a confirmed draft: the Consumption_Entry header, its two subform
+// rows (Finished_Goods_Cunsumptions, Consumption_Items), flips the
+// Production Target to "Completed" (mirroring the native form's on-success
+// workflow), and finally bumps the Sequence_Master counter — only after
+// everything else has succeeded, so a failed/partial commit doesn't burn a
+// sequence number.
+export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<ConsumptionEntryRow> {
+  return addRecord(CONFIG.CONSUMPTION_ENTRY_FORM, {
+    Consumption_ID: draft.consumptionId,
+    Production_Target: draft.productionTargetRecordId,
+    Date_field: formatDateStringForZoho(draft.date),
+    Remarks: draft.remarks,
+  }).then(function (entryRecord) {
+    const entryId: string = display(entryRecord.ID);
+
+    const finishedGoodInserts = draft.finishedGoods.map(function (fg) {
+      const payload: Record<string, any> = {
+        Consumption_Entry: entryId,
+        Finished_Good: fg.itemId,
+        Target_Quantity: fg.targetQuantity,
+        Produced_Quantity: fg.producedQuantity,
+        Scrap_Quantity: fg.scrapQuantity,
+      };
+      if (fg.batchNo) payload.Batch_No = fg.batchNo;
+      if (fg.expiryDate) payload.Expiry_Date = formatDateStringForZoho(fg.expiryDate);
+      return addRecord(CONFIG.FINISHED_GOODS_CONSUMPTIONS_FORM, payload);
+    });
+
+    const rawMaterialInserts = draft.rawMaterials.map(function (rm) {
+      return addRecord(CONFIG.CONSUMPTION_ITEMS_FORM, {
+        Consumption_ID: entryId,
+        Raw_Material: rm.productId,
+        UOM: rm.uom,
+        Allocated_Quantity: rm.allocatedQuantity,
+        Consumed_Quantity: rm.consumedQuantity,
+        Scrap_Quantity: rm.scrapQuantity,
+      });
+    });
+
+    const productionTargetUpdate = updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
+      Status: "Completed" as ProductionTargetStatus,
+    });
+
+    return Promise.all(finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate])).then(
+      function () {
+        return bumpConsumptionSequence(draft.sequenceRowId, draft.sequenceConsumptionNo).then(function () {
+          return {
+            id: entryId,
+            consumptionId: draft.consumptionId,
+            productionTargetId: draft.productionTargetId,
+            date: formatDateStringForZoho(draft.date),
+            remarks: draft.remarks,
+            finishedGoods: draft.finishedGoods.map(function (fg) {
+              return { id: "", ...fg };
+            }),
+            rawMaterials: draft.rawMaterials.map(function (rm) {
+              return { id: "", ...rm };
+            }),
+          };
+        });
+      }
+    );
+  });
+}
+
 // Fetch everything the Production Overview page needs
 export function fetchProductionOverview(productionTargetId: string): Promise<{
   record: ProductionTargetRow | null;
@@ -808,7 +1022,7 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
       return Promise.all([
         procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([] as ProcurementRow[]),
         fetchProductionInProgress(productionTargetId),
-        fetchConsumptionEntries(productionTargetId),
+        fetchConsumptionEntries(record.id),
         mrpDetailsPromise,
       ]).then(function (rest) {
         return {
