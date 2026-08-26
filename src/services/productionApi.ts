@@ -162,15 +162,20 @@ export function fetchProductionTarget(productionTargetId: string): Promise<Produ
 }
 
 // ───────────── Material Requirement & Planning ─────────────
-export function fetchMrpRecord(productionTargetId: string): Promise<MrpRow | null> {
-  const criteria = `Production_Target == "${productionTargetId}"`;
+// NOTE: Material_Requirement_Planning.Production_Target is a lookup field.
+// Creator's criteria engine matches lookups by the linked record's NUMERIC ID,
+// NOT by display text — `Production_Target == "PT-118"` always returns 0 rows.
+// Pass productionTargetRecordId (the numeric record ID from Production_Target)
+// and match without quotes, same as fetchFinishedGoodsForTarget.
+export function fetchMrpRecord(productionTargetRecordId: string): Promise<MrpRow | null> {
+  const criteria = `Production_Target == ${productionTargetRecordId}`;
   return getRecords(CONFIG.MRP_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
     const r = rows[0];
     return {
       id: r.ID,
       mrpId: display(r.MRP_ID),
-      productionTargetId: display(r.Production_Target_ID),
+      productionTargetId: display(r.Production_Target),
       // MRP_Date per the app's .ds export — Material_Requirement_Planning
       // has no Date_field. Status here is just "False"/"True" (unrelated to
       // stock — see MrpRow.status) — the procurement-required signal lives
@@ -457,7 +462,8 @@ export function prepareMrpDraft(
   // generated MRP_ID. This doesn't fully close the race (both checks can
   // still run before either commit finishes) but it catches the common case
   // where the first MRP has already landed by the time this one starts.
-  return fetchMrpRecord(productionTargetId).then(function (existingMrp) {
+  // Uses productionTargetRecordId (numeric) since Production_Target is a lookup field.
+  return fetchMrpRecord(productionTargetRecordId).then(function (existingMrp) {
     if (existingMrp) {
       return Promise.reject(new Error(`An MRP (${existingMrp.mrpId}) already exists for this Production Target.`));
     }
@@ -665,35 +671,55 @@ export function fetchMrpDetails(
 // Fetch everything the Production Overview page needs, still no async/await —
 // Promise.all is native ES6 and fine (generator-based async/await
 // transpilation is the actual iOS Safari problem, not Promises themselves).
-export function fetchProductionOverview(productionTargetId: string) {
-  return Promise.all([
-    fetchProductionTarget(productionTargetId),
-    fetchMrpRecord(productionTargetId),
-  ]).then(function (results) {
-    const record = results[0];
-    const mrpRecord = results[1];
-    // The procurement-required signal lives on Production_Targets.Status,
-    // not on the MRP record (see types.ts) — only meaningful once an MRP
-    // actually exists, hence the !!mrpRecord guard.
-    const procurementNeeded = !!mrpRecord && !!record && record.status === "Waiting for Stock";
+//
+// IMPORTANT: fetchMrpRecord requires the Production Target's NUMERIC record ID
+// (not the display string like "PT-118"), because Production_Target on the MRP
+// form is a lookup field. We must fetch the Production Target first to get
+// record.id, then fetch the MRP using that numeric ID.
+export function fetchProductionOverview(productionTargetId: string): Promise<{
+  record: ProductionTargetRow | null;
+  mrpRecord: MrpRow | null;
+  mrpDetails: MrpDetailData | null;
+  procurementRecords: ProcurementRow[];
+  productionInProgress: ProductionInProgressRow[];
+  consumptionEntries: ConsumptionEntryRow[];
+}> {
+  return fetchProductionTarget(productionTargetId).then(function (record) {
+    if (!record) {
+      return Promise.resolve({
+        record: null as ProductionTargetRow | null,
+        mrpRecord: null as MrpRow | null,
+        mrpDetails: null as MrpDetailData | null,
+        procurementRecords: [] as ProcurementRow[],
+        productionInProgress: [] as ProductionInProgressRow[],
+        consumptionEntries: [] as ConsumptionEntryRow[],
+      });
+    }
 
-    const mrpDetailsPromise =
-      mrpRecord && record ? fetchMrpDetails(mrpRecord, record.id) : Promise.resolve(null);
+    return fetchMrpRecord(record.id).then(function (mrpRecord) {
+      // The procurement-required signal lives on Production_Targets.Status,
+      // not on the MRP record (see types.ts) — only meaningful once an MRP
+      // actually exists, hence the !!mrpRecord guard.
+      const procurementNeeded = !!mrpRecord && record.status === "Waiting for Stock";
 
-    return Promise.all([
-      procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([]),
-      fetchProductionInProgress(productionTargetId),
-      fetchConsumptionEntries(productionTargetId),
-      mrpDetailsPromise,
-    ]).then(function (rest) {
-      return {
-        record,
-        mrpRecord,
-        mrpDetails: rest[3] as MrpDetailData | null,
-        procurementRecords: rest[0],
-        productionInProgress: rest[1],
-        consumptionEntries: rest[2],
-      };
+      const mrpDetailsPromise =
+        mrpRecord ? fetchMrpDetails(mrpRecord, record.id) : Promise.resolve(null as MrpDetailData | null);
+
+      return Promise.all([
+        procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([] as ProcurementRow[]),
+        fetchProductionInProgress(productionTargetId),
+        fetchConsumptionEntries(productionTargetId),
+        mrpDetailsPromise,
+      ]).then(function (rest) {
+        return {
+          record,
+          mrpRecord,
+          mrpDetails: rest[3] as MrpDetailData | null,
+          procurementRecords: rest[0] as ProcurementRow[],
+          productionInProgress: rest[1],
+          consumptionEntries: rest[2],
+        };
+      });
     });
   });
 }

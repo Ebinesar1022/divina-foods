@@ -107,25 +107,26 @@ export default function ProductionOverview({ productionTargetId }: { productionT
         return fetchProductionOverview(productionTargetId).then(function (result) {
           // If Creator report indexing has slight latency for child tables,
           // ensure the freshly committed draft data is immediately available for the report view
-          if (result) {
-            if (!result.mrpDetails || !result.mrpDetails.rawMaterials.length) {
-              result.mrpDetails = {
-                mrpRecord: result.mrpRecord || {
-                  id: "",
-                  mrpId: committedDraft.mrpId,
-                  productionTargetId: committedDraft.productionTargetId,
-                  date: committedDraft.mrpDate,
-                  createdBy: "",
-                  notes: committedNotes,
-                  status: "False",
-                },
-                finishedGoods: committedDraft.finishedGoods,
-                rawMaterials: committedDraft.rawMaterials,
-                hasShortfall: committedDraft.hasShortfall,
-              };
-            }
+          const mrpDetails = result.mrpDetails;
+          if (!mrpDetails || !mrpDetails.rawMaterials.length) {
+            const overrideDetails = {
+              mrpRecord: result.mrpRecord || {
+                id: "",
+                mrpId: committedDraft.mrpId,
+                productionTargetId: committedDraft.productionTargetId,
+                date: committedDraft.mrpDate,
+                createdBy: "",
+                notes: committedNotes,
+                status: "False" as const,
+              },
+              finishedGoods: committedDraft.finishedGoods,
+              rawMaterials: committedDraft.rawMaterials,
+              hasShortfall: committedDraft.hasShortfall,
+            };
+            setData({ ...result, mrpDetails: overrideDetails });
+          } else {
+            setData(result);
           }
-          setData(result);
         });
       })
       .then(function () {
