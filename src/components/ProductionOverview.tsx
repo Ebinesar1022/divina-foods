@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, CircularProgress, Tab, Tabs, Typography, Paper, Alert, Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
 import CreateMrpDialog from "./CreateMrpDialog";
-import { commitMrpDraft, fetchProductionOverview, prepareMrpDraft } from "../services/productionApi";
+import InitiateProductionDialog from "./InitiateProductionDialog";
+import {
+  commitMrpDraft,
+  commitProductionOrder,
+  fetchEmployees,
+  fetchProductionOverview,
+  prepareMrpDraft,
+  prepareProductionOrderDraft,
+} from "../services/productionApi";
 import { computeProgress, isProcurementRequired, stageIndex, stageKeyFromStatus } from "../config/stages.config";
 import type {
   ConsumptionEntryRow,
+  EmployeeOption,
   MrpDraft,
   MrpRow,
   ProcurementRow,
   ProductionInProgressRow,
+  ProductionOrderDraft,
+  ProductionOrderRow,
   ProductionTargetRow,
 } from "../types";
 
@@ -20,13 +32,19 @@ const TABS = [
   { key: "overview", label: "Overview" },
   { key: "mrp", label: "MRP" },
   { key: "procurement", label: "Procurement" },
+  { key: "initiate_production", label: "Initiate Production" },
   { key: "in_progress", label: "In-Progress" },
   { key: "consumption_entry", label: "Consumption Entry" },
 ];
 
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 interface OverviewData {
   record: ProductionTargetRow | null;
   mrpRecord: MrpRow | null;
+  productionOrderRecord: ProductionOrderRow | null;
   procurementRecords: ProcurementRow[];
   productionInProgress: ProductionInProgressRow[];
   consumptionEntries: ConsumptionEntryRow[];
@@ -52,6 +70,19 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   // landing before React re-renders.
   const preparingRef = useRef(false);
   const committingRef = useRef(false);
+
+  // Initiate Production: same two-phase draft → commit pattern as Create MRP.
+  const [poDialogOpen, setPoDialogOpen] = useState(false);
+  const [poDraft, setPoDraft] = useState<ProductionOrderDraft | null>(null);
+  const [poDraftError, setPoDraftError] = useState("");
+  const [poCommitError, setPoCommitError] = useState("");
+  const [poCommitting, setPoCommitting] = useState(false);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [assignedToId, setAssignedToId] = useState("");
+  const poPreparingRef = useRef(false);
+  const poCommittingRef = useRef(false);
 
   useEffect(() => {
     setLoading(true);
@@ -115,6 +146,63 @@ export default function ProductionOverview({ productionTargetId }: { productionT
       });
   }
 
+  function handleOpenInitiateProduction() {
+    if (!data || !data.record) return;
+    if (poPreparingRef.current) return;
+    poPreparingRef.current = true;
+    setPoDialogOpen(true);
+    setPoDraft(null);
+    setPoDraftError("");
+    setPoCommitError("");
+    setStartDate(todayIsoDate());
+    setEndDate("");
+    setAssignedToId("");
+    Promise.all([prepareProductionOrderDraft(data.record.id, productionTargetId), fetchEmployees()])
+      .then(function (results) {
+        setPoDraft(results[0]);
+        setEmployees(results[1]);
+      })
+      .catch(function (err: any) {
+        setPoDraftError((err && err.message) || "Failed to prepare production order. Please try again.");
+      })
+      .finally(function () {
+        poPreparingRef.current = false;
+      });
+  }
+
+  function handleCancelPoDraft() {
+    if (poCommittingRef.current) return; // nothing was written yet — safe to just close, except mid-commit
+    setPoDialogOpen(false);
+    setPoDraft(null);
+    setPoDraftError("");
+    setPoCommitError("");
+  }
+
+  function handleConfirmInitiateProduction() {
+    if (!poDraft) return;
+    if (poCommittingRef.current) return;
+    poCommittingRef.current = true;
+    setPoCommitting(true);
+    setPoCommitError("");
+    commitProductionOrder(poDraft, { startDate, endDate, assignedToId })
+      .then(function () {
+        return fetchProductionOverview(productionTargetId).then(function (result) {
+          setData(result);
+        });
+      })
+      .then(function () {
+        setPoDialogOpen(false);
+        setPoDraft(null);
+      })
+      .catch(function (err: any) {
+        setPoCommitError((err && err.message) || "Failed to start production. Please try again.");
+      })
+      .finally(function () {
+        poCommittingRef.current = false;
+        setPoCommitting(false);
+      });
+  }
+
   if (loading || !data || !data.record) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -123,7 +211,8 @@ export default function ProductionOverview({ productionTargetId }: { productionT
     );
   }
 
-  const { record, mrpRecord, procurementRecords, productionInProgress, consumptionEntries } = data;
+  const { record, mrpRecord, productionOrderRecord, procurementRecords, productionInProgress, consumptionEntries } =
+    data;
   const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
   const stageKey = stageKeyFromStatus(record.status);
   const currentIndex = stageIndex(stageKey);
@@ -230,6 +319,38 @@ export default function ProductionOverview({ productionTargetId }: { productionT
             </Box>
           )}
 
+          {activeTab === "initiate_production" && (
+            <Box>
+              {productionOrderRecord ? (
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" }, gap: 2 }}>
+                  <InfoCard label="Production Order ID" value={productionOrderRecord.productionOrderId} />
+                  <InfoCard label="Start Date" value={productionOrderRecord.startDate} />
+                  <InfoCard label="End Date" value={productionOrderRecord.endDate} />
+                  <InfoCard label="Assigned To" value={productionOrderRecord.assignedTo} />
+                </Box>
+              ) : !mrpRecord ? (
+                <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                  Create the MRP first before initiating production.
+                </Alert>
+              ) : isProcurementRequired(record.status) ? (
+                <Alert severity="warning" sx={{ borderRadius: "12px" }}>
+                  Procurement must be completed before production can start.
+                </Alert>
+              ) : (
+                <Box>
+                  <Button
+                    variant="contained"
+                    startIcon={<PlayCircleIcon />}
+                    onClick={handleOpenInitiateProduction}
+                    sx={{ borderRadius: "10px", textTransform: "none" }}
+                  >
+                    Start Production
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+
           {activeTab === "in_progress" && (
             <Box>
               {productionInProgress.length ? (
@@ -275,6 +396,23 @@ export default function ProductionOverview({ productionTargetId }: { productionT
         onNotesChange={setNotes}
         onCancel={handleCancelDraft}
         onConfirm={handleConfirmCreate}
+      />
+
+      <InitiateProductionDialog
+        open={poDialogOpen}
+        draft={poDraft}
+        draftError={poDraftError}
+        employees={employees}
+        committing={poCommitting}
+        commitError={poCommitError}
+        startDate={startDate}
+        endDate={endDate}
+        assignedToId={assignedToId}
+        onStartDateChange={setStartDate}
+        onEndDateChange={setEndDate}
+        onAssignedToChange={setAssignedToId}
+        onCancel={handleCancelPoDraft}
+        onConfirm={handleConfirmInitiateProduction}
       />
     </Box>
   );

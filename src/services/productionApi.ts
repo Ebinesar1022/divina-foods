@@ -11,11 +11,16 @@ import type {
   BomItemRow,
   ConsumptionEntryRow,
   CreateMrpResult,
+  CreateProductionOrderResult,
+  EmployeeOption,
   FinishedGoodTargetRow,
   MrpDraft,
   MrpRow,
   ProcurementRow,
   ProductionInProgressRow,
+  ProductionOrderDetails,
+  ProductionOrderDraft,
+  ProductionOrderRow,
   ProductionTargetRow,
   ProductionTargetStatus,
   RawMaterialNeedRow,
@@ -54,6 +59,11 @@ export const CONFIG = {
   WAREHOUSE_REPORT: "Warehouse_Master_Report",
   MRP_FORM: "Material_Requirement_Planning",
   RAW_MATERIALS_FORM: "Raw_Materials",
+
+  // Initiate Production — confirmed against the app's .ds export.
+  PRODUCTION_ORDER_REPORT: "Production_Order_Report",
+  PRODUCTION_ORDER_FORM: "Production_Order",
+  EMPLOYEE_REPORT: "Employee_Report",
 };
 
 function display(value: any): string {
@@ -72,6 +82,18 @@ function lookupId(value: any): string {
   if (value == null) return "";
   if (typeof value === "object") return value.ID != null ? String(value.ID) : "";
   return String(value);
+}
+
+// Employee.Employee_Name is a "name"-type field — comes back as
+// { prefix, first_name, last_name, suffix }, matching the displayformat
+// used for Assigned_To lookups elsewhere in the app (Production_Targets,
+// Production_Order): "prefix first_name last_name suffix".
+function formatEmployeeName(nameField: any): string {
+  if (!nameField || typeof nameField !== "object") return "";
+  return [nameField.prefix, nameField.first_name, nameField.last_name, nameField.suffix]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 }
 
 // Generic fetch — every read on this page goes through this one function.
@@ -437,6 +459,14 @@ function formatDateForZoho(date: Date): string {
   return `${day}-${months[date.getMonth()]}-${date.getFullYear()}`;
 }
 
+// Converts a native <input type="date"> value ("YYYY-MM-DD") to Zoho's
+// write format. The explicit T00:00:00 keeps this in local time — parsing
+// a bare "YYYY-MM-DD" string parses as UTC midnight, which can roll back a
+// day once .getDate() reads it in a negative-offset timezone.
+function formatIsoDateForZoho(isoDate: string): string {
+  return formatDateForZoho(new Date(isoDate + "T00:00:00"));
+}
+
 // ───────────── Create MRP: two-phase draft → commit ─────────────
 // Phase 1 (prepareMrpDraft) computes everything a new MRP would contain —
 // finished goods, BOM-exploded raw material needs, the generated MRP_ID —
@@ -564,6 +594,104 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
   });
 }
 
+// ───────────── Initiate Production ─────────────
+
+export function fetchEmployees(): Promise<EmployeeOption[]> {
+  return getRecords(CONFIG.EMPLOYEE_REPORT).then(function (rows) {
+    return rows.map(function (r: any) {
+      return {
+        id: r.ID,
+        name: formatEmployeeName(r.Employee_Name) || display(r.Employee_ID) || "Unnamed",
+      };
+    });
+  });
+}
+
+// Existence guard for Initiate Production, mirroring fetchMrpRecord — same
+// Production_Target lookup field shape (no _ID suffix) as the MRP form,
+// which is confirmed to accept text-display criteria the way
+// Finished_Goods.Production_Target_ID does not.
+export function fetchProductionOrderRecord(productionTargetId: string): Promise<ProductionOrderRow | null> {
+  const criteria = `Production_Target == "${productionTargetId}"`;
+  return getRecords(CONFIG.PRODUCTION_ORDER_REPORT, criteria).then(function (rows) {
+    if (!rows.length) return null;
+    const r = rows[0];
+    return {
+      id: r.ID,
+      productionOrderId: display(r.Production_Order_ID),
+      productionTargetId: display(r.Production_Target),
+      status: display(r.Status),
+      startDate: display(r.Start_Date),
+      endDate: display(r.End_Date),
+      assignedTo: display(r.Assigned_To),
+    };
+  });
+}
+
+// Computes the draft; writes nothing to Zoho. Mirrors prepareMrpDraft's
+// generated-ID pattern: Sequence_Master's Order_Name + Order_No, per the
+// native "Generate Production Order ID" workflow.
+export function prepareProductionOrderDraft(
+  productionTargetRecordId: string,
+  productionTargetId: string
+): Promise<ProductionOrderDraft> {
+  return fetchProductionOrderRecord(productionTargetId).then(function (existing) {
+    if (existing) {
+      return Promise.reject(
+        new Error(`A production order (${existing.productionOrderId}) already exists for this Production Target.`)
+      );
+    }
+
+    return fetchSequenceMasterRow().then(function (sequenceRow) {
+      const prefix = display(sequenceRow.Order_Name);
+      const currentNo = parseInt(display(sequenceRow.Order_No), 10) || 0;
+      return {
+        productionOrderId: prefix + String(currentNo).padStart(3, "0"),
+        productionTargetRecordId: productionTargetRecordId,
+        productionTargetId: productionTargetId,
+        sequenceRowId: sequenceRow.ID,
+        sequenceOrderNo: currentNo,
+      };
+    });
+  });
+}
+
+// Writes a confirmed draft: the Production_Order record, the Production
+// Target's Status update (to "In Progress" — the whole point of this
+// action), and the Sequence_Master bump — only after the order itself has
+// been created successfully.
+export function commitProductionOrder(
+  draft: ProductionOrderDraft,
+  details: ProductionOrderDetails
+): Promise<CreateProductionOrderResult> {
+  const payload: Record<string, any> = {
+    Production_Order_ID: draft.productionOrderId,
+    Production_Target: draft.productionTargetRecordId,
+    Status: "In Progress",
+    Start_Date: formatIsoDateForZoho(details.startDate),
+  };
+  if (details.endDate) payload.End_Date = formatIsoDateForZoho(details.endDate);
+  if (details.assignedToId) payload.Assigned_To = details.assignedToId;
+
+  return addRecord(CONFIG.PRODUCTION_ORDER_FORM, payload).then(function (orderRecord) {
+    const productionOrderRecordId: string = display(orderRecord.ID);
+
+    const productionTargetUpdate = updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
+      Status: "In Progress" as ProductionTargetStatus,
+    });
+    const sequenceBump = updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, draft.sequenceRowId, {
+      Order_No: draft.sequenceOrderNo + 1,
+    });
+
+    return Promise.all([productionTargetUpdate, sequenceBump]).then(function () {
+      return {
+        productionOrderRecordId: productionOrderRecordId,
+        productionOrderId: draft.productionOrderId,
+      };
+    });
+  });
+}
+
 // Fetch everything the Production Overview page needs, still no async/await —
 // Promise.all is native ES6 and fine (generator-based async/await
 // transpilation is the actual iOS Safari problem, not Promises themselves).
@@ -571,9 +699,11 @@ export function fetchProductionOverview(productionTargetId: string) {
   return Promise.all([
     fetchProductionTarget(productionTargetId),
     fetchMrpRecord(productionTargetId),
+    fetchProductionOrderRecord(productionTargetId),
   ]).then(function (results) {
     const record = results[0];
     const mrpRecord = results[1];
+    const productionOrderRecord = results[2];
     // The procurement-required signal lives on Production_Targets.Status,
     // not on the MRP record (see types.ts) — only meaningful once an MRP
     // actually exists, hence the !!mrpRecord guard.
@@ -587,6 +717,7 @@ export function fetchProductionOverview(productionTargetId: string) {
       return {
         record,
         mrpRecord,
+        productionOrderRecord,
         procurementRecords: rest[0],
         productionInProgress: rest[1],
         consumptionEntries: rest[2],
