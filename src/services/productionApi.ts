@@ -49,7 +49,7 @@ export const CONFIG = {
   MAIN_WAREHOUSE_STOCK_REPORT: "Main_Warehouse_Stock_Details_Report",
   SEQUENCE_MASTER_REPORT: "Sequence_Master_Report",
   SEQUENCE_MASTER_FORM: "Sequence_Master",
-  WAREHOUSE_REPORT: "Warehouse_Report",
+  WAREHOUSE_REPORT: "Warehouse_Master_Report",
   MRP_FORM: "Material_Requirement_Planning",
   RAW_MATERIALS_FORM: "Raw_Materials",
 };
