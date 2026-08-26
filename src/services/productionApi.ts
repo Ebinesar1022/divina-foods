@@ -49,6 +49,10 @@ export const CONFIG = {
   MAIN_WAREHOUSE_STOCK_REPORT: "Main_Warehouse_Stock_Details_Report",
   SEQUENCE_MASTER_REPORT: "Sequence_Master_Report",
   SEQUENCE_MASTER_FORM: "Sequence_Master",
+  // Confirmed against live DevTools traffic: this is a report directly on
+  // Warehouse_Master (not a separate "Warehouse" wrapper form), listing
+  // every physical warehouse (Main, Production, Scrap, ...) with
+  // Warehouse_Name as plain text — not a lookup.
   WAREHOUSE_REPORT: "Warehouse_Master_Report",
   MRP_FORM: "Material_Requirement_Planning",
   RAW_MATERIALS_FORM: "Raw_Materials",
@@ -405,17 +409,16 @@ function bumpMrpSequence(sequenceRow: any): Promise<any> {
   });
 }
 
-// Warehouse is a singleton record — the app only ever uses a single
-// Warehouse record, so there's no picker; just resolve its Warehouse_Name
-// lookup, which is what gets written into MRP.Warehouse.
+// The app only ever books MRPs against "Main Warehouse" — no picker needed,
+// just resolve that one Warehouse_Master row's own record ID, which is what
+// gets written into MRP.Warehouse (a lookup to Warehouse_Master).
 function fetchDefaultWarehouseId(): Promise<string> {
-  return getRecords(CONFIG.WAREHOUSE_REPORT).then(function (rows) {
-    if (!rows.length) return Promise.reject(new Error("Warehouse has no row configured."));
-    const warehouseId = lookupId(rows[0].Warehouse_Name);
-    if (!warehouseId) {
-      return Promise.reject(new Error("Warehouse record is missing its Warehouse_Name lookup."));
+  const criteria = `Warehouse_Name == "Main Warehouse"`;
+  return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
+    if (!rows.length) {
+      return Promise.reject(new Error('Could not find a "Main Warehouse" row in Warehouse_Master.'));
     }
-    return warehouseId;
+    return display(rows[0].ID);
   });
 }
 
