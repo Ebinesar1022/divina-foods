@@ -758,8 +758,18 @@ export function allocateStockOnProductionStart(productionTargetRecordId: string)
     },
     public_key: ALLOCATE_STOCK_API.public_key,
   }).then(function (resp: any) {
-    if (resp && resp.code && resp.code >= 400) {
-      return Promise.reject(new Error(resp.message || "Failed to allocate stock for production."));
+    // Zoho's own convention (used throughout this file for getRecords/
+    // addRecords/updateRecordById) is code 3000 = success — NOT an HTTP-style
+    // "< 400 is success" scheme. This response's own success codes (3000,
+    // and error codes like 3001/3330 seen elsewhere in this app) are all
+    // >= 400 numerically, so a `resp.code >= 400` check flags every
+    // successful call as a failure. Check the actual shape instead:
+    // { code: 3000, result: { status: "success", message: "...", ... } }.
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
+      return Promise.reject(
+        new Error((result && result.message) || "Failed to allocate stock for production.")
+      );
     }
     return resp;
   });
