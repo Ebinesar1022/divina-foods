@@ -14,6 +14,7 @@ import type {
   CreateProductionOrderResult,
   EmployeeOption,
   FinishedGoodTargetRow,
+  MrpDetailData,
   MrpDraft,
   MrpRow,
   ProcurementRow,
@@ -59,6 +60,7 @@ export const CONFIG = {
   WAREHOUSE_REPORT: "Warehouse_Master_Report",
   MRP_FORM: "Material_Requirement_Planning",
   RAW_MATERIALS_FORM: "Raw_Materials",
+  RAW_MATERIALS_REPORT: "Raw_Materials_Report",
 
   // Initiate Production — confirmed against the app's .ds export.
   PRODUCTION_ORDER_REPORT: "Production_Order_Report",
@@ -182,15 +184,20 @@ export function fetchProductionTarget(productionTargetId: string): Promise<Produ
 }
 
 // ───────────── Material Requirement & Planning ─────────────
-export function fetchMrpRecord(productionTargetId: string): Promise<MrpRow | null> {
-  const criteria = `Production_Target == "${productionTargetId}"`;
+// NOTE: Material_Requirement_Planning.Production_Target is a lookup field.
+// Creator's criteria engine matches lookups by the linked record's NUMERIC ID,
+// NOT by display text — `Production_Target == "PT-118"` always returns 0 rows.
+// Pass productionTargetRecordId (the numeric record ID from Production_Target)
+// and match without quotes, same as fetchFinishedGoodsForTarget.
+export function fetchMrpRecord(productionTargetRecordId: string): Promise<MrpRow | null> {
+  const criteria = `Production_Target == ${productionTargetRecordId}`;
   return getRecords(CONFIG.MRP_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
     const r = rows[0];
     return {
       id: r.ID,
       mrpId: display(r.MRP_ID),
-      productionTargetId: display(r.Production_Target_ID),
+      productionTargetId: display(r.Production_Target),
       // MRP_Date per the app's .ds export — Material_Requirement_Planning
       // has no Date_field. Status here is just "False"/"True" (unrelated to
       // stock — see MrpRow.status) — the procurement-required signal lives
@@ -485,7 +492,8 @@ export function prepareMrpDraft(
   // generated MRP_ID. This doesn't fully close the race (both checks can
   // still run before either commit finishes) but it catches the common case
   // where the first MRP has already landed by the time this one starts.
-  return fetchMrpRecord(productionTargetId).then(function (existingMrp) {
+  // Uses productionTargetRecordId (numeric) since Production_Target is a lookup field.
+  return fetchMrpRecord(productionTargetRecordId).then(function (existingMrp) {
     if (existingMrp) {
       return Promise.reject(new Error(`An MRP (${existingMrp.mrpId}) already exists for this Production Target.`));
     }
@@ -594,6 +602,102 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
   });
 }
 
+// ───────────── MRP Details (Finished Goods & Raw Materials for Report) ─────────────
+
+export function fetchFinishedGoodsForMrp(
+  mrpRecordId: string,
+  productionTargetRecordId?: string
+): Promise<FinishedGoodTargetRow[]> {
+  const criteria = `MRP_ID == ${mrpRecordId}`;
+  return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(function (rows) {
+    if (rows && rows.length > 0) {
+      return rows.map(function (r: any) {
+        return {
+          id: r.ID,
+          productionTargetRecordId: lookupId(r.Production_Target_ID) || productionTargetRecordId || "",
+          itemId: lookupId(r.Item),
+          itemName: display(r.Item),
+          uomId: lookupId(r.UOM),
+          uomName: display(r.UOM),
+          targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
+        };
+      });
+    }
+    // Fallback: lookup by Production Target record ID if not tagged with MRP_ID yet
+    if (productionTargetRecordId) {
+      return fetchFinishedGoodsForTarget(productionTargetRecordId);
+    }
+    return [];
+  });
+}
+
+export function fetchRawMaterialsForMrp(mrpRecordId: string): Promise<RawMaterialNeedRow[]> {
+  const criteria = `MRP_ID == ${mrpRecordId}`;
+  return getRecords(CONFIG.RAW_MATERIALS_REPORT, criteria).then(function (rows) {
+    if (!rows || !rows.length) return [];
+    return rows.map(function (r: any) {
+      return {
+        productId: lookupId(r.Product_Name) || lookupId(r.Product) || display(r.Product_Name),
+        productName: display(r.Product_Name) || display(r.Product),
+        uom: display(r.UOM),
+        stockOnHand: parseFloat(display(r.Stock_On_hand || r.Stock_On_Hand)) || 0,
+        stockRequired: parseFloat(display(r.Stock_Required)) || 0,
+        allocateQuantity: parseFloat(display(r.Allocate_Quantity || r.Allocated_Qty)) || 0,
+        neededQuantity: parseFloat(display(r.Needed_Quantity || r.Needed_Qty)) || 0,
+        status: (display(r.Status) || "Stock Available") as RawMaterialNeedRow["status"],
+      };
+    });
+  });
+}
+
+export function fetchMrpDetails(
+  mrpRecord: MrpRow,
+  productionTargetRecordId: string
+): Promise<MrpDetailData> {
+  return Promise.all([
+    fetchFinishedGoodsForMrp(mrpRecord.id, productionTargetRecordId),
+    fetchRawMaterialsForMrp(mrpRecord.id),
+  ]).then(function (results) {
+    const finishedGoods = results[0];
+    let rawMaterials = results[1];
+
+    if (rawMaterials.length > 0) {
+      const hasShortfall = rawMaterials.some(function (rm) {
+        return rm.status === "Needs Purchase";
+      });
+      return {
+        mrpRecord: mrpRecord,
+        finishedGoods: finishedGoods,
+        rawMaterials: rawMaterials,
+        hasShortfall: hasShortfall,
+      };
+    }
+
+    // Fallback: If Raw_Materials_Report has no rows returned (e.g. mock data or unindexed),
+    // compute needs dynamically from finished goods BOM
+    if (finishedGoods.length > 0) {
+      return computeRawMaterialNeeds(finishedGoods).then(function (computed) {
+        const hasShortfall = computed.some(function (rm) {
+          return rm.status === "Needs Purchase";
+        });
+        return {
+          mrpRecord: mrpRecord,
+          finishedGoods: finishedGoods,
+          rawMaterials: computed,
+          hasShortfall: hasShortfall,
+        };
+      });
+    }
+
+    return {
+      mrpRecord: mrpRecord,
+      finishedGoods: [],
+      rawMaterials: [],
+      hasShortfall: false,
+    };
+  });
+}
+
 // ───────────── Initiate Production ─────────────
 
 export function fetchEmployees(): Promise<EmployeeOption[]> {
@@ -608,11 +712,11 @@ export function fetchEmployees(): Promise<EmployeeOption[]> {
 }
 
 // Existence guard for Initiate Production, mirroring fetchMrpRecord — same
-// Production_Target lookup field shape (no _ID suffix) as the MRP form,
-// which is confirmed to accept text-display criteria the way
-// Finished_Goods.Production_Target_ID does not.
-export function fetchProductionOrderRecord(productionTargetId: string): Promise<ProductionOrderRow | null> {
-  const criteria = `Production_Target == "${productionTargetId}"`;
+// Production_Target lookup field shape (no _ID suffix) as the MRP form. Like
+// fetchMrpRecord, this needs the Production Target's NUMERIC record ID —
+// Creator's criteria engine matches lookups by ID, not display text.
+export function fetchProductionOrderRecord(productionTargetRecordId: string): Promise<ProductionOrderRow | null> {
+  const criteria = `Production_Target == ${productionTargetRecordId}`;
   return getRecords(CONFIG.PRODUCTION_ORDER_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
     const r = rows[0];
@@ -635,7 +739,7 @@ export function prepareProductionOrderDraft(
   productionTargetRecordId: string,
   productionTargetId: string
 ): Promise<ProductionOrderDraft> {
-  return fetchProductionOrderRecord(productionTargetId).then(function (existing) {
+  return fetchProductionOrderRecord(productionTargetRecordId).then(function (existing) {
     if (existing) {
       return Promise.reject(
         new Error(`A production order (${existing.productionOrderId}) already exists for this Production Target.`)
@@ -695,33 +799,63 @@ export function commitProductionOrder(
 // Fetch everything the Production Overview page needs, still no async/await —
 // Promise.all is native ES6 and fine (generator-based async/await
 // transpilation is the actual iOS Safari problem, not Promises themselves).
-export function fetchProductionOverview(productionTargetId: string) {
-  return Promise.all([
-    fetchProductionTarget(productionTargetId),
-    fetchMrpRecord(productionTargetId),
-    fetchProductionOrderRecord(productionTargetId),
-  ]).then(function (results) {
-    const record = results[0];
-    const mrpRecord = results[1];
-    const productionOrderRecord = results[2];
-    // The procurement-required signal lives on Production_Targets.Status,
-    // not on the MRP record (see types.ts) — only meaningful once an MRP
-    // actually exists, hence the !!mrpRecord guard.
-    const procurementNeeded = !!mrpRecord && !!record && record.status === "Waiting for Stock";
+//
+// IMPORTANT: fetchMrpRecord and fetchProductionOrderRecord both require the
+// Production Target's NUMERIC record ID (not the display string like
+// "PT-118"), because Production_Target on both forms is a lookup field. We
+// must fetch the Production Target first to get record.id, then fetch the
+// rest using that numeric ID.
+export function fetchProductionOverview(productionTargetId: string): Promise<{
+  record: ProductionTargetRow | null;
+  mrpRecord: MrpRow | null;
+  mrpDetails: MrpDetailData | null;
+  productionOrderRecord: ProductionOrderRow | null;
+  procurementRecords: ProcurementRow[];
+  productionInProgress: ProductionInProgressRow[];
+  consumptionEntries: ConsumptionEntryRow[];
+}> {
+  return fetchProductionTarget(productionTargetId).then(function (record) {
+    if (!record) {
+      return Promise.resolve({
+        record: null as ProductionTargetRow | null,
+        mrpRecord: null as MrpRow | null,
+        mrpDetails: null as MrpDetailData | null,
+        productionOrderRecord: null as ProductionOrderRow | null,
+        procurementRecords: [] as ProcurementRow[],
+        productionInProgress: [] as ProductionInProgressRow[],
+        consumptionEntries: [] as ConsumptionEntryRow[],
+      });
+    }
 
-    return Promise.all([
-      procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([]),
-      fetchProductionInProgress(productionTargetId),
-      fetchConsumptionEntries(productionTargetId),
-    ]).then(function (rest) {
-      return {
-        record,
-        mrpRecord,
-        productionOrderRecord,
-        procurementRecords: rest[0],
-        productionInProgress: rest[1],
-        consumptionEntries: rest[2],
-      };
+    return Promise.all([fetchMrpRecord(record.id), fetchProductionOrderRecord(record.id)]).then(function (
+      lookups
+    ) {
+      const mrpRecord = lookups[0];
+      const productionOrderRecord = lookups[1];
+      // The procurement-required signal lives on Production_Targets.Status,
+      // not on the MRP record (see types.ts) — only meaningful once an MRP
+      // actually exists, hence the !!mrpRecord guard.
+      const procurementNeeded = !!mrpRecord && record.status === "Waiting for Stock";
+
+      const mrpDetailsPromise =
+        mrpRecord ? fetchMrpDetails(mrpRecord, record.id) : Promise.resolve(null as MrpDetailData | null);
+
+      return Promise.all([
+        procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([] as ProcurementRow[]),
+        fetchProductionInProgress(productionTargetId),
+        fetchConsumptionEntries(productionTargetId),
+        mrpDetailsPromise,
+      ]).then(function (rest) {
+        return {
+          record,
+          mrpRecord,
+          mrpDetails: rest[3] as MrpDetailData | null,
+          productionOrderRecord,
+          procurementRecords: rest[0] as ProcurementRow[],
+          productionInProgress: rest[1],
+          consumptionEntries: rest[2],
+        };
+      });
     });
   });
 }

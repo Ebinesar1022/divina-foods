@@ -131,6 +131,13 @@ export interface MrpDraft {
   sequenceMrpNo: number;
 }
 
+export interface MrpDetailData {
+  mrpRecord: MrpRow;
+  finishedGoods: FinishedGoodTargetRow[];
+  rawMaterials: RawMaterialNeedRow[];
+  hasShortfall: boolean;
+}
+
 // ───────────── Initiate Production ─────────────
 
 export interface EmployeeOption {
