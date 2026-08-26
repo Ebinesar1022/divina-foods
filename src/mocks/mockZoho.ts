@@ -144,8 +144,6 @@ const EMPLOYEES = [
   { ID: "2", Employee_ID: "EMP-002", Employee_Name: { prefix: "Ms.", first_name: "Anu", last_name: "R" } },
 ];
 
-const PRODUCTION_ORDERS: any[] = [];
-
 const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.PRODUCTION_TARGET_REPORT]: PRODUCTION_TARGET,
   [CONFIG.MRP_REPORT]: MRP,
@@ -161,7 +159,6 @@ const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.SEQUENCE_MASTER_REPORT]: SEQUENCE_MASTER,
   [CONFIG.WAREHOUSE_REPORT]: WAREHOUSE_MASTER,
   [CONFIG.EMPLOYEE_REPORT]: EMPLOYEES,
-  [CONFIG.PRODUCTION_ORDER_REPORT]: PRODUCTION_ORDERS,
 };
 
 export function installMockZoho() {
@@ -178,10 +175,16 @@ export function installMockZoho() {
           return Promise.resolve({ code: 3000, data: record });
         },
         updateRecordById(params: { report_name: string; id: string; payload: { data: any } }) {
+          const rows = REPORT_DATA[params.report_name] || [];
+          const target = rows.find((r) => String(r.ID) === String(params.id));
+          if (target) {
+            Object.assign(target, params.payload.data);
+          }
           return Promise.resolve({ code: 3000, data: params.payload.data });
         },
       },
     },
   };
 }
+
 
