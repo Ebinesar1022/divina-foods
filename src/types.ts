@@ -21,6 +21,7 @@ export interface ProductionTargetRow {
   productionTargetId: string; // e.g. "PT-105"
   date: string;
   assignedTo: string;
+  assignedToId?: string;
   startDate: string;
   endDate: string;
   status: ProductionTargetStatus;
@@ -138,42 +139,16 @@ export interface MrpDetailData {
   hasShortfall: boolean;
 }
 
-// ───────────── Initiate Production ─────────────
+// ───────────── Start Production ─────────────
 
 export interface EmployeeOption {
   id: string;
   name: string;
 }
 
-// An existing Production_Order record for a target — shown once one exists,
-// in place of the "Start Production" button.
-export interface ProductionOrderRow {
-  id: string;
-  productionOrderId: string; // e.g. "PO-012"
-  productionTargetId: string;
-  status: string; // Released | In Progress | Completed
-  startDate: string;
-  endDate: string;
-  assignedTo: string;
-}
-
-// A fully-computed but not-yet-written Production_Order — mirrors MrpDraft's
-// draft → commit shape.
-export interface ProductionOrderDraft {
-  productionOrderId: string; // e.g. "PO-012"
-  productionTargetRecordId: string;
-  productionTargetId: string; // display id, e.g. "PT-120"
-  sequenceRowId: string;
-  sequenceOrderNo: number;
-}
-
-export interface CreateProductionOrderResult {
-  productionOrderRecordId: string;
-  productionOrderId: string;
-}
-
-export interface ProductionOrderDetails {
+export interface StartProductionDetails {
   startDate: string; // "YYYY-MM-DD" from a native <input type="date">
-  endDate: string; // "YYYY-MM-DD", or "" if not set
-  assignedToId: string; // Employee record ID, or "" if not set
+  endDate?: string; // "YYYY-MM-DD", or "" if not set
+  assignedToId?: string; // Employee record ID, or "" if not set
 }
+

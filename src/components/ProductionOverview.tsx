@@ -29,13 +29,18 @@ import MrpReportView from "./MrpReportView";
 import FoodProductionLoader from "./FoodProductionLoader";
 import {
   commitMrpDraft,
-  commitProductionOrder,
   fetchEmployees,
   fetchProductionOverview,
   prepareMrpDraft,
-  prepareProductionOrderDraft,
+  startProduction,
+  allocateStockOnProductionStart,
 } from "../services/productionApi";
-import { computeProgress, isProcurementRequired, stageIndex, stageKeyFromStatus } from "../config/stages.config";
+import {
+  computeProgress,
+  isProcurementRequired,
+  stageIndex,
+  stageKeyFromStatus,
+} from "../config/stages.config";
 import type {
   ConsumptionEntryRow,
   EmployeeOption,
@@ -44,8 +49,6 @@ import type {
   MrpRow,
   ProcurementRow,
   ProductionInProgressRow,
-  ProductionOrderDraft,
-  ProductionOrderRow,
   ProductionTargetRow,
 } from "../types";
 
@@ -62,17 +65,59 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function parseZohoDateToIso(dateStr: string): string {
+  if (!dateStr) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const parts = dateStr.split("-");
+  if (parts.length === 3 && parts[1].length === 3) {
+    const day = parts[0].padStart(2, "0");
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const monthIdx = monthNames.findIndex(
+      (m) => m.toLowerCase() === parts[1].toLowerCase(),
+    );
+    if (monthIdx !== -1) {
+      const month = String(monthIdx + 1).padStart(2, "0");
+      const year = parts[2];
+      return `${year}-${month}-${day}`;
+    }
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  return "";
+}
+
 interface OverviewData {
   record: ProductionTargetRow | null;
   mrpRecord: MrpRow | null;
   mrpDetails?: MrpDetailData | null;
-  productionOrderRecord: ProductionOrderRow | null;
   procurementRecords: ProcurementRow[];
   productionInProgress: ProductionInProgressRow[];
   consumptionEntries: ConsumptionEntryRow[];
 }
 
-export default function ProductionOverview({ productionTargetId }: { productionTargetId: string }) {
+export default function ProductionOverview({
+  productionTargetId,
+}: {
+  productionTargetId: string;
+}) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OverviewData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
@@ -93,17 +138,14 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   const preparingRef = useRef(false);
   const committingRef = useRef(false);
 
-  // Initiate Production: same two-phase draft → commit pattern as Create MRP.
+  // Start Production: dialog prefilled with MRP ID, Production Target, and Target details.
   const [poDialogOpen, setPoDialogOpen] = useState(false);
-  const [poDraft, setPoDraft] = useState<ProductionOrderDraft | null>(null);
-  const [poDraftError, setPoDraftError] = useState("");
   const [poCommitError, setPoCommitError] = useState("");
   const [poCommitting, setPoCommitting] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
-  const poPreparingRef = useRef(false);
   const poCommittingRef = useRef(false);
 
   useEffect(() => {
@@ -128,7 +170,9 @@ export default function ProductionOverview({ productionTargetId }: { productionT
         setMrpDraft(draft);
       })
       .catch(function (err: any) {
-        setDraftError((err && err.message) || "Failed to prepare MRP. Please try again.");
+        setDraftError(
+          (err && err.message) || "Failed to prepare MRP. Please try again.",
+        );
       })
       .finally(function () {
         preparingRef.current = false;
@@ -153,37 +197,41 @@ export default function ProductionOverview({ productionTargetId }: { productionT
     const committedNotes = notes;
     commitMrpDraft(committedDraft, committedNotes)
       .then(function () {
-        return fetchProductionOverview(productionTargetId).then(function (result) {
-          // If Creator report indexing has slight latency for child tables,
-          // ensure the freshly committed draft data is immediately available for the report view
-          const mrpDetails = result.mrpDetails;
-          if (!mrpDetails || !mrpDetails.rawMaterials.length) {
-            const overrideDetails = {
-              mrpRecord: result.mrpRecord || {
-                id: "",
-                mrpId: committedDraft.mrpId,
-                productionTargetId: committedDraft.productionTargetId,
-                date: committedDraft.mrpDate,
-                createdBy: "",
-                notes: committedNotes,
-                status: "False" as const,
-              },
-              finishedGoods: committedDraft.finishedGoods,
-              rawMaterials: committedDraft.rawMaterials,
-              hasShortfall: committedDraft.hasShortfall,
-            };
-            setData({ ...result, mrpDetails: overrideDetails });
-          } else {
-            setData(result);
-          }
-        });
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            // If Creator report indexing has slight latency for child tables,
+            // ensure the freshly committed draft data is immediately available for the report view
+            const mrpDetails = result.mrpDetails;
+            if (!mrpDetails || !mrpDetails.rawMaterials.length) {
+              const overrideDetails = {
+                mrpRecord: result.mrpRecord || {
+                  id: "",
+                  mrpId: committedDraft.mrpId,
+                  productionTargetId: committedDraft.productionTargetId,
+                  date: committedDraft.mrpDate,
+                  createdBy: "",
+                  notes: committedNotes,
+                  status: "False" as const,
+                },
+                finishedGoods: committedDraft.finishedGoods,
+                rawMaterials: committedDraft.rawMaterials,
+                hasShortfall: committedDraft.hasShortfall,
+              };
+              setData({ ...result, mrpDetails: overrideDetails });
+            } else {
+              setData(result);
+            }
+          },
+        );
       })
       .then(function () {
         setMrpDialogOpen(false);
         setMrpDraft(null);
       })
       .catch(function (err: any) {
-        setCommitError((err && err.message) || "Failed to create MRP. Please try again.");
+        setCommitError(
+          (err && err.message) || "Failed to create MRP. Please try again.",
+        );
       })
       .finally(function () {
         committingRef.current = false;
@@ -193,54 +241,56 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
   function handleOpenInitiateProduction() {
     if (!data || !data.record) return;
-    if (poPreparingRef.current) return;
-    poPreparingRef.current = true;
+    const target = data.record;
     setPoDialogOpen(true);
-    setPoDraft(null);
-    setPoDraftError("");
     setPoCommitError("");
-    setStartDate(todayIsoDate());
-    setEndDate("");
-    setAssignedToId("");
-    Promise.all([prepareProductionOrderDraft(data.record.id, productionTargetId), fetchEmployees()])
-      .then(function (results) {
-        setPoDraft(results[0]);
-        setEmployees(results[1]);
-      })
-      .catch(function (err: any) {
-        setPoDraftError((err && err.message) || "Failed to prepare production order. Please try again.");
-      })
-      .finally(function () {
-        poPreparingRef.current = false;
-      });
+    setStartDate(parseZohoDateToIso(target.startDate) || todayIsoDate());
+    setEndDate(parseZohoDateToIso(target.endDate));
+    setAssignedToId(target.assignedToId || "");
+    fetchEmployees().then(function (empList) {
+      setEmployees(empList);
+      if (!target.assignedToId && target.assignedTo) {
+        const matched = empList.find(
+          (e) => e.name.toLowerCase() === target.assignedTo.toLowerCase(),
+        );
+        if (matched) {
+          setAssignedToId(matched.id);
+        }
+      }
+    });
   }
 
   function handleCancelPoDraft() {
-    if (poCommittingRef.current) return; // nothing was written yet — safe to just close, except mid-commit
+    if (poCommittingRef.current) return;
     setPoDialogOpen(false);
-    setPoDraft(null);
-    setPoDraftError("");
     setPoCommitError("");
   }
 
   function handleConfirmInitiateProduction() {
-    if (!poDraft) return;
+    if (!data || !data.record) return;
     if (poCommittingRef.current) return;
     poCommittingRef.current = true;
     setPoCommitting(true);
     setPoCommitError("");
-    commitProductionOrder(poDraft, { startDate, endDate, assignedToId })
+    Promise.all([
+      startProduction(data.record.id, { startDate, endDate, assignedToId }),
+      allocateStockOnProductionStart(data.record.id),
+    ])
       .then(function () {
-        return fetchProductionOverview(productionTargetId).then(function (result) {
-          setData(result);
-        });
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            setData(result);
+          },
+        );
       })
       .then(function () {
         setPoDialogOpen(false);
-        setPoDraft(null);
       })
       .catch(function (err: any) {
-        setPoCommitError((err && err.message) || "Failed to start production. Please try again.");
+        setPoCommitError(
+          (err && err.message) ||
+            "Failed to start production. Please try again.",
+        );
       })
       .finally(function () {
         poCommittingRef.current = false;
@@ -250,7 +300,14 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
   if (loading || !data || !data.record) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "60vh",
+        }}
+      >
         <FoodProductionLoader
           size="large"
           text="Loading Production Overview…"
@@ -260,8 +317,7 @@ export default function ProductionOverview({ productionTargetId }: { productionT
     );
   }
 
-  const { record, mrpRecord, productionOrderRecord, procurementRecords, productionInProgress, consumptionEntries } =
-    data;
+  const { record, mrpRecord, procurementRecords, productionInProgress, consumptionEntries } = data;
   const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
   const neededItems = (data.mrpDetails?.rawMaterials || []).filter((rm) => rm.status === "Needs Purchase");
   const stageKey = stageKeyFromStatus(record.status);
@@ -271,9 +327,16 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto", p: { xs: 2, md: 3 } }}>
-      <ProjectHeader record={record} progressPercent={progressPercent} onBack={() => window.history.back()} />
+      <ProjectHeader
+        record={record}
+        progressPercent={progressPercent}
+        onBack={() => window.history.back()}
+      />
 
-      <Paper elevation={0} sx={{ mt: 3, borderRadius: "16px", p: { xs: 1, md: 2 } }}>
+      <Paper
+        elevation={0}
+        sx={{ mt: 3, borderRadius: "16px", p: { xs: 1, md: 2 } }}
+      >
         <PipelineStepper
           currentStageKey={stageKey}
           currentIndex={currentIndex}
@@ -297,11 +360,23 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
         <Box sx={{ p: { xs: 2, md: 3 } }}>
           {activeTab === "overview" && (
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" }, gap: 2 }}>
-              <InfoCard label="Production Target ID" value={record.productionTargetId} />
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" },
+                gap: 2,
+              }}
+            >
+              <InfoCard
+                label="Production Target ID"
+                value={record.productionTargetId}
+              />
               <InfoCard label="Date" value={record.date} />
               <InfoCard label="Assigned To" value={record.assignedTo} />
-              <InfoCard label="Current Status" valueNode={<StatusChip value={record.status} />} />
+              <InfoCard
+                label="Current Status"
+                valueNode={<StatusChip value={record.status} />}
+              />
             </Box>
           )}
 
@@ -447,12 +522,27 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
           {activeTab === "initiate_production" && (
             <Box>
-              {productionOrderRecord ? (
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" }, gap: 2 }}>
-                  <InfoCard label="Production Order ID" value={productionOrderRecord.productionOrderId} />
-                  <InfoCard label="Start Date" value={productionOrderRecord.startDate} />
-                  <InfoCard label="End Date" value={productionOrderRecord.endDate} />
-                  <InfoCard label="Assigned To" value={productionOrderRecord.assignedTo} />
+              {record.status === "In Progress" ||
+              record.status === "Completed" ? (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+                    gap: 2,
+                  }}
+                >
+                  <InfoCard label="MRP ID" value={mrpRecord?.mrpId} />
+                  <InfoCard
+                    label="Production Target ID"
+                    value={record.productionTargetId}
+                  />
+                  <InfoCard label="Start Date" value={record.startDate} />
+                  <InfoCard label="End Date" value={record.endDate} />
+                  <InfoCard label="Assigned To" value={record.assignedTo} />
+                  <InfoCard
+                    label="Target Status"
+                    valueNode={<StatusChip value={record.status} />}
+                  />
                 </Box>
               ) : !mrpRecord ? (
                 <Alert severity="info" sx={{ borderRadius: "12px" }}>
@@ -481,7 +571,11 @@ export default function ProductionOverview({ productionTargetId }: { productionT
             <Box>
               {productionInProgress.length ? (
                 productionInProgress.map((row) => (
-                  <Paper key={row.id} variant="outlined" sx={{ p: 1.5, mb: 1, borderRadius: "12px" }}>
+                  <Paper
+                    key={row.id}
+                    variant="outlined"
+                    sx={{ p: 1.5, mb: 1, borderRadius: "12px" }}
+                  >
                     <Typography sx={{ fontWeight: 600 }}>{row.date}</Typography>
                     <Typography color="text.secondary" sx={{ fontSize: 13 }}>
                       Assigned to {row.assignedBy}
@@ -490,7 +584,9 @@ export default function ProductionOverview({ productionTargetId }: { productionT
                   </Paper>
                 ))
               ) : (
-                <Typography color="text.secondary">No production batches logged yet.</Typography>
+                <Typography color="text.secondary">
+                  No production batches logged yet.
+                </Typography>
               )}
             </Box>
           )}
@@ -499,13 +595,21 @@ export default function ProductionOverview({ productionTargetId }: { productionT
             <Box>
               {consumptionEntries.length ? (
                 consumptionEntries.map((row) => (
-                  <Paper key={row.id} variant="outlined" sx={{ p: 1.5, mb: 1, borderRadius: "12px" }}>
-                    <Typography sx={{ fontWeight: 600 }}>Qty consumed: {row.consumedQty}</Typography>
+                  <Paper
+                    key={row.id}
+                    variant="outlined"
+                    sx={{ p: 1.5, mb: 1, borderRadius: "12px" }}
+                  >
+                    <Typography sx={{ fontWeight: 600 }}>
+                      Qty consumed: {row.consumedQty}
+                    </Typography>
                     <StatusChip value={row.status} />
                   </Paper>
                 ))
               ) : (
-                <Typography color="text.secondary">No consumption entries yet.</Typography>
+                <Typography color="text.secondary">
+                  No consumption entries yet.
+                </Typography>
               )}
             </Box>
           )}
@@ -526,8 +630,8 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
       <InitiateProductionDialog
         open={poDialogOpen}
-        draft={poDraft}
-        draftError={poDraftError}
+        mrpId={mrpRecord?.mrpId || ""}
+        productionTargetId={record.productionTargetId}
         employees={employees}
         committing={poCommitting}
         commitError={poCommitError}
@@ -544,11 +648,23 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   );
 }
 
-function InfoCard({ label, value, valueNode }: { label: string; value?: string; valueNode?: React.ReactNode }) {
+function InfoCard({
+  label,
+  value,
+  valueNode,
+}: {
+  label: string;
+  value?: string;
+  valueNode?: React.ReactNode;
+}) {
   return (
     <Paper variant="outlined" sx={{ p: 1.5, borderRadius: "12px" }}>
-      <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 0.5 }}>{label}</Typography>
-      {valueNode || <Typography sx={{ fontWeight: 600 }}>{value || "—"}</Typography>}
+      <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 0.5 }}>
+        {label}
+      </Typography>
+      {valueNode || (
+        <Typography sx={{ fontWeight: 600 }}>{value || "—"}</Typography>
+      )}
     </Paper>
   );
 }

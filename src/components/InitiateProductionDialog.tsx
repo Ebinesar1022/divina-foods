@@ -14,12 +14,12 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
-import type { EmployeeOption, ProductionOrderDraft } from "../types";
+import type { EmployeeOption } from "../types";
 
 interface InitiateProductionDialogProps {
   open: boolean;
-  draft: ProductionOrderDraft | null;
-  draftError: string;
+  mrpId: string;
+  productionTargetId: string;
   employees: EmployeeOption[];
   committing: boolean;
   commitError: string;
@@ -35,8 +35,8 @@ interface InitiateProductionDialogProps {
 
 export default function InitiateProductionDialog({
   open,
-  draft,
-  draftError,
+  mrpId,
+  productionTargetId,
   employees,
   committing,
   commitError,
@@ -49,8 +49,6 @@ export default function InitiateProductionDialog({
   onCancel,
   onConfirm,
 }: InitiateProductionDialogProps) {
-  const isPreparing = !draft && !draftError;
-
   return (
     <Dialog
       open={open}
@@ -77,7 +75,7 @@ export default function InitiateProductionDialog({
               Start Production
             </Typography>
             <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)" }}>
-              Creates the production order and moves this target In Progress
+              Initiates production and moves this target In Progress
             </Typography>
           </Box>
         </Box>
@@ -87,74 +85,57 @@ export default function InitiateProductionDialog({
       </Box>
 
       <DialogContent sx={{ p: 3, bgcolor: "#F8FAFC" }}>
-        {isPreparing && (
-          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, py: 6 }}>
-            <CircularProgress />
-            <Typography color="text.secondary">Generating the production order…</Typography>
-          </Box>
-        )}
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)" }, gap: 2, mb: 2.5 }}>
+          <FieldCard label="MRP ID" value={mrpId} />
+          <FieldCard label="Production Target" value={productionTargetId} />
+        </Box>
 
-        {draftError && (
-          <Alert severity="error" sx={{ borderRadius: "12px" }}>
-            {draftError}
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)" }, gap: 2, mb: 2.5 }}>
+          <TextField
+            label="Start Date"
+            type="date"
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            value={startDate}
+            onChange={(e) => onStartDateChange(e.target.value)}
+            disabled={committing}
+            sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+          />
+          <TextField
+            label="End Date"
+            type="date"
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            value={endDate}
+            onChange={(e) => onEndDateChange(e.target.value)}
+            disabled={committing}
+            sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+          />
+        </Box>
+
+        <TextField
+          select
+          label="Assigned To"
+          fullWidth
+          value={assignedToId}
+          onChange={(e) => onAssignedToChange(e.target.value)}
+          disabled={committing}
+          sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+        >
+          <MenuItem value="">
+            <em>Unassigned</em>
+          </MenuItem>
+          {employees.map((emp) => (
+            <MenuItem key={emp.id} value={emp.id}>
+              {emp.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        {commitError && (
+          <Alert severity="error" sx={{ borderRadius: "12px", mt: 2 }}>
+            {commitError}
           </Alert>
-        )}
-
-        {draft && (
-          <>
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)" }, gap: 2, mb: 2.5 }}>
-              <FieldCard label="Production Order ID" value={draft.productionOrderId} />
-              <FieldCard label="Production Target" value={draft.productionTargetId} />
-            </Box>
-
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)" }, gap: 2, mb: 2.5 }}>
-              <TextField
-                label="Start Date"
-                type="date"
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                value={startDate}
-                onChange={(e) => onStartDateChange(e.target.value)}
-                disabled={committing}
-                sx={{ bgcolor: "#fff", borderRadius: "10px" }}
-              />
-              <TextField
-                label="End Date"
-                type="date"
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                value={endDate}
-                onChange={(e) => onEndDateChange(e.target.value)}
-                disabled={committing}
-                sx={{ bgcolor: "#fff", borderRadius: "10px" }}
-              />
-            </Box>
-
-            <TextField
-              select
-              label="Assigned To"
-              fullWidth
-              value={assignedToId}
-              onChange={(e) => onAssignedToChange(e.target.value)}
-              disabled={committing}
-              sx={{ bgcolor: "#fff", borderRadius: "10px" }}
-            >
-              <MenuItem value="">
-                <em>Unassigned</em>
-              </MenuItem>
-              {employees.map((emp) => (
-                <MenuItem key={emp.id} value={emp.id}>
-                  {emp.name}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            {commitError && (
-              <Alert severity="error" sx={{ borderRadius: "12px", mt: 2 }}>
-                {commitError}
-              </Alert>
-            )}
-          </>
         )}
       </DialogContent>
 
@@ -169,7 +150,7 @@ export default function InitiateProductionDialog({
         </Button>
         <Button
           onClick={onConfirm}
-          disabled={!draft || !startDate || committing}
+          disabled={!startDate || committing}
           variant="contained"
           startIcon={committing ? <CircularProgress size={16} color="inherit" /> : undefined}
           sx={{ borderRadius: "10px", textTransform: "none" }}
