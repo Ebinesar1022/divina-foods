@@ -20,6 +20,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import AddTaskIcon from "@mui/icons-material/AddTask";
 import StatusChip from "./StatusChip";
+import FoodProductionLoader from "./FoodProductionLoader";
 import type { MrpDraft } from "../types";
 
 interface CreateMrpDialogProps {
@@ -84,10 +85,11 @@ export default function CreateMrpDialog({
 
       <DialogContent sx={{ p: 3, bgcolor: "#F8FAFC" }}>
         {isPreparing && (
-          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, py: 8 }}>
-            <CircularProgress />
-            <Typography color="text.secondary">Exploding BOMs and checking stock…</Typography>
-          </Box>
+          <FoodProductionLoader
+            size="medium"
+            text="Exploding Recipes &amp; Bills of Materials…"
+            subtext="Analyzing finished goods BOMs and calculating required raw material allocations"
+          />
         )}
 
         {draftError && (

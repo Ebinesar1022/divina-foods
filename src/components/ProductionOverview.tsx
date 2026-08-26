@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, CircularProgress, Tab, Tabs, Typography, Paper, Alert, Button } from "@mui/material";
+import { Box, Tab, Tabs, Typography, Paper, Alert, Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import ProjectHeader from "./ProjectHeader";
@@ -7,6 +7,7 @@ import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
 import CreateMrpDialog from "./CreateMrpDialog";
 import MrpReportView from "./MrpReportView";
+import FoodProductionLoader from "./FoodProductionLoader";
 import { commitMrpDraft, fetchProductionOverview, prepareMrpDraft } from "../services/productionApi";
 import { computeProgress, isProcurementRequired, stageIndex, stageKeyFromStatus } from "../config/stages.config";
 import type {
@@ -144,8 +145,12 @@ export default function ProductionOverview({ productionTargetId }: { productionT
 
   if (loading || !data || !data.record) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-        <CircularProgress />
+      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+        <FoodProductionLoader
+          size="large"
+          text="Loading Production Overview…"
+          subtext="Fetching recipe formulations, stock levels & stage progression"
+        />
       </Box>
     );
   }

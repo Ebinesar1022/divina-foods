@@ -1,7 +1,6 @@
 import {
   Alert,
   Box,
-  CircularProgress,
   Paper,
   Table,
   TableBody,
@@ -18,6 +17,7 @@ import StickyNote2OutlinedIcon from "@mui/icons-material/StickyNote2Outlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import StatusChip from "./StatusChip";
+import FoodProductionLoader from "./FoodProductionLoader";
 import type { MrpDetailData, MrpRow, ProductionTargetRow } from "../types";
 
 interface MrpReportViewProps {
@@ -191,9 +191,11 @@ export default function MrpReportView({
       )}
 
       {loading && !mrpDetails ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-          <CircularProgress size={32} />
-        </Box>
+        <FoodProductionLoader
+          size="small"
+          text="Loading Material Breakdown…"
+          subtext="Calculating stock and requirement allocations"
+        />
       ) : (
         <>
           {/* Finished Goods Section */}
