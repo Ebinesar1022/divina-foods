@@ -248,8 +248,15 @@ export function fetchConsumptionEntries(productionTargetId: string): Promise<Con
 // Finished-good lines already attached to the Production Target (added when
 // the target itself was created). These are what get exploded through their
 // BOM below, and later get their MRP_ID set once the new MRP exists.
-export function fetchFinishedGoodsForTarget(productionTargetId: string): Promise<FinishedGoodTargetRow[]> {
-  const criteria = `Production_Target_ID == "${productionTargetId}"`;
+//
+// NOTE: Finished_Goods.Production_Target_ID is a lookup field, and Creator's
+// criteria engine matches lookups as NUMBER (the linked record's ID) rather
+// than by display text — `Production_Target_ID == "PT-114"` throws
+// "Invalid criteria specified" (code 3330) here, unlike the plain-text
+// Production_Target_ID field on Production_Targets itself. So this one
+// takes the Production Target's record ID, not its display ID string.
+export function fetchFinishedGoodsForTarget(productionTargetRecordId: string): Promise<FinishedGoodTargetRow[]> {
+  const criteria = `Production_Target_ID == ${productionTargetRecordId}`;
   return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(function (rows) {
     return rows.map(function (r: any) {
       return {
@@ -422,12 +429,9 @@ function formatDateForZoho(date: Date): string {
 // through their BOMs, checks stock, writes the MRP header + Raw_Materials
 // rows, links the existing Finished_Goods rows to the new MRP, and bumps
 // the Sequence_Master counter — only after everything else has succeeded.
-export function createMrpForTarget(
-  productionTargetRecordId: string,
-  productionTargetId: string
-): Promise<CreateMrpResult> {
+export function createMrpForTarget(productionTargetRecordId: string): Promise<CreateMrpResult> {
   return Promise.all([
-    fetchFinishedGoodsForTarget(productionTargetId),
+    fetchFinishedGoodsForTarget(productionTargetRecordId),
     fetchSequenceMasterRow(),
     fetchDefaultWarehouseId(),
   ]).then(function (results) {

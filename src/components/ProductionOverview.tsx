@@ -49,7 +49,7 @@ export default function ProductionOverview({ productionTargetId }: { productionT
     if (!data || !data.record) return;
     setCreatingMrp(true);
     setCreateMrpError("");
-    createMrpForTarget(data.record.id, productionTargetId)
+    createMrpForTarget(data.record.id)
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
           setData(result);
