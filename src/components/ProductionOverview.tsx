@@ -605,12 +605,32 @@ export default function ProductionOverview({
               {record.status === "In Progress" ||
               record.status === "Completed" ? (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <Box sx={{ position: "relative" }}>
+                  {/* Outer container with soft light-blue glow */}
+                  <Paper
+                    elevation={0}
+                    variant="outlined"
+                    sx={{
+                      position: "relative",
+                      p: { xs: 2, sm: 2.5 },
+                      borderRadius: "16px",
+                      borderColor: "rgba(59, 130, 246, 0.25)",
+                      bgcolor: "#FFFFFF",
+                      boxShadow: "0 0 24px rgba(59, 130, 246, 0.2)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Dimmed/muted card grid so stamp pops without losing legibility */}
                     <Box
                       sx={{
                         display: "grid",
                         gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
                         gap: 2,
+                        opacity: 0.78,
+                        filter: "contrast(0.95)",
+                        "& .MuiPaper-root": {
+                          bgcolor: "#F8FAFC",
+                          borderColor: "#E2E8F0",
+                        },
                       }}
                     >
                       <InfoCard label="MRP ID" value={mrpRecord?.mrpId} />
@@ -626,11 +646,13 @@ export default function ProductionOverview({
                         valueNode={<StatusChip value={record.status} />}
                       />
                     </Box>
+
+                    {/* Bright, high-contrast, perfectly centered stamp */}
                     <StatusStamp
                       text={record.status === "Completed" ? "Production Completed" : "Production Started"}
                       color={record.status === "Completed" ? "#059669" : "#2563eb"}
                     />
-                  </Box>
+                  </Paper>
 
                   {(data.mrpDetails?.finishedGoods?.length ?? 0) > 0 && (
                     <Box>
@@ -969,45 +991,48 @@ function CenteredStateCard({
 }
 
 // A classic rotated "ink stamp" overlay — sits on top of whatever's behind
-// it (pointer-events disabled, no fill, so the content stays fully visible
-// and clickable underneath). Wrap the target content in a
-// `position: relative` Box and drop this inside it.
+// it (pointer-events disabled). Centered vertically and horizontally over the
+// parent container without being affected by child opacity.
 function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string }) {
   return (
     <Box
       aria-hidden
       sx={{
         position: "absolute",
-        inset: 0,
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%) rotate(-10deg)",
+        transformOrigin: "center center",
+        pointerEvents: "none",
+        zIndex: 2,
+        userSelect: "none",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        pointerEvents: "none",
-        overflow: "hidden",
-        zIndex: 1,
       }}
     >
       <Box
         sx={{
           position: "relative",
-          transform: "rotate(-10deg)",
-          border: `3px solid ${color}`,
+          border: `3.5px solid ${color}`,
           borderRadius: "10px",
           color: color,
+          bgcolor: "rgba(255, 255, 255, 0.88)",
+          backdropFilter: "blur(2px)",
+          boxShadow: `0 4px 16px ${color === "#059669" ? "rgba(5, 150, 105, 0.2)" : "rgba(37, 99, 235, 0.2)"}`,
           fontWeight: 800,
-          fontSize: { xs: 18, sm: 24 },
+          fontSize: { xs: 17, sm: 22, md: 24 },
           letterSpacing: "0.12em",
           textTransform: "uppercase",
-          px: { xs: 2, sm: 3 },
-          py: { xs: 0.75, sm: 1 },
-          opacity: 0.62,
+          px: { xs: 2.5, sm: 3.5 },
+          py: { xs: 0.75, sm: 1.2 },
+          opacity: 0.95,
           whiteSpace: "nowrap",
-          userSelect: "none",
           "&::before": {
             content: '""',
             position: "absolute",
             inset: 4,
-            border: `1px solid ${color}`,
+            border: `1.5px solid ${color}`,
             borderRadius: "6px",
           },
         }}
