@@ -12,6 +12,7 @@ import type {
   ConsumptionEntryRow,
   CreateMrpResult,
   FinishedGoodTargetRow,
+  MrpDraft,
   MrpRow,
   ProcurementRow,
   ProductionInProgressRow,
@@ -411,10 +412,9 @@ function generateMrpId(sequenceRow: any): string {
 
 // Only call this once the full MRP create has succeeded — bumping the
 // counter first would burn a sequence number on a failed/partial create.
-function bumpMrpSequence(sequenceRow: any): Promise<any> {
-  const currentNo = parseInt(display(sequenceRow.MRP_No), 10) || 0;
-  return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRow.ID, {
-    MRP_No: currentNo + 1,
+function bumpMrpSequence(sequenceRowId: string, currentMrpNo: number): Promise<any> {
+  return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
+    MRP_No: currentMrpNo + 1,
   });
 }
 
@@ -437,19 +437,23 @@ function formatDateForZoho(date: Date): string {
   return `${day}-${months[date.getMonth()]}-${date.getFullYear()}`;
 }
 
-// Creates the MRP for a Production Target: explodes its finished goods
-// through their BOMs, checks stock, writes the MRP header + Raw_Materials
-// rows, links the existing Finished_Goods rows to the new MRP, and bumps
-// the Sequence_Master counter — only after everything else has succeeded.
-export function createMrpForTarget(
+// ───────────── Create MRP: two-phase draft → commit ─────────────
+// Phase 1 (prepareMrpDraft) computes everything a new MRP would contain —
+// finished goods, BOM-exploded raw material needs, the generated MRP_ID —
+// without writing anything, so the UI can show a full preview (mirroring
+// the native "Generate MRP ID" form) before the user confirms. Phase 2
+// (commitMrpDraft) only runs once the user clicks Create in that preview.
+
+// Computes the draft; writes nothing to Zoho.
+export function prepareMrpDraft(
   productionTargetRecordId: string,
   productionTargetId: string
-): Promise<CreateMrpResult> {
-  // Guard against duplicate MRPs — a second click after a page reload (or a
-  // second tab) while the first create was still mid-flight would otherwise
+): Promise<MrpDraft> {
+  // Guard against duplicate MRPs — a second attempt after a page reload (or
+  // a second tab) while an earlier one was still mid-flight would otherwise
   // race the Sequence_Master read and produce two headers with the same
   // generated MRP_ID. This doesn't fully close the race (both checks can
-  // still run before either create finishes) but it catches the common case
+  // still run before either commit finishes) but it catches the common case
   // where the first MRP has already landed by the time this one starts.
   return fetchMrpRecord(productionTargetId).then(function (existingMrp) {
     if (existingMrp) {
@@ -472,69 +476,91 @@ export function createMrpForTarget(
       }
 
       return computeRawMaterialNeeds(finishedGoods).then(function (rawMaterials) {
-        const mrpId = generateMrpId(sequenceRow);
-        // The procurement-required signal belongs on Production_Targets.Status
-        // (values Planned/Released/Waiting for Stock/In Progress/Completed,
-        // confirmed against the app's .ds export), NOT on the MRP record —
-        // Material_Requirement_Planning.Status is a separate, unrelated
-        // True/False field that always gets its native default here.
         const hasShortfall = rawMaterials.some(function (rm) {
           return rm.status === "Needs Purchase";
         });
-        const productionTargetStatus: ProductionTargetStatus = hasShortfall ? "Waiting for Stock" : "Released";
 
-        return addRecord(CONFIG.MRP_FORM, {
-          MRP_ID: mrpId,
-          Production_Target: productionTargetRecordId,
-          Warehouse: warehouseId,
-          MRP_Date: formatDateForZoho(new Date()),
-          Status: "False",
-        }).then(function (mrpRecord) {
-          const mrpRecordId: string = display(mrpRecord.ID);
-
-          // Mirrors the native "Generate MRP ID" workflow: it creates fresh
-          // Finished_Goods rows scoped to the MRP (Item/UOM/Target_Quantity
-          // copied over, MRP_ID set), rather than re-linking the rows already
-          // attached to the Production Target — those stay exactly as they
-          // were, under Production_Target_ID only.
-          const finishedGoodInserts = finishedGoods.map(function (fg) {
-            return addRecord(CONFIG.FINISHED_GOODS_FORM, {
-              MRP_ID: mrpRecordId,
-              Item: fg.itemId,
-              UOM: fg.uomId,
-              Target_Quantity: fg.targetQuantity,
-            });
-          });
-
-          const rawMaterialInserts = rawMaterials.map(function (rm) {
-            return addRecord(CONFIG.RAW_MATERIALS_FORM, {
-              MRP_ID: mrpRecordId,
-              Product_Name: rm.productId,
-              UOM: rm.uom,
-              Stock_On_hand: rm.stockOnHand,
-              Stock_Required: rm.stockRequired,
-              Allocate_Quantity: rm.allocateQuantity,
-              Needed_Quantity: rm.neededQuantity,
-              Status: rm.status,
-            });
-          });
-
-          const productionTargetUpdate = updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, productionTargetRecordId, {
-            Status: productionTargetStatus,
-          });
-
-          return Promise.all(finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate])).then(function () {
-            return bumpMrpSequence(sequenceRow).then(function () {
-              return {
-                mrpRecordId: mrpRecordId,
-                mrpId: mrpId,
-                rawMaterials: rawMaterials,
-              };
-            });
-          });
-        });
+        return {
+          mrpId: generateMrpId(sequenceRow),
+          mrpDate: formatDateForZoho(new Date()),
+          productionTargetRecordId: productionTargetRecordId,
+          productionTargetId: productionTargetId,
+          warehouseId: warehouseId,
+          finishedGoods: finishedGoods,
+          rawMaterials: rawMaterials,
+          hasShortfall: hasShortfall,
+          sequenceRowId: sequenceRow.ID,
+          sequenceMrpNo: parseInt(display(sequenceRow.MRP_No), 10) || 0,
+        };
       });
     });
+  });
+}
+
+// Writes a confirmed draft: MRP header, fresh Finished_Goods rows scoped to
+// the MRP, Raw_Materials rows, the Production Target's Status update, and
+// finally the Sequence_Master bump — only after everything else has
+// succeeded, so a failed/partial commit doesn't burn a sequence number.
+export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMrpResult> {
+  // The procurement-required signal belongs on Production_Targets.Status
+  // (values Planned/Released/Waiting for Stock/In Progress/Completed,
+  // confirmed against the app's .ds export), NOT on the MRP record —
+  // Material_Requirement_Planning.Status is a separate, unrelated
+  // True/False field that always gets its native default here.
+  const productionTargetStatus: ProductionTargetStatus = draft.hasShortfall ? "Waiting for Stock" : "Released";
+
+  return addRecord(CONFIG.MRP_FORM, {
+    MRP_ID: draft.mrpId,
+    Production_Target: draft.productionTargetRecordId,
+    Warehouse: draft.warehouseId,
+    MRP_Date: draft.mrpDate,
+    Notes: notes,
+    Status: "False",
+  }).then(function (mrpRecord) {
+    const mrpRecordId: string = display(mrpRecord.ID);
+
+    // Mirrors the native "Generate MRP ID" workflow: it creates fresh
+    // Finished_Goods rows scoped to the MRP (Item/UOM/Target_Quantity
+    // copied over, MRP_ID set), rather than re-linking the rows already
+    // attached to the Production Target — those stay exactly as they
+    // were, under Production_Target_ID only.
+    const finishedGoodInserts = draft.finishedGoods.map(function (fg) {
+      return addRecord(CONFIG.FINISHED_GOODS_FORM, {
+        MRP_ID: mrpRecordId,
+        Item: fg.itemId,
+        UOM: fg.uomId,
+        Target_Quantity: fg.targetQuantity,
+      });
+    });
+
+    const rawMaterialInserts = draft.rawMaterials.map(function (rm) {
+      return addRecord(CONFIG.RAW_MATERIALS_FORM, {
+        MRP_ID: mrpRecordId,
+        Product_Name: rm.productId,
+        UOM: rm.uom,
+        Stock_On_hand: rm.stockOnHand,
+        Stock_Required: rm.stockRequired,
+        Allocate_Quantity: rm.allocateQuantity,
+        Needed_Quantity: rm.neededQuantity,
+        Status: rm.status,
+      });
+    });
+
+    const productionTargetUpdate = updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
+      Status: productionTargetStatus,
+    });
+
+    return Promise.all(finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate])).then(
+      function () {
+        return bumpMrpSequence(draft.sequenceRowId, draft.sequenceMrpNo).then(function () {
+          return {
+            mrpRecordId: mrpRecordId,
+            mrpId: draft.mrpId,
+            rawMaterials: draft.rawMaterials,
+          };
+        });
+      }
+    );
   });
 }
 

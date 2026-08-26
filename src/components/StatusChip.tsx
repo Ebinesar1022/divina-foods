@@ -12,6 +12,9 @@ export const STATUS_COLORS: Record<string, string> = {
   Approved: "#10B981",
   Rejected: "#EF4444",
   Received: "#3B82F6",
+  // Raw_Materials.Status vocabulary (Create MRP preview + Required Materials).
+  "Needs Purchase": "#EF4444",
+  "Stock Available": "#10B981",
 };
 
 export default function StatusChip({

@@ -115,3 +115,18 @@ export interface CreateMrpResult {
   mrpId: string; // e.g. "MRP-045"
   rawMaterials: RawMaterialNeedRow[];
 }
+
+// A fully-computed but not-yet-written MRP — everything needed to render
+// the preview dialog, plus what commitMrpDraft needs to actually write it.
+export interface MrpDraft {
+  mrpId: string; // e.g. "MRP-091"
+  mrpDate: string; // formatted for display + write, e.g. "26-Aug-2026"
+  productionTargetRecordId: string;
+  productionTargetId: string; // display id, e.g. "PT-118"
+  warehouseId: string;
+  finishedGoods: FinishedGoodTargetRow[];
+  rawMaterials: RawMaterialNeedRow[];
+  hasShortfall: boolean;
+  sequenceRowId: string;
+  sequenceMrpNo: number;
+}

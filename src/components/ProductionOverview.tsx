@@ -4,10 +4,12 @@ import AddIcon from "@mui/icons-material/Add";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
-import { createMrpForTarget, fetchProductionOverview } from "../services/productionApi";
+import CreateMrpDialog from "./CreateMrpDialog";
+import { commitMrpDraft, fetchProductionOverview, prepareMrpDraft } from "../services/productionApi";
 import { computeProgress, isProcurementRequired, stageIndex, stageKeyFromStatus } from "../config/stages.config";
 import type {
   ConsumptionEntryRow,
+  MrpDraft,
   MrpRow,
   ProcurementRow,
   ProductionInProgressRow,
@@ -34,12 +36,22 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OverviewData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
-  const [creatingMrp, setCreatingMrp] = useState(false);
-  const [createMrpError, setCreateMrpError] = useState("");
-  // Refs update synchronously (unlike state), so this closes the gap the
-  // `disabled={creatingMrp}` button prop can't cover on its own — e.g. a
-  // second click landing before React re-renders, or a stale page reload.
-  const creatingMrpRef = useRef(false);
+
+  // Create MRP: a two-phase draft → commit dialog. Opening it kicks off
+  // prepareMrpDraft (read-only — explodes BOMs, checks stock, generates the
+  // MRP_ID) so the user can review everything before anything is written;
+  // only clicking Create in the dialog calls commitMrpDraft.
+  const [mrpDialogOpen, setMrpDialogOpen] = useState(false);
+  const [mrpDraft, setMrpDraft] = useState<MrpDraft | null>(null);
+  const [draftError, setDraftError] = useState("");
+  const [commitError, setCommitError] = useState("");
+  const [committing, setCommitting] = useState(false);
+  const [notes, setNotes] = useState("");
+  // Refs update synchronously (unlike state), so these close the gap
+  // `disabled={...}` props can't cover on their own — e.g. a second click
+  // landing before React re-renders.
+  const preparingRef = useRef(false);
+  const committingRef = useRef(false);
 
   useEffect(() => {
     setLoading(true);
@@ -49,24 +61,57 @@ export default function ProductionOverview({ productionTargetId }: { productionT
     });
   }, [productionTargetId]);
 
-  function handleCreateMrp() {
+  function handleOpenCreateMrp() {
     if (!data || !data.record) return;
-    if (creatingMrpRef.current) return;
-    creatingMrpRef.current = true;
-    setCreatingMrp(true);
-    setCreateMrpError("");
-    createMrpForTarget(data.record.id, productionTargetId)
+    if (preparingRef.current) return;
+    preparingRef.current = true;
+    setMrpDialogOpen(true);
+    setMrpDraft(null);
+    setDraftError("");
+    setCommitError("");
+    setNotes("");
+    prepareMrpDraft(data.record.id, productionTargetId)
+      .then(function (draft) {
+        setMrpDraft(draft);
+      })
+      .catch(function (err: any) {
+        setDraftError((err && err.message) || "Failed to prepare MRP. Please try again.");
+      })
+      .finally(function () {
+        preparingRef.current = false;
+      });
+  }
+
+  function handleCancelDraft() {
+    if (committingRef.current) return; // nothing was written yet — safe to just close, except mid-commit
+    setMrpDialogOpen(false);
+    setMrpDraft(null);
+    setDraftError("");
+    setCommitError("");
+  }
+
+  function handleConfirmCreate() {
+    if (!mrpDraft) return;
+    if (committingRef.current) return;
+    committingRef.current = true;
+    setCommitting(true);
+    setCommitError("");
+    commitMrpDraft(mrpDraft, notes)
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
           setData(result);
         });
       })
+      .then(function () {
+        setMrpDialogOpen(false);
+        setMrpDraft(null);
+      })
       .catch(function (err: any) {
-        setCreateMrpError((err && err.message) || "Failed to create MRP. Please try again.");
+        setCommitError((err && err.message) || "Failed to create MRP. Please try again.");
       })
       .finally(function () {
-        creatingMrpRef.current = false;
-        setCreatingMrp(false);
+        committingRef.current = false;
+        setCommitting(false);
       });
   }
 
@@ -133,18 +178,12 @@ export default function ProductionOverview({ productionTargetId }: { productionT
                 <Box>
                   <Button
                     variant="contained"
-                    startIcon={creatingMrp ? <CircularProgress size={16} color="inherit" /> : <AddIcon />}
-                    onClick={handleCreateMrp}
-                    disabled={creatingMrp}
+                    startIcon={<AddIcon />}
+                    onClick={handleOpenCreateMrp}
                     sx={{ borderRadius: "10px", textTransform: "none" }}
                   >
-                    {creatingMrp ? "Creating MRP…" : "Create MRP"}
+                    Create MRP
                   </Button>
-                  {createMrpError && (
-                    <Alert severity="error" sx={{ borderRadius: "12px", mt: 2 }}>
-                      {createMrpError}
-                    </Alert>
-                  )}
                 </Box>
               )}
             </Box>
@@ -225,6 +264,18 @@ export default function ProductionOverview({ productionTargetId }: { productionT
           )}
         </Box>
       </Paper>
+
+      <CreateMrpDialog
+        open={mrpDialogOpen}
+        draft={mrpDraft}
+        draftError={draftError}
+        committing={committing}
+        commitError={commitError}
+        notes={notes}
+        onNotesChange={setNotes}
+        onCancel={handleCancelDraft}
+        onConfirm={handleConfirmCreate}
+      />
     </Box>
   );
 }
