@@ -1,8 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Tab, Tabs, Typography, Paper, Alert, Button } from "@mui/material";
+import {
+  Box,
+  Tab,
+  Tabs,
+  Typography,
+  Paper,
+  Alert,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+} from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
+import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
@@ -246,6 +263,7 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   const { record, mrpRecord, productionOrderRecord, procurementRecords, productionInProgress, consumptionEntries } =
     data;
   const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
+  const neededItems = (data.mrpDetails?.rawMaterials || []).filter((rm) => rm.status === "Needs Purchase");
   const stageKey = stageKeyFromStatus(record.status);
   const currentIndex = stageIndex(stageKey);
   const isFullyComplete = stageKey === "consumption_entry";
@@ -296,101 +314,133 @@ export default function ProductionOverview({ productionTargetId }: { productionT
                   productionTarget={record}
                 />
               ) : (
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: { xs: 3, md: 4 },
-                    borderRadius: "14px",
-                    textAlign: "center",
-                    bgcolor: "#F8FAFC",
-                    borderStyle: "dashed",
-                    borderColor: "#CBD5E1",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 2,
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: "12px",
-                      bgcolor: "#EFF6FF",
-                      color: "#2563eb",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <AssignmentTurnedInIcon sx={{ fontSize: 28 }} />
-                  </Box>
-                  <Box sx={{ maxWidth: 450 }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: 16, color: "#0F172A", mb: 0.5 }}>
-                      No Material Requirement &amp; Planning Yet
-                    </Typography>
-                    <Typography sx={{ fontSize: 13.5, color: "#64748B" }}>
-                      Generate the MRP to explode BOMs, evaluate available warehouse stock, and compute needed purchase quantities.
-                    </Typography>
-                  </Box>
-                  <Button
-                    variant="contained"
-                    size="medium"
-                    startIcon={<AddIcon />}
-                    onClick={handleOpenCreateMrp}
-                    sx={{
-                      borderRadius: "10px",
-                      textTransform: "none",
-                      fontWeight: 600,
-                      px: 2.5,
-                      py: 1,
-                      boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
-                    }}
-                  >
-                    Create MRP
-                  </Button>
-                </Paper>
+                <CenteredStateCard
+                  icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
+                  title="No Material Requirement &amp; Planning Yet"
+                  description="Generate the MRP to explode BOMs, evaluate available warehouse stock, and compute needed purchase quantities."
+                  action={
+                    <Button
+                      variant="contained"
+                      size="medium"
+                      startIcon={<AddIcon />}
+                      onClick={handleOpenCreateMrp}
+                      sx={{
+                        borderRadius: "10px",
+                        textTransform: "none",
+                        fontWeight: 600,
+                        px: 2.5,
+                        py: 1,
+                        boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+                      }}
+                    >
+                      Create MRP
+                    </Button>
+                  }
+                />
               )}
             </Box>
           )}
 
           {activeTab === "procurement" && (
-            <Box>
-              {procurementSkipped ? (
-                <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                  No procurement needed — stock was available at MRP stage.
-                </Alert>
-              ) : procurementRecords.length ? (
-                procurementRecords.map((p) => (
-                  <Paper
-                    key={p.id}
-                    variant="outlined"
-                    sx={{ p: 1.5, mb: 1, borderRadius: "12px", display: "flex", justifyContent: "space-between" }}
-                  >
-                    <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                      <Box
-                        sx={{
-                          px: 1,
-                          py: 0.25,
-                          borderRadius: "6px",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          bgcolor: p.type === "purchase_order" ? "#EEF2FF" : "#ECFDF5",
-                          color: p.type === "purchase_order" ? "#4F46E5" : "#059669",
-                        }}
-                      >
-                        {p.type === "purchase_order" ? "PO" : "PR"}
-                      </Box>
-                      <Typography sx={{ fontWeight: 600 }}>{p.recordNo}</Typography>
-                      <Typography color="text.secondary" sx={{ fontSize: 13 }}>
-                        {p.supplier}
-                      </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              {!mrpRecord ? (
+                <CenteredStateCard
+                  icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
+                  title="MRP Not Created Yet"
+                  description="Create the Material Requirement &amp; Planning first to see what needs to be procured."
+                />
+              ) : record.status === "Waiting for Stock" ? (
+                <>
+                  <CenteredStateCard
+                    icon={<ShoppingCartOutlinedIcon sx={{ fontSize: 28 }} />}
+                    iconBg="#FEF3C7"
+                    iconColor="#D97706"
+                    title="Procurement Needed"
+                    description="Raise purchase orders for the raw materials below. Once everything has arrived, head to Initiate Production to start the run."
+                  />
+
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, mb: 1 }}>Needed Items</Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                            <TableCell>Product Name</TableCell>
+                            <TableCell>UOM</TableCell>
+                            <TableCell align="right">Needed Quantity</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {neededItems.length ? (
+                            neededItems.map((rm) => (
+                              <TableRow key={rm.productId}>
+                                <TableCell>{rm.productName}</TableCell>
+                                <TableCell>{rm.uom}</TableCell>
+                                <TableCell align="right">{rm.neededQuantity.toFixed(2)}</TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={3} align="center" sx={{ py: 3, color: "#94A3B8" }}>
+                                No shortfall items found.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+
+                  {procurementRecords.length > 0 && (
+                    <Box>
+                      <Typography sx={{ fontWeight: 700, mb: 1 }}>Purchase Orders &amp; Receives</Typography>
+                      {procurementRecords.map((p) => (
+                        <Paper
+                          key={p.id}
+                          variant="outlined"
+                          sx={{ p: 1.5, mb: 1, borderRadius: "12px", display: "flex", justifyContent: "space-between" }}
+                        >
+                          <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                            <Box
+                              sx={{
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: "6px",
+                                fontSize: 11,
+                                fontWeight: 700,
+                                bgcolor: p.type === "purchase_order" ? "#EEF2FF" : "#ECFDF5",
+                                color: p.type === "purchase_order" ? "#4F46E5" : "#059669",
+                              }}
+                            >
+                              {p.type === "purchase_order" ? "PO" : "PR"}
+                            </Box>
+                            <Typography sx={{ fontWeight: 600 }}>{p.recordNo}</Typography>
+                            <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                              {p.supplier}
+                            </Typography>
+                          </Box>
+                          <StatusChip value={p.status} />
+                        </Paper>
+                      ))}
                     </Box>
-                    <StatusChip value={p.status} />
-                  </Paper>
-                ))
+                  )}
+                </>
+              ) : record.status === "Completed" ? (
+                <CenteredStateCard
+                  icon={<EmojiEventsOutlinedIcon sx={{ fontSize: 28 }} />}
+                  iconBg="#ECFDF5"
+                  iconColor="#059669"
+                  title="Production Completed!"
+                  description="This target went all the way from MRP through procurement to a finished run. Nice work."
+                />
               ) : (
-                <Typography color="text.secondary">No procurement records yet.</Typography>
+                <CenteredStateCard
+                  icon={<CheckCircleOutlineIcon sx={{ fontSize: 28 }} />}
+                  iconBg="#ECFDF5"
+                  iconColor="#059669"
+                  title="Procurement Complete"
+                  description="All raw materials are available. Head to the Initiate Production tab to start the run."
+                />
               )}
             </Box>
           )}
@@ -499,6 +549,63 @@ function InfoCard({ label, value, valueNode }: { label: string; value?: string; 
     <Paper variant="outlined" sx={{ p: 1.5, borderRadius: "12px" }}>
       <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 0.5 }}>{label}</Typography>
       {valueNode || <Typography sx={{ fontWeight: 600 }}>{value || "—"}</Typography>}
+    </Paper>
+  );
+}
+
+// A centered, dashed-border status card — used across tabs for "nothing to
+// show yet" / "here's what's next" states (no MRP yet, procurement needed,
+// procurement complete, run finished, ...).
+function CenteredStateCard({
+  icon,
+  title,
+  description,
+  iconBg = "#EFF6FF",
+  iconColor = "#2563eb",
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+  iconBg?: string;
+  iconColor?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: { xs: 3, md: 4 },
+        borderRadius: "14px",
+        textAlign: "center",
+        bgcolor: "#F8FAFC",
+        borderStyle: "dashed",
+        borderColor: "#CBD5E1",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 2,
+      }}
+    >
+      <Box
+        sx={{
+          width: 48,
+          height: 48,
+          borderRadius: "12px",
+          bgcolor: iconBg,
+          color: iconColor,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {icon}
+      </Box>
+      <Box sx={{ maxWidth: 480 }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 16, color: "#0F172A", mb: 0.5 }}>{title}</Typography>
+        {description && <Typography sx={{ fontSize: 13.5, color: "#64748B" }}>{description}</Typography>}
+      </Box>
+      {action}
     </Paper>
   );
 }
