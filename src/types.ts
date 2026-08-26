@@ -7,15 +7,14 @@ export type StageKey =
 
 export type StageState = "done" | "active" | "pending" | "skipped";
 
-// Material_Requirement_Planning's own Status field (there is no separate
-// Stock_Status field — confirmed against the app's .ds export). Live values
-// confirmed from the Material_Requirement_Planning_Report listing.
-export type MrpStockStatus = "Released" | "Waiting for Stock" | "In Progress" | "Completed";
-
 export type ProcurementRecordType = "purchase_order" | "purchase_receive";
 
-// Confirmed real values for Production_Target_Report's Status dropdown.
-export type ProductionTargetStatus = "Planned" | "Waiting for Stock" | "In Progress" | "Completed";
+// Confirmed against the app's .ds export — Production_Targets.Status is the
+// field that carries both stage progression AND whether procurement is
+// needed. Material_Requirement_Planning has its own unrelated Status field
+// (just "False"/"True", see MrpRow.status below) — there is no separate
+// Stock_Status field on either form.
+export type ProductionTargetStatus = "Planned" | "Released" | "Waiting for Stock" | "In Progress" | "Completed";
 
 export interface ProductionTargetRow {
   id: string;
@@ -35,7 +34,7 @@ export interface MrpRow {
   date: string;
   createdBy: string;
   notes: string;
-  stockStatus: MrpStockStatus;
+  status: "False" | "True"; // MRP's own Status field — unrelated to stock
 }
 
 export interface ProcurementRow {

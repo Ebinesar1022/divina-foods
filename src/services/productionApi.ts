@@ -13,10 +13,10 @@ import type {
   CreateMrpResult,
   FinishedGoodTargetRow,
   MrpRow,
-  MrpStockStatus,
   ProcurementRow,
   ProductionInProgressRow,
   ProductionTargetRow,
+  ProductionTargetStatus,
   RawMaterialNeedRow,
   RawMaterialStockRow,
 } from "../types";
@@ -168,12 +168,14 @@ export function fetchMrpRecord(productionTargetId: string): Promise<MrpRow | nul
       id: r.ID,
       mrpId: display(r.MRP_ID),
       productionTargetId: display(r.Production_Target_ID),
-      // MRP_Date and Status per the app's .ds export — Material_Requirement_
-      // Planning has no Date_field or Stock_Status field at all.
+      // MRP_Date per the app's .ds export — Material_Requirement_Planning
+      // has no Date_field. Status here is just "False"/"True" (unrelated to
+      // stock — see MrpRow.status) — the procurement-required signal lives
+      // on Production_Targets.Status instead.
       date: display(r.MRP_Date),
       createdBy: display(r.Created_By45657),
       notes: display(r.Notes),
-      stockStatus: display(r.Status) as any,
+      status: display(r.Status) as any,
     };
   });
 }
@@ -471,23 +473,22 @@ export function createMrpForTarget(
 
       return computeRawMaterialNeeds(finishedGoods).then(function (rawMaterials) {
         const mrpId = generateMrpId(sequenceRow);
-        // Drives the pipeline's procurement-required logic elsewhere in this
-        // widget (isProcurementRequired) — if even one raw material is short,
-        // this MRP waits on procurement before production can start. There is
-        // no separate Stock_Status field on Material_Requirement_Planning
-        // (confirmed against the app's .ds export) — Status is the one field
-        // that carries this, alongside its other lifecycle values.
+        // The procurement-required signal belongs on Production_Targets.Status
+        // (values Planned/Released/Waiting for Stock/In Progress/Completed,
+        // confirmed against the app's .ds export), NOT on the MRP record —
+        // Material_Requirement_Planning.Status is a separate, unrelated
+        // True/False field that always gets its native default here.
         const hasShortfall = rawMaterials.some(function (rm) {
           return rm.status === "Needs Purchase";
         });
-        const status: MrpStockStatus = hasShortfall ? "Waiting for Stock" : "Released";
+        const productionTargetStatus: ProductionTargetStatus = hasShortfall ? "Waiting for Stock" : "Released";
 
         return addRecord(CONFIG.MRP_FORM, {
           MRP_ID: mrpId,
           Production_Target: productionTargetRecordId,
           Warehouse: warehouseId,
           MRP_Date: formatDateForZoho(new Date()),
-          Status: status,
+          Status: "False",
         }).then(function (mrpRecord) {
           const mrpRecordId: string = display(mrpRecord.ID);
 
@@ -518,7 +519,11 @@ export function createMrpForTarget(
             });
           });
 
-          return Promise.all(finishedGoodInserts.concat(rawMaterialInserts)).then(function () {
+          const productionTargetUpdate = updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, productionTargetRecordId, {
+            Status: productionTargetStatus,
+          });
+
+          return Promise.all(finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate])).then(function () {
             return bumpMrpSequence(sequenceRow).then(function () {
               return {
                 mrpRecordId: mrpRecordId,
@@ -543,7 +548,10 @@ export function fetchProductionOverview(productionTargetId: string) {
   ]).then(function (results) {
     const record = results[0];
     const mrpRecord = results[1];
-    const procurementNeeded = !!mrpRecord && mrpRecord.stockStatus === "Waiting for Stock";
+    // The procurement-required signal lives on Production_Targets.Status,
+    // not on the MRP record (see types.ts) — only meaningful once an MRP
+    // actually exists, hence the !!mrpRecord guard.
+    const procurementNeeded = !!mrpRecord && !!record && record.status === "Waiting for Stock";
 
     return Promise.all([
       procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([]),

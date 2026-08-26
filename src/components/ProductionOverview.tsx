@@ -79,7 +79,7 @@ export default function ProductionOverview({ productionTargetId }: { productionT
   }
 
   const { record, mrpRecord, procurementRecords, productionInProgress, consumptionEntries } = data;
-  const procurementSkipped = !!mrpRecord && !isProcurementRequired(mrpRecord.stockStatus);
+  const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
   const stageKey = stageKeyFromStatus(record.status);
   const currentIndex = stageIndex(stageKey);
   const isFullyComplete = stageKey === "consumption_entry";
@@ -126,8 +126,8 @@ export default function ProductionOverview({ productionTargetId }: { productionT
               {mrpRecord ? (
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2 }}>
                   <InfoCard label="MRP ID" value={mrpRecord.mrpId} />
-                  <InfoCard label="Created By" value={mrpRecord.createdBy} />
-                  <InfoCard label="Stock Status" valueNode={<StatusChip value={mrpRecord.stockStatus} />} />
+                  <InfoCard label="MRP Date" value={mrpRecord.date} />
+                  <InfoCard label="Production Target Status" valueNode={<StatusChip value={record.status} />} />
                 </Box>
               ) : (
                 <Box>
