@@ -524,25 +524,59 @@ export default function ProductionOverview({
             <Box>
               {record.status === "In Progress" ||
               record.status === "Completed" ? (
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-                    gap: 2,
-                  }}
-                >
-                  <InfoCard label="MRP ID" value={mrpRecord?.mrpId} />
-                  <InfoCard
-                    label="Production Target ID"
-                    value={record.productionTargetId}
-                  />
-                  <InfoCard label="Start Date" value={record.startDate} />
-                  <InfoCard label="End Date" value={record.endDate} />
-                  <InfoCard label="Assigned To" value={record.assignedTo} />
-                  <InfoCard
-                    label="Target Status"
-                    valueNode={<StatusChip value={record.status} />}
-                  />
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <Box sx={{ position: "relative" }}>
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+                        gap: 2,
+                      }}
+                    >
+                      <InfoCard label="MRP ID" value={mrpRecord?.mrpId} />
+                      <InfoCard
+                        label="Production Target ID"
+                        value={record.productionTargetId}
+                      />
+                      <InfoCard label="Start Date" value={record.startDate} />
+                      <InfoCard label="End Date" value={record.endDate} />
+                      <InfoCard label="Assigned To" value={record.assignedTo} />
+                      <InfoCard
+                        label="Target Status"
+                        valueNode={<StatusChip value={record.status} />}
+                      />
+                    </Box>
+                    <StatusStamp
+                      text={record.status === "Completed" ? "Production Completed" : "Production Started"}
+                      color={record.status === "Completed" ? "#059669" : "#2563eb"}
+                    />
+                  </Box>
+
+                  {(data.mrpDetails?.finishedGoods?.length ?? 0) > 0 && (
+                    <Box>
+                      <Typography sx={{ fontWeight: 700, mb: 1 }}>Finished Goods</Typography>
+                      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                              <TableCell>Item</TableCell>
+                              <TableCell>UOM</TableCell>
+                              <TableCell align="right">Target Quantity</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {data.mrpDetails!.finishedGoods.map((fg) => (
+                              <TableRow key={fg.id}>
+                                <TableCell>{fg.itemName}</TableCell>
+                                <TableCell>{fg.uomName}</TableCell>
+                                <TableCell align="right">{fg.targetQuantity}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )}
                 </Box>
               ) : !mrpRecord ? (
                 <Alert severity="info" sx={{ borderRadius: "12px" }}>
@@ -723,5 +757,55 @@ function CenteredStateCard({
       </Box>
       {action}
     </Paper>
+  );
+}
+
+// A classic rotated "ink stamp" overlay — sits on top of whatever's behind
+// it (pointer-events disabled, no fill, so the content stays fully visible
+// and clickable underneath). Wrap the target content in a
+// `position: relative` Box and drop this inside it.
+function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string }) {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+        overflow: "hidden",
+        zIndex: 1,
+      }}
+    >
+      <Box
+        sx={{
+          position: "relative",
+          transform: "rotate(-10deg)",
+          border: `3px solid ${color}`,
+          borderRadius: "10px",
+          color: color,
+          fontWeight: 800,
+          fontSize: { xs: 18, sm: 24 },
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          px: { xs: 2, sm: 3 },
+          py: { xs: 0.75, sm: 1 },
+          opacity: 0.62,
+          whiteSpace: "nowrap",
+          userSelect: "none",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            inset: 4,
+            border: `1px solid ${color}`,
+            borderRadius: "6px",
+          },
+        }}
+      >
+        {text}
+      </Box>
+    </Box>
   );
 }
