@@ -13,6 +13,7 @@ import type {
   CreateMrpResult,
   FinishedGoodTargetRow,
   MrpRow,
+  MrpStockStatus,
   ProcurementRow,
   ProductionInProgressRow,
   ProductionTargetRow,
@@ -43,12 +44,10 @@ export const CONFIG = {
   // relying on this in production; these are transcribed from the .ds
   // export and not yet click-verified against the live app.
   FINISHED_GOODS_REPORT: "Finished_Goods_Report",
-  FINISHED_GOODS_FORM: "Finished_Goods",
   BOM_MASTER_REPORT: "BOM_Master_Report",
   BOM_ITEMS_REPORT: "BOM_Items_Report",
   MAIN_WAREHOUSE_STOCK_REPORT: "Main_Warehouse_Stock_Details_Report",
   SEQUENCE_MASTER_REPORT: "Sequence_Master_Report",
-  SEQUENCE_MASTER_FORM: "Sequence_Master",
   // Confirmed against live DevTools traffic: this is a report directly on
   // Warehouse_Master (not a separate "Warehouse" wrapper form), listing
   // every physical warehouse (Main, Production, Scrap, ...) with
@@ -118,17 +117,25 @@ function addRecord(formName: string, data: Record<string, any>): Promise<any> {
 
 // Generic update — used to bump Sequence_Master's counter and to link an
 // existing Finished_Goods row to the MRP that was just created for it.
-function updateRecord(formName: string, recordId: string, data: Record<string, any>): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.updateRecords({
+//
+// NOTE: the JS SDK's update call is `updateRecordById`, not `updateRecords`
+// (that method doesn't exist on the SDK) — and it takes `report_name`, not
+// `form_name`, same as getRecords. Confirmed against Zoho's own docs:
+// https://www.zoho.com/creator/help/js-api/v2/update-specific-record.html
+// Getting this wrong made every update reject before any network request
+// was even sent, silently dropping the Finished_Goods MRP_ID link-back and
+// the sequence bump while the rest of the create had already succeeded.
+function updateRecord(reportName: string, recordId: string, data: Record<string, any>): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.updateRecordById({
     app_name: CONFIG.APP_NAME,
-    form_name: formName,
+    report_name: reportName,
     id: recordId,
     payload: {
       data: data,
     },
   }).then(function (resp: any) {
     if (!resp || resp.code !== 3000) {
-      return Promise.reject(new Error("Failed to update record " + recordId + " in " + formName + "."));
+      return Promise.reject(new Error("Failed to update record " + recordId + " in " + reportName + "."));
     }
     return resp.data;
   });
@@ -404,7 +411,7 @@ function generateMrpId(sequenceRow: any): string {
 // counter first would burn a sequence number on a failed/partial create.
 function bumpMrpSequence(sequenceRow: any): Promise<any> {
   const currentNo = parseInt(display(sequenceRow.MRP_No), 10) || 0;
-  return updateRecord(CONFIG.SEQUENCE_MASTER_FORM, sequenceRow.ID, {
+  return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRow.ID, {
     MRP_No: currentNo + 1,
   });
 }
@@ -464,6 +471,13 @@ export function createMrpForTarget(
 
       return computeRawMaterialNeeds(finishedGoods).then(function (rawMaterials) {
         const mrpId = generateMrpId(sequenceRow);
+        // Drives the pipeline's procurement-required logic elsewhere in this
+        // widget (isProcurementRequired) — if even one raw material is short,
+        // this MRP waits on procurement before production can start.
+        const hasShortfall = rawMaterials.some(function (rm) {
+          return rm.status === "Needs Purchase";
+        });
+        const stockStatus: MrpStockStatus = hasShortfall ? "Waiting for Stock" : "Ready For Production";
 
         return addRecord(CONFIG.MRP_FORM, {
           MRP_ID: mrpId,
@@ -471,11 +485,12 @@ export function createMrpForTarget(
           Warehouse: warehouseId,
           MRP_Date: formatDateForZoho(new Date()),
           Status: "False",
+          Stock_Status: stockStatus,
         }).then(function (mrpRecord) {
           const mrpRecordId: string = display(mrpRecord.ID);
 
           const finishedGoodUpdates = finishedGoods.map(function (fg) {
-            return updateRecord(CONFIG.FINISHED_GOODS_FORM, fg.id, { MRP_ID: mrpRecordId });
+            return updateRecord(CONFIG.FINISHED_GOODS_REPORT, fg.id, { MRP_ID: mrpRecordId });
           });
 
           const rawMaterialInserts = rawMaterials.map(function (rm) {
