@@ -7,11 +7,10 @@ export type StageKey =
 
 export type StageState = "done" | "active" | "pending" | "skipped";
 
-export type MrpStockStatus =
-  | "Waiting for Stock"
-  | "Ready For Production"
-  | "Production Inprogress"
-  | "Completed Production Target";
+// Material_Requirement_Planning's own Status field (there is no separate
+// Stock_Status field — confirmed against the app's .ds export). Live values
+// confirmed from the Material_Requirement_Planning_Report listing.
+export type MrpStockStatus = "Released" | "Waiting for Stock" | "In Progress" | "Completed";
 
 export type ProcurementRecordType = "purchase_order" | "purchase_receive";
 

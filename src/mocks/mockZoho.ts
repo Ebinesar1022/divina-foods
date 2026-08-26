@@ -25,10 +25,10 @@ const MRP = [
     ID: "1",
     MRP_ID: "MRP-077",
     Production_Target_ID: DEMO_PT_ID,
-    Date_field: "21-Aug-2026",
+    MRP_Date: "21-Aug-2026",
     Created_By45657: { id: "1", Deparment_Role: "Planner" },
     Notes: "Stock check completed",
-    Stock_Status: "Ready For Production",
+    Status: "Released",
   },
 ];
 

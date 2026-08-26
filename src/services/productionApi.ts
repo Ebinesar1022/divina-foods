@@ -39,11 +39,9 @@ export const CONFIG = {
   PRODUCTION_INPROGRESS_REPORT: "Production_Inprogress",
   CONSUMPTION_ENTRY_REPORT: "Consumption_Entry_Report",
 
-  // ⚠️ Create MRP additions — confirm every report AND form name below
-  // against Creator → Reports / Creator → Forms (case sensitive) before
-  // relying on this in production; these are transcribed from the .ds
-  // export and not yet click-verified against the live app.
+  // Confirmed against the app's .ds export (Divina_Foods_3.ds).
   FINISHED_GOODS_REPORT: "Finished_Goods_Report",
+  FINISHED_GOODS_FORM: "Finished_Goods",
   BOM_MASTER_REPORT: "BOM_Master_Report",
   BOM_ITEMS_REPORT: "BOM_Items_Report",
   MAIN_WAREHOUSE_STOCK_REPORT: "Main_Warehouse_Stock_Details_Report",
@@ -170,10 +168,12 @@ export function fetchMrpRecord(productionTargetId: string): Promise<MrpRow | nul
       id: r.ID,
       mrpId: display(r.MRP_ID),
       productionTargetId: display(r.Production_Target_ID),
-      date: display(r.Date_field),
+      // MRP_Date and Status per the app's .ds export — Material_Requirement_
+      // Planning has no Date_field or Stock_Status field at all.
+      date: display(r.MRP_Date),
       createdBy: display(r.Created_By45657),
       notes: display(r.Notes),
-      stockStatus: display(r.Stock_Status) as any,
+      stockStatus: display(r.Status) as any,
     };
   });
 }
@@ -473,24 +473,36 @@ export function createMrpForTarget(
         const mrpId = generateMrpId(sequenceRow);
         // Drives the pipeline's procurement-required logic elsewhere in this
         // widget (isProcurementRequired) — if even one raw material is short,
-        // this MRP waits on procurement before production can start.
+        // this MRP waits on procurement before production can start. There is
+        // no separate Stock_Status field on Material_Requirement_Planning
+        // (confirmed against the app's .ds export) — Status is the one field
+        // that carries this, alongside its other lifecycle values.
         const hasShortfall = rawMaterials.some(function (rm) {
           return rm.status === "Needs Purchase";
         });
-        const stockStatus: MrpStockStatus = hasShortfall ? "Waiting for Stock" : "Ready For Production";
+        const status: MrpStockStatus = hasShortfall ? "Waiting for Stock" : "Released";
 
         return addRecord(CONFIG.MRP_FORM, {
           MRP_ID: mrpId,
           Production_Target: productionTargetRecordId,
           Warehouse: warehouseId,
           MRP_Date: formatDateForZoho(new Date()),
-          Status: "False",
-          Stock_Status: stockStatus,
+          Status: status,
         }).then(function (mrpRecord) {
           const mrpRecordId: string = display(mrpRecord.ID);
 
-          const finishedGoodUpdates = finishedGoods.map(function (fg) {
-            return updateRecord(CONFIG.FINISHED_GOODS_REPORT, fg.id, { MRP_ID: mrpRecordId });
+          // Mirrors the native "Generate MRP ID" workflow: it creates fresh
+          // Finished_Goods rows scoped to the MRP (Item/UOM/Target_Quantity
+          // copied over, MRP_ID set), rather than re-linking the rows already
+          // attached to the Production Target — those stay exactly as they
+          // were, under Production_Target_ID only.
+          const finishedGoodInserts = finishedGoods.map(function (fg) {
+            return addRecord(CONFIG.FINISHED_GOODS_FORM, {
+              MRP_ID: mrpRecordId,
+              Item: fg.itemId,
+              UOM: fg.uomId,
+              Target_Quantity: fg.targetQuantity,
+            });
           });
 
           const rawMaterialInserts = rawMaterials.map(function (rm) {
@@ -506,7 +518,7 @@ export function createMrpForTarget(
             });
           });
 
-          return Promise.all(finishedGoodUpdates.concat(rawMaterialInserts)).then(function () {
+          return Promise.all(finishedGoodInserts.concat(rawMaterialInserts)).then(function () {
             return bumpMrpSequence(sequenceRow).then(function () {
               return {
                 mrpRecordId: mrpRecordId,
