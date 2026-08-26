@@ -132,12 +132,19 @@ const MAIN_WAREHOUSE_STOCK = [
 ];
 
 const SEQUENCE_MASTER = [
-  { ID: "1", MRP_Name: "MRP-", MRP_No: "78" },
+  { ID: "1", MRP_Name: "MRP-", MRP_No: "78", Order_Name: "PO-", Order_No: "11" },
 ];
 
 const WAREHOUSE_MASTER = [
   { ID: "1", Warehouse_Name: "Main Warehouse" },
 ];
+
+const EMPLOYEES = [
+  { ID: "1", Employee_ID: "EMP-001", Employee_Name: { prefix: "Mr.", first_name: "Sibi", last_name: "L" } },
+  { ID: "2", Employee_ID: "EMP-002", Employee_Name: { prefix: "Ms.", first_name: "Anu", last_name: "R" } },
+];
+
+const PRODUCTION_ORDERS: any[] = [];
 
 const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.PRODUCTION_TARGET_REPORT]: PRODUCTION_TARGET,
@@ -153,6 +160,8 @@ const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.MAIN_WAREHOUSE_STOCK_REPORT]: MAIN_WAREHOUSE_STOCK,
   [CONFIG.SEQUENCE_MASTER_REPORT]: SEQUENCE_MASTER,
   [CONFIG.WAREHOUSE_REPORT]: WAREHOUSE_MASTER,
+  [CONFIG.EMPLOYEE_REPORT]: EMPLOYEES,
+  [CONFIG.PRODUCTION_ORDER_REPORT]: PRODUCTION_ORDERS,
 };
 
 export function installMockZoho() {
