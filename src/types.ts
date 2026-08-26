@@ -130,3 +130,11 @@ export interface MrpDraft {
   sequenceRowId: string;
   sequenceMrpNo: number;
 }
+
+export interface MrpDetailData {
+  mrpRecord: MrpRow;
+  finishedGoods: FinishedGoodTargetRow[];
+  rawMaterials: RawMaterialNeedRow[];
+  hasShortfall: boolean;
+}
+

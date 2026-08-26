@@ -12,6 +12,7 @@ import type {
   ConsumptionEntryRow,
   CreateMrpResult,
   FinishedGoodTargetRow,
+  MrpDetailData,
   MrpDraft,
   MrpRow,
   ProcurementRow,
@@ -54,6 +55,7 @@ export const CONFIG = {
   WAREHOUSE_REPORT: "Warehouse_Master_Report",
   MRP_FORM: "Material_Requirement_Planning",
   RAW_MATERIALS_FORM: "Raw_Materials",
+  RAW_MATERIALS_REPORT: "Raw_Materials_Report",
 };
 
 function display(value: any): string {
@@ -564,6 +566,102 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
   });
 }
 
+// ───────────── MRP Details (Finished Goods & Raw Materials for Report) ─────────────
+
+export function fetchFinishedGoodsForMrp(
+  mrpRecordId: string,
+  productionTargetRecordId?: string
+): Promise<FinishedGoodTargetRow[]> {
+  const criteria = `MRP_ID == ${mrpRecordId}`;
+  return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(function (rows) {
+    if (rows && rows.length > 0) {
+      return rows.map(function (r: any) {
+        return {
+          id: r.ID,
+          productionTargetRecordId: lookupId(r.Production_Target_ID) || productionTargetRecordId || "",
+          itemId: lookupId(r.Item),
+          itemName: display(r.Item),
+          uomId: lookupId(r.UOM),
+          uomName: display(r.UOM),
+          targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
+        };
+      });
+    }
+    // Fallback: lookup by Production Target record ID if not tagged with MRP_ID yet
+    if (productionTargetRecordId) {
+      return fetchFinishedGoodsForTarget(productionTargetRecordId);
+    }
+    return [];
+  });
+}
+
+export function fetchRawMaterialsForMrp(mrpRecordId: string): Promise<RawMaterialNeedRow[]> {
+  const criteria = `MRP_ID == ${mrpRecordId}`;
+  return getRecords(CONFIG.RAW_MATERIALS_REPORT, criteria).then(function (rows) {
+    if (!rows || !rows.length) return [];
+    return rows.map(function (r: any) {
+      return {
+        productId: lookupId(r.Product_Name) || lookupId(r.Product) || display(r.Product_Name),
+        productName: display(r.Product_Name) || display(r.Product),
+        uom: display(r.UOM),
+        stockOnHand: parseFloat(display(r.Stock_On_hand || r.Stock_On_Hand)) || 0,
+        stockRequired: parseFloat(display(r.Stock_Required)) || 0,
+        allocateQuantity: parseFloat(display(r.Allocate_Quantity || r.Allocated_Qty)) || 0,
+        neededQuantity: parseFloat(display(r.Needed_Quantity || r.Needed_Qty)) || 0,
+        status: (display(r.Status) || "Stock Available") as RawMaterialNeedRow["status"],
+      };
+    });
+  });
+}
+
+export function fetchMrpDetails(
+  mrpRecord: MrpRow,
+  productionTargetRecordId: string
+): Promise<MrpDetailData> {
+  return Promise.all([
+    fetchFinishedGoodsForMrp(mrpRecord.id, productionTargetRecordId),
+    fetchRawMaterialsForMrp(mrpRecord.id),
+  ]).then(function (results) {
+    const finishedGoods = results[0];
+    let rawMaterials = results[1];
+
+    if (rawMaterials.length > 0) {
+      const hasShortfall = rawMaterials.some(function (rm) {
+        return rm.status === "Needs Purchase";
+      });
+      return {
+        mrpRecord: mrpRecord,
+        finishedGoods: finishedGoods,
+        rawMaterials: rawMaterials,
+        hasShortfall: hasShortfall,
+      };
+    }
+
+    // Fallback: If Raw_Materials_Report has no rows returned (e.g. mock data or unindexed),
+    // compute needs dynamically from finished goods BOM
+    if (finishedGoods.length > 0) {
+      return computeRawMaterialNeeds(finishedGoods).then(function (computed) {
+        const hasShortfall = computed.some(function (rm) {
+          return rm.status === "Needs Purchase";
+        });
+        return {
+          mrpRecord: mrpRecord,
+          finishedGoods: finishedGoods,
+          rawMaterials: computed,
+          hasShortfall: hasShortfall,
+        };
+      });
+    }
+
+    return {
+      mrpRecord: mrpRecord,
+      finishedGoods: [],
+      rawMaterials: [],
+      hasShortfall: false,
+    };
+  });
+}
+
 // Fetch everything the Production Overview page needs, still no async/await —
 // Promise.all is native ES6 and fine (generator-based async/await
 // transpilation is the actual iOS Safari problem, not Promises themselves).
@@ -579,14 +677,19 @@ export function fetchProductionOverview(productionTargetId: string) {
     // actually exists, hence the !!mrpRecord guard.
     const procurementNeeded = !!mrpRecord && !!record && record.status === "Waiting for Stock";
 
+    const mrpDetailsPromise =
+      mrpRecord && record ? fetchMrpDetails(mrpRecord, record.id) : Promise.resolve(null);
+
     return Promise.all([
       procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([]),
       fetchProductionInProgress(productionTargetId),
       fetchConsumptionEntries(productionTargetId),
+      mrpDetailsPromise,
     ]).then(function (rest) {
       return {
         record,
         mrpRecord,
+        mrpDetails: rest[3] as MrpDetailData | null,
         procurementRecords: rest[0],
         productionInProgress: rest[1],
         consumptionEntries: rest[2],
@@ -594,3 +697,4 @@ export function fetchProductionOverview(productionTargetId: string) {
     });
   });
 }
+

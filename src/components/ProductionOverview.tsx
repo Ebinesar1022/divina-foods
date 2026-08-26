@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, CircularProgress, Tab, Tabs, Typography, Paper, Alert, Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import StatusChip from "./StatusChip";
 import CreateMrpDialog from "./CreateMrpDialog";
+import MrpReportView from "./MrpReportView";
 import { commitMrpDraft, fetchProductionOverview, prepareMrpDraft } from "../services/productionApi";
 import { computeProgress, isProcurementRequired, stageIndex, stageKeyFromStatus } from "../config/stages.config";
 import type {
   ConsumptionEntryRow,
+  MrpDetailData,
   MrpDraft,
   MrpRow,
   ProcurementRow,
@@ -27,6 +30,7 @@ const TABS = [
 interface OverviewData {
   record: ProductionTargetRow | null;
   mrpRecord: MrpRow | null;
+  mrpDetails?: MrpDetailData | null;
   procurementRecords: ProcurementRow[];
   productionInProgress: ProductionInProgressRow[];
   consumptionEntries: ConsumptionEntryRow[];
@@ -96,9 +100,31 @@ export default function ProductionOverview({ productionTargetId }: { productionT
     committingRef.current = true;
     setCommitting(true);
     setCommitError("");
-    commitMrpDraft(mrpDraft, notes)
+    const committedDraft = mrpDraft;
+    const committedNotes = notes;
+    commitMrpDraft(committedDraft, committedNotes)
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
+          // If Creator report indexing has slight latency for child tables,
+          // ensure the freshly committed draft data is immediately available for the report view
+          if (result) {
+            if (!result.mrpDetails || !result.mrpDetails.rawMaterials.length) {
+              result.mrpDetails = {
+                mrpRecord: result.mrpRecord || {
+                  id: "",
+                  mrpId: committedDraft.mrpId,
+                  productionTargetId: committedDraft.productionTargetId,
+                  date: committedDraft.mrpDate,
+                  createdBy: "",
+                  notes: committedNotes,
+                  status: "False",
+                },
+                finishedGoods: committedDraft.finishedGoods,
+                rawMaterials: committedDraft.rawMaterials,
+                hasShortfall: committedDraft.hasShortfall,
+              };
+            }
+          }
           setData(result);
         });
       })
@@ -169,22 +195,66 @@ export default function ProductionOverview({ productionTargetId }: { productionT
           {activeTab === "mrp" && (
             <Box>
               {mrpRecord ? (
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2 }}>
-                  <InfoCard label="MRP ID" value={mrpRecord.mrpId} />
-                  <InfoCard label="MRP Date" value={mrpRecord.date} />
-                  <InfoCard label="Production Target Status" valueNode={<StatusChip value={record.status} />} />
-                </Box>
+                <MrpReportView
+                  mrpRecord={mrpRecord}
+                  mrpDetails={data.mrpDetails}
+                  productionTarget={record}
+                />
               ) : (
-                <Box>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: { xs: 3, md: 4 },
+                    borderRadius: "14px",
+                    textAlign: "center",
+                    bgcolor: "#F8FAFC",
+                    borderStyle: "dashed",
+                    borderColor: "#CBD5E1",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 2,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: "12px",
+                      bgcolor: "#EFF6FF",
+                      color: "#2563eb",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <AssignmentTurnedInIcon sx={{ fontSize: 28 }} />
+                  </Box>
+                  <Box sx={{ maxWidth: 450 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 16, color: "#0F172A", mb: 0.5 }}>
+                      No Material Requirement &amp; Planning Yet
+                    </Typography>
+                    <Typography sx={{ fontSize: 13.5, color: "#64748B" }}>
+                      Generate the MRP to explode BOMs, evaluate available warehouse stock, and compute needed purchase quantities.
+                    </Typography>
+                  </Box>
                   <Button
                     variant="contained"
+                    size="medium"
                     startIcon={<AddIcon />}
                     onClick={handleOpenCreateMrp}
-                    sx={{ borderRadius: "10px", textTransform: "none" }}
+                    sx={{
+                      borderRadius: "10px",
+                      textTransform: "none",
+                      fontWeight: 600,
+                      px: 2.5,
+                      py: 1,
+                      boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+                    }}
                   >
                     Create MRP
                   </Button>
-                </Box>
+                </Paper>
               )}
             </Box>
           )}
