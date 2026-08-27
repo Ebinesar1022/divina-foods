@@ -104,6 +104,18 @@ function lookupId(value: any): string {
   return String(value);
 }
 
+// Rounds a computed quantity to 4 decimal places before it's ever written
+// to Zoho. BOM math (quantityRequired * targetQuantity, then summed across
+// finished goods) routinely lands on IEEE754 noise like 0.30000000000000004
+// — that has 17 significant digits once JSON-serialized, which Creator's
+// decimal fields reject outright with "<Field> has exceeded its maximum
+// digits" (code 3001). Rounding at the point every derived quantity is
+// produced keeps that noise from ever reaching a payload.
+function roundQty(value: number): number {
+  if (!isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 10000) / 10000;
+}
+
 // Employee.Employee_Name is a "name"-type field — comes back as
 // { prefix, first_name, last_name, suffix }, matching the displayformat
 // used for Assigned_To lookups elsewhere in the app (Production_Targets,
@@ -469,7 +481,7 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
           productId: item.productId,
           productName: item.productName,
           uom: item.uomName,
-          requiredQuantity: item.quantityRequired * fg.targetQuantity,
+          requiredQuantity: roundQty(item.quantityRequired * fg.targetQuantity),
         };
       });
     });
@@ -480,7 +492,7 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
       lines.forEach(function (line) {
         const existing = aggregated.get(line.productId);
         if (existing) {
-          existing.stockRequired += line.requiredQuantity;
+          existing.stockRequired = roundQty(existing.stockRequired + line.requiredQuantity);
         } else {
           aggregated.set(line.productId, {
             productId: line.productId,
@@ -498,9 +510,9 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
       return fetchStockOnHand(rm.productId);
     }).then(function (stockLevels) {
       return aggregatedList.map(function (rm, index) {
-        const stockOnHand = stockLevels[index];
-        const allocateQuantity = Math.min(stockOnHand, rm.stockRequired);
-        const neededQuantity = Math.max(0, rm.stockRequired - stockOnHand);
+        const stockOnHand = roundQty(stockLevels[index]);
+        const allocateQuantity = roundQty(Math.min(stockOnHand, rm.stockRequired));
+        const neededQuantity = roundQty(Math.max(0, rm.stockRequired - stockOnHand));
         return {
           productId: rm.productId,
           productName: rm.productName,
