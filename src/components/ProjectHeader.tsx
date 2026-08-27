@@ -80,15 +80,17 @@ export default function ProjectHeader({ record, progressPercent, onBack }: Proje
       sx={{
         position: 'relative',
         overflow: 'hidden',
-        borderRadius: '18px',
+        borderRadius: '20px',
         px: { xs: 2.5, sm: 3.5, md: 4 },
         py: { xs: 2.5, sm: 3, md: 3.5 },
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #2563eb 100%)',
+        background: 'linear-gradient(135deg, #172554 0%, #1E3A8A 38%, #2563EB 72%, #0EA5E9 100%)',
+        border: 'none',
+        backdropFilter: 'none',
         color: '#fff',
-        boxShadow: '0 10px 30px -5px rgba(30, 58, 138, 0.35)',
+        boxShadow: '0 16px 40px rgba(37, 99, 235, 0.18)',
       }}
     >
-      {/* Decorative ambient glowing circles */}
+      {/* Decorative liquid-glass bubbles */}
       <Box
         sx={{
           position: 'absolute',
@@ -97,7 +99,8 @@ export default function ProjectHeader({ record, progressPercent, onBack }: Proje
           width: 240,
           height: 240,
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, rgba(255,255,255,0) 70%)',
+          background: 'rgba(255, 255, 255, 0.08)',
+          filter: 'blur(2px)',
           pointerEvents: 'none',
         }}
       />
@@ -109,7 +112,21 @@ export default function ProjectHeader({ record, progressPercent, onBack }: Proje
           width: 280,
           height: 280,
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(14, 165, 233, 0.2) 0%, rgba(255,255,255,0) 70%)',
+          background: 'rgba(255, 255, 255, 0.06)',
+          filter: 'blur(2px)',
+          pointerEvents: 'none',
+        }}
+      />
+      <Box
+        sx={{
+          position: 'absolute',
+          bottom: -30,
+          left: 40,
+          width: 90,
+          height: 90,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.22), rgba(255,255,255,0.02) 70%)',
+          filter: 'blur(1px)',
           pointerEvents: 'none',
         }}
       />
@@ -173,6 +190,14 @@ export default function ProjectHeader({ record, progressPercent, onBack }: Proje
             >
               Production Overview
             </Typography>
+            {(record.date || record.assignedTo) && (
+              <Typography
+                variant="caption"
+                sx={{ color: 'rgba(255, 255, 255, 0.7)', display: 'block', mt: 0.5, fontWeight: 500 }}
+              >
+                {[record.date, record.assignedTo].filter(Boolean).join(' · ')}
+              </Typography>
+            )}
             {record.notes && (
               <Typography
                 variant="caption"

@@ -24,17 +24,17 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 const STATE_PILL_STYLE: Record<string, { bg: string; color: string; border: string }> = {
-  Completed: { bg: "#ECFDF5", color: "#059669", border: "#A7F3D0" },
-  "In Progress": { bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
-  Upcoming: { bg: "#F8FAFC", color: "#64748B", border: "#E2E8F0" },
-  Skipped: { bg: "#F8FAFC", color: "#94A3B8", border: "#E2E8F0" },
+  Completed: { bg: "rgba(16,185,129,0.10)", color: "#059669", border: "rgba(16,185,129,0.25)" },
+  "In Progress": { bg: "rgba(37,99,235,0.10)", color: "#2563EB", border: "rgba(37,99,235,0.20)" },
+  Upcoming: { bg: "rgba(148,163,184,0.10)", color: "#64748B", border: "rgba(148,163,184,0.25)" },
+  Skipped: { bg: "rgba(203,213,225,0.22)", color: "#64748B", border: "rgba(148,163,184,0.25)" },
 };
 
 const STATE_NODE_STYLE: Record<string, { bg: string; border: string; fg: string; shadow?: string }> = {
-  done: { bg: "#ECFDF5", border: "#10B981", fg: "#059669", shadow: "0 2px 8px rgba(16, 185, 129, 0.15)" },
+  done: { bg: "rgba(16,185,129,0.10)", border: "#10B981", fg: "#059669", shadow: "0 2px 8px rgba(16, 185, 129, 0.15)" },
   active: { bg: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)", border: "#2563eb", fg: "#ffffff", shadow: "0 4px 12px rgba(37, 99, 235, 0.25)" },
-  pending: { bg: "#ffffff", border: "#e2e8f0", fg: "#94a3b8", shadow: "none" },
-  skipped: { bg: "#f8fafc", border: "#cbd5e1", fg: "#94a3b8", shadow: "none" },
+  pending: { bg: "rgba(255,255,255,0.6)", border: "#e2e8f0", fg: "#94a3b8", shadow: "none" },
+  skipped: { bg: "rgba(203,213,225,0.16)", border: "#cbd5e1", fg: "#94a3b8", shadow: "none" },
 };
 
 function StageIcon({ iconName, sx }: { iconName: string; sx?: object }) {
@@ -87,12 +87,10 @@ export default function ActivityTimeline({
     <Paper
       elevation={0}
       sx={{
-        borderRadius: "16px",
+        borderRadius: "18px",
         p: { xs: 2, sm: 2.5 },
         height: "100%",
-        border: "1px solid #E2E8F0",
-        bgcolor: "#FFFFFF",
-        boxShadow: "0 2px 12px rgba(15, 23, 42, 0.04)",
+        boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 3 }}>
@@ -100,8 +98,8 @@ export default function ActivityTimeline({
           sx={{
             width: 32,
             height: 32,
-            borderRadius: "8px",
-            bgcolor: "#EFF6FF",
+            borderRadius: "11px",
+            bgcolor: "rgba(37,99,235,0.10)",
             color: "#2563EB",
             display: "flex",
             alignItems: "center",
@@ -110,7 +108,7 @@ export default function ActivityTimeline({
         >
           <AccessTimeIcon sx={{ fontSize: 18 }} />
         </Box>
-        <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#172033" }}>
           Activity Timeline
         </Typography>
       </Box>
@@ -176,14 +174,24 @@ export default function ActivityTimeline({
 
                 {!isLast && (
                   <Box
-                    sx={{
-                      width: 2,
-                      flex: 1,
-                      minHeight: 32,
-                      bgcolor: state === "done" ? "#10b981" : "#e2e8f0",
-                      my: 0.75,
-                      borderRadius: "999px",
-                    }}
+                    sx={
+                      state === "skipped"
+                        ? {
+                            width: 0,
+                            flex: 1,
+                            minHeight: 32,
+                            my: 0.75,
+                            borderLeft: "2px dashed #cbd5e1",
+                          }
+                        : {
+                            width: 2,
+                            flex: 1,
+                            minHeight: 32,
+                            bgcolor: state === "done" ? "#10b981" : "#e2e8f0",
+                            my: 0.75,
+                            borderRadius: "999px",
+                          }
+                    }
                   />
                 )}
               </Box>

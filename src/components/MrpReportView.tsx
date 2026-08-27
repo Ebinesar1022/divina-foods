@@ -51,9 +51,8 @@ export default function MrpReportView({
         elevation={0}
         sx={{
           p: { xs: 2, sm: 2.5 },
-          borderRadius: "14px",
-          border: "1px solid #E2E8F0",
-          background: "linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%)",
+          borderRadius: "16px",
+          boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
           display: "flex",
           flexDirection: { xs: "column", sm: "row" },
           justifyContent: "space-between",
@@ -129,9 +128,9 @@ export default function MrpReportView({
           variant="outlined"
           sx={{
             p: 2,
-            borderRadius: "12px",
-            bgcolor: "#F8FAFC",
-            borderColor: "#E2E8F0",
+            borderRadius: "14px",
+            bgcolor: "rgba(255,255,255,0.55)",
+            borderColor: "rgba(148,163,184,0.25)",
             display: "flex",
             alignItems: "flex-start",
             gap: 1.5,
@@ -225,13 +224,13 @@ export default function MrpReportView({
               variant="outlined"
               sx={{
                 borderRadius: "12px",
-                borderColor: "#E2E8F0",
+                borderColor: "rgba(148,163,184,0.25)",
                 overflow: "hidden",
               }}
             >
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: "#F8FAFC" }}>
+                  <TableRow sx={{ bgcolor: "rgba(241,245,249,0.55)" }}>
                     <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>Item</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>UOM</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
@@ -246,7 +245,7 @@ export default function MrpReportView({
                         key={fg.id || idx}
                         sx={{
                           "&:last-child td, &:last-child th": { border: 0 },
-                          "&:hover": { bgcolor: "#F8FAFC" },
+                          "&:hover": { bgcolor: "rgba(37,99,235,0.035)" },
                         }}
                       >
                         <TableCell sx={{ fontWeight: 600, color: "#1E293B" }}>
@@ -341,13 +340,13 @@ export default function MrpReportView({
               variant="outlined"
               sx={{
                 borderRadius: "12px",
-                borderColor: "#E2E8F0",
+                borderColor: "rgba(148,163,184,0.25)",
                 overflow: "hidden",
               }}
             >
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: "#F8FAFC" }}>
+                  <TableRow sx={{ bgcolor: "rgba(241,245,249,0.55)" }}>
                     <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
                       Product Name
                     </TableCell>
@@ -446,13 +445,14 @@ function MetricCard({
       variant="outlined"
       sx={{
         p: 1.75,
-        borderRadius: "12px",
-        bgcolor: "#fff",
-        borderColor: highlight ? "#C7D2FE" : "#E2E8F0",
-        boxShadow: highlight ? "0 2px 8px rgba(99, 102, 241, 0.08)" : "none",
-        transition: "all 0.2s ease",
+        borderRadius: "14px",
+        bgcolor: "rgba(255,255,255,0.65)",
+        borderColor: highlight ? "rgba(37,99,235,0.25)" : "rgba(148,163,184,0.25)",
+        boxShadow: highlight ? "0 6px 22px rgba(37, 99, 235, 0.10)" : "0 6px 22px rgba(30, 58, 138, 0.06)",
+        transition: "transform 180ms ease, box-shadow 180ms ease",
         "&:hover": {
-          borderColor: "#CBD5E1",
+          transform: "translateY(-1px)",
+          boxShadow: "0 12px 35px rgba(37, 99, 235, 0.12)",
         },
       }}
     >
