@@ -593,11 +593,9 @@ export default function ProductionOverview({
           <Paper
             elevation={0}
             sx={{
-              borderRadius: "16px",
+              borderRadius: "18px",
               p: { xs: 1, sm: 1.5 },
-              border: "1px solid #E2E8F0",
-              bgcolor: "#FFFFFF",
-              boxShadow: "0 2px 12px rgba(15, 23, 42, 0.04)",
+              boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
             }}
           >
             <PipelineStepper
@@ -611,10 +609,8 @@ export default function ProductionOverview({
           <Paper
             elevation={0}
             sx={{
-              borderRadius: "16px",
-              border: "1px solid #E2E8F0",
-              bgcolor: "#FFFFFF",
-              boxShadow: "0 2px 12px rgba(15, 23, 42, 0.04)",
+              borderRadius: "18px",
+              boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
               overflow: "hidden",
             }}
           >
@@ -625,8 +621,8 @@ export default function ProductionOverview({
               scrollButtons="auto"
               sx={{
                 px: { xs: 1, sm: 2 },
-                bgcolor: "#F8FAFC",
-                borderBottom: "1px solid #E2E8F0",
+                bgcolor: "rgba(241,245,249,0.45)",
+                borderBottom: "1px solid rgba(148,163,184,0.18)",
                 minHeight: 48,
                 "& .MuiTab-root": {
                   fontWeight: 600,
@@ -644,6 +640,7 @@ export default function ProductionOverview({
                   height: 3,
                   borderRadius: "3px 3px 0 0",
                   backgroundColor: "#2563EB",
+                  boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
                 },
               }}
             >
@@ -745,7 +742,7 @@ export default function ProductionOverview({
                         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
                           <Table size="small">
                             <TableHead>
-                              <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                              <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
                                 <TableCell padding="checkbox" />
                                 <TableCell>Product Name</TableCell>
                                 <TableCell>UOM</TableCell>
@@ -840,7 +837,7 @@ export default function ProductionOverview({
                                 <TableContainer>
                                   <Table size="small">
                                     <TableHead>
-                                      <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                      <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
                                         <TableCell>Product</TableCell>
                                         <TableCell align="right">Ordered</TableCell>
                                         <TableCell align="right">Received</TableCell>
@@ -899,10 +896,9 @@ export default function ProductionOverview({
                         sx={{
                           position: "relative",
                           p: { xs: 2, sm: 2.5 },
-                          borderRadius: "16px",
-                          borderColor: "rgba(59, 130, 246, 0.25)",
-                          bgcolor: "#FFFFFF",
-                          boxShadow: "0 0 24px rgba(59, 130, 246, 0.2)",
+                          borderRadius: "18px",
+                          borderColor: "rgba(37, 99, 235, 0.18)",
+                          boxShadow: "0 8px 30px rgba(37, 99, 235, 0.12)",
                           overflow: "hidden",
                         }}
                       >
@@ -915,8 +911,8 @@ export default function ProductionOverview({
                             opacity: 0.78,
                             filter: "contrast(0.95)",
                             "& .MuiPaper-root": {
-                              bgcolor: "#F8FAFC",
-                              borderColor: "#E2E8F0",
+                              bgcolor: "rgba(255,255,255,0.5)",
+                              borderColor: "rgba(148,163,184,0.25)",
                             },
                           }}
                         >
@@ -947,7 +943,7 @@ export default function ProductionOverview({
                           <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
                             <Table size="small">
                               <TableHead>
-                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
                                   <TableCell>Item</TableCell>
                                   <TableCell>UOM</TableCell>
                                   <TableCell align="right">Target Quantity</TableCell>
@@ -1084,7 +1080,7 @@ export default function ProductionOverview({
                               <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
                                 <Table size="small">
                                   <TableHead>
-                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
                                       <TableCell>Item</TableCell>
                                       <TableCell align="right">Target</TableCell>
                                       <TableCell align="right">Produced</TableCell>
@@ -1118,7 +1114,7 @@ export default function ProductionOverview({
                               <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
                                 <Table size="small">
                                   <TableHead>
-                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
                                       <TableCell>Raw Material</TableCell>
                                       <TableCell>UOM</TableCell>
                                       <TableCell align="right">Allocated</TableCell>
@@ -1250,14 +1246,13 @@ function InfoCard({
       variant="outlined"
       sx={{
         p: { xs: 1.5, sm: 2 },
-        borderRadius: "12px",
-        borderColor: "#E2E8F0",
-        bgcolor: "#F8FAFC",
-        transition: "transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease",
+        borderRadius: "14px",
+        bgcolor: "rgba(255,255,255,0.65)",
+        boxShadow: "0 6px 22px rgba(30, 58, 138, 0.06)",
+        transition: "transform 180ms ease, box-shadow 180ms ease",
         "&:hover": {
-          borderColor: "#CBD5E1",
-          bgcolor: "#FFFFFF",
-          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+          transform: "translateY(-1px)",
+          boxShadow: "0 12px 35px rgba(37, 99, 235, 0.12)",
         },
       }}
     >
@@ -1265,7 +1260,7 @@ function InfoCard({
         {label}
       </Typography>
       {valueNode || (
-        <Typography sx={{ fontWeight: 700, fontSize: { xs: 13.5, sm: 14.5 }, color: "#0F172A", wordBreak: "break-word" }}>
+        <Typography sx={{ fontWeight: 700, fontSize: { xs: 13.5, sm: 14.5 }, color: "#172033", wordBreak: "break-word" }}>
           {value || "—"}
         </Typography>
       )}
@@ -1296,16 +1291,16 @@ function CenteredStateCard({
       variant="outlined"
       sx={{
         p: { xs: 3, sm: 4 },
-        borderRadius: "16px",
+        borderRadius: "18px",
         textAlign: "center",
-        bgcolor: "#FAFBFD",
+        bgcolor: "rgba(255,255,255,0.55)",
         borderStyle: "dashed",
-        borderColor: "#CBD5E1",
+        borderColor: "rgba(148,163,184,0.4)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         gap: 2,
-        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.02)",
+        boxShadow: "0 8px 30px rgba(37, 99, 235, 0.06)",
       }}
     >
       <Box
@@ -1362,11 +1357,11 @@ function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string
       <Box
         sx={{
           position: "relative",
-          border: `3.5px solid ${color}`,
+          border: `3px solid ${color}`,
           borderRadius: "10px",
           color: color,
-          bgcolor: "rgba(255, 255, 255, 0.88)",
-          backdropFilter: "blur(2px)",
+          bgcolor: "rgba(255, 255, 255, 0.82)",
+          backdropFilter: "blur(8px)",
           boxShadow: `0 4px 16px ${color === "#059669" ? "rgba(5, 150, 105, 0.2)" : "rgba(37, 99, 235, 0.2)"}`,
           fontWeight: 800,
           fontSize: { xs: 17, sm: 22, md: 24 },

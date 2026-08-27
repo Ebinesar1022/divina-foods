@@ -1,5 +1,28 @@
 import { createTheme } from "@mui/material/styles";
 
+// ───────────── Glass design tokens ─────────────
+// Shared constants for the light glassmorphism / liquid-glass look. Exported
+// so components that need a bespoke glass surface (hero, stamp, ambient
+// blobs) can reuse the same palette instead of re-deriving colors.
+export const glass = {
+  primary: "#2563EB",
+  deepBlue: "#1E3A8A",
+  cyan: "#0EA5E9",
+  success: "#10B981",
+  warning: "#F59E0B",
+  danger: "#EF4444",
+  pageBg: "#F0F4FA",
+  white: "rgba(255,255,255,0.68)",
+  whiteStrong: "rgba(255,255,255,0.82)",
+  border: "rgba(255,255,255,0.70)",
+  mutedText: "#64748B",
+  primaryText: "#172033",
+  pending: "#94A3B8",
+  skipped: "#CBD5E1",
+  pageGradient:
+    "linear-gradient(135deg, #F4F8FF 0%, #EEF5FF 45%, #F7FAFF 100%)",
+};
+
 const theme = createTheme({
   typography: {
     fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -34,17 +57,17 @@ const theme = createTheme({
       dark: "#d97706",
     },
     background: {
-      default: "#f1f5f9",
-      paper: "#FFFFFF",
+      default: glass.pageBg,
+      paper: "rgba(255,255,255,0.68)",
     },
     text: {
-      primary: "#0F172A",
-      secondary: "#64748B",
+      primary: glass.primaryText,
+      secondary: glass.mutedText,
     },
-    divider: "#E2E8F0",
+    divider: "rgba(148, 163, 184, 0.24)",
   },
   shape: {
-    borderRadius: 14,
+    borderRadius: 16,
   },
   components: {
     MuiCssBaseline: {
@@ -58,8 +81,15 @@ const theme = createTheme({
           boxSizing: "inherit",
         },
         body: {
-          backgroundColor: "#f1f5f9",
-          color: "#0F172A",
+          backgroundColor: glass.pageBg,
+          backgroundImage: `
+            radial-gradient(circle at 5% 10%, rgba(14,165,233,0.10), transparent 28%),
+            radial-gradient(circle at 90% 20%, rgba(37,99,235,0.08), transparent 30%),
+            radial-gradient(circle at 70% 90%, rgba(16,185,129,0.06), transparent 28%),
+            ${glass.pageGradient}
+          `,
+          backgroundAttachment: "fixed",
+          color: glass.primaryText,
           overflowX: "hidden",
           WebkitFontSmoothing: "antialiased",
           MozOsxFontSmoothing: "grayscale",
@@ -79,7 +109,34 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: "none",
-          transition: "box-shadow 0.2s ease, border-color 0.2s ease",
+          backgroundColor: "rgba(255,255,255,0.62)",
+          backdropFilter: "blur(18px) saturate(130%)",
+          WebkitBackdropFilter: "blur(18px) saturate(130%)",
+          border: "1px solid rgba(255,255,255,0.75)",
+          transition: "transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease",
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: {
+          fontSize: 12,
+          fontWeight: 700,
+          color: glass.mutedText,
+          backgroundColor: "rgba(241,245,249,0.55)",
+        },
+        root: {
+          borderBottom: "1px solid rgba(148,163,184,0.12)",
+          fontVariantNumeric: "tabular-nums",
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          "&:hover": {
+            backgroundColor: "rgba(37,99,235,0.035)",
+          },
         },
       },
     },
@@ -88,8 +145,21 @@ const theme = createTheme({
         root: {
           borderRadius: 10,
           boxShadow: "none",
+        },
+        containedPrimary: {
+          backgroundColor: "#2563EB",
+          boxShadow: "0 5px 14px rgba(37, 99, 235, 0.18)",
           "&:hover": {
-            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+            backgroundColor: "#1D4ED8",
+            boxShadow: "0 6px 18px rgba(37, 99, 235, 0.24)",
+          },
+        },
+        outlined: {
+          backgroundColor: "rgba(255,255,255,0.6)",
+          borderColor: "rgba(148,163,184,0.35)",
+          "&:hover": {
+            borderColor: "rgba(148,163,184,0.55)",
+            backgroundColor: "rgba(255,255,255,0.8)",
           },
         },
       },
@@ -98,4 +168,3 @@ const theme = createTheme({
 });
 
 export default theme;
-
