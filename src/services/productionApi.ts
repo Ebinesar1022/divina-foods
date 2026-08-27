@@ -866,6 +866,13 @@ export function allocateStockOnProductionStart(productionTargetRecordId: string)
   });
 }
 
+// ⚠️ From the "UpdateWarehouse" Custom API's Summary page in Microservices.
+const UPDATE_WAREHOUSE_STOCK_API = {
+  api_name: "UpdateWarehouse",
+  workspace_name: "info_divinafoodco",
+  public_key: "kCfMhmAE0sxAkrU2vWbUXMthV",
+};
+
 // ───────────── Complete Production (Consumption Entry) ─────────────
 // Mirrors the native "Complete Production" custom action on the
 // Production_Inprogress list: that action just opens the Consumption_Entry
@@ -953,83 +960,61 @@ export function prepareConsumptionDraft(
   });
 }
 
-// Mirrors the native "Update the Scrap Warehouse" workflow (Consumption_Entry,
-// record event = on add, on success) — bumps the Main/Scrap/Production
-// warehouse stock detail rows for both the finished goods produced and the
-// raw materials consumed. Unlike "Update Inventory Adjustment" (which calls
-// out to Zoho Inventory via an org-specific connection and is intentionally
-// NOT replicated here), this one only touches plain Creator forms, so it's
-// fully reachable from widget JS — it just needs replicating client-side
-// because "on add" record-event workflows don't fire for records created
-// through the JS SDK's addRecords, only through Creator's own form UI.
+// Calls the "UpdateWarehouse" Custom API, which runs the
+// updateWarehouseStockOnConsumption Deluge function server-side — bumps the
+// Main/Scrap/Production warehouse stock detail rows for both the finished
+// goods produced and the raw materials consumed, mirroring the native
+// "Update the Scrap Warehouse" workflow (Consumption_Entry, record event =
+// on add, on success — which doesn't fire for records created through the
+// JS SDK's addRecords, only through Creator's own form UI).
 //
-// Matches the native script's own gate exactly: both branches only update
-// anything if a Scrap_Warehouse_Stock_Details row already exists for that
-// product (its `count() > 0` check) — and, matching the native script, the
-// raw-material branch deliberately leaves Main_Warehouse_Stock_Details's
-// Available_Stocks untouched (only the finished-good branch recomputes it).
+// This replaced an earlier client-side replication that fetched + updated
+// every warehouse row one product at a time: with several finished goods
+// and raw materials each needing 2-3 lookups plus updates, that blew past
+// Creator's cap on simultaneous in-flight API calls (code 2955) and was
+// slow even when it didn't. One Custom API call does all of it server-side.
 function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promise<any> {
-  return runSequentially(draft.finishedGoods, function (fg): Promise<any[]> {
-    if (!fg.itemId) return Promise.resolve([]);
-    return getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`).then(function (
-      scrapRows
-    ) {
-      if (!scrapRows.length) return Promise.resolve([]);
-      return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`).then(function (
-        mainRows
-      ) {
-        return runSequentially(scrapRows, function (row: any) {
-          return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, row.ID, {
-            Scrap_Quantity: (parseFloat(display(row.Scrap_Quantity)) || 0) + fg.scrapQuantity,
-          });
-        }).then(function () {
-          return runSequentially(mainRows, function (row: any) {
-            const newStockOnHand = (parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity;
-            return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, row.ID, {
-              Stock_On_Hand: newStockOnHand,
-              Available_Stocks: newStockOnHand,
-            });
-          });
-        });
-      });
+  const finishedGoodsPayload = draft.finishedGoods
+    .filter(function (fg) {
+      return !!fg.itemId;
+    })
+    .map(function (fg) {
+      return {
+        Finished_Good: fg.itemId,
+        Produced_Quantity: fg.producedQuantity,
+        Scrap_Quantity: fg.scrapQuantity,
+      };
     });
-  }).then(function () {
-    return runSequentially(draft.rawMaterials, function (rm): Promise<any[]> {
-      if (!rm.productId) return Promise.resolve([]);
-      return getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`).then(function (
-        scrapRows
-      ) {
-        if (!scrapRows.length) return Promise.resolve([]);
-        return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`).then(function (
-          mainRows
-        ) {
-          return getRecords(CONFIG.PRODUCTION_STOCK_REPORT, `Product_Master == ${rm.productId}`).then(function (
-            productionRows
-          ) {
-            return runSequentially(mainRows, function (row: any) {
-              return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, row.ID, {
-                Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
-                Stock_On_Hand: (parseFloat(display(row.Stock_On_Hand)) || 0) - rm.allocatedQuantity,
-              });
-            })
-              .then(function () {
-                return runSequentially(productionRows, function (row: any) {
-                  return updateRecord(CONFIG.PRODUCTION_STOCK_REPORT, row.ID, {
-                    Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
-                  });
-                });
-              })
-              .then(function () {
-                return runSequentially(scrapRows, function (row: any) {
-                  return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, row.ID, {
-                    Scrap_Quantity: (parseFloat(display(row.Scrap_Quantity)) || 0) + rm.scrapQuantity,
-                  });
-                });
-              });
-          });
-        });
-      });
+
+  const rawMaterialsPayload = draft.rawMaterials
+    .filter(function (rm) {
+      return !!rm.productId;
+    })
+    .map(function (rm) {
+      return {
+        Raw_Material: rm.productId,
+        Allocated_Quantity: rm.allocatedQuantity,
+        Scrap_Quantity: rm.scrapQuantity,
+      };
     });
+
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: UPDATE_WAREHOUSE_STOCK_API.api_name,
+    workspace_name: UPDATE_WAREHOUSE_STOCK_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      finished_goods: finishedGoodsPayload,
+      raw_materials: rawMaterialsPayload,
+    },
+    public_key: UPDATE_WAREHOUSE_STOCK_API.public_key,
+  }).then(function (resp: any) {
+    // Same code-3000-means-success convention as allocateStockOnProductionStart.
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
+      return Promise.reject(new Error((result && result.message) || "Failed to update warehouse stock."));
+    }
+    return resp;
   });
 }
 
