@@ -128,9 +128,23 @@ const BOM_ITEMS = [
 ];
 
 const MAIN_WAREHOUSE_STOCK = [
-  { ID: "1", Product_Master: { ID: "301", display_value: "Salt" }, Available_Stocks: "0" },
-  { ID: "2", Product_Master: { ID: "302", display_value: "Olive Oil" }, Available_Stocks: "50" },
-  { ID: "3", Product_Master: { ID: "303", display_value: "Yeast" }, Available_Stocks: "200" },
+  { ID: "1", Product_Master: { ID: "301", display_value: "Salt" }, Stock_On_Hand: "0", Committed_Stocks: "0", Available_Stocks: "0" },
+  { ID: "2", Product_Master: { ID: "302", display_value: "Olive Oil" }, Stock_On_Hand: "50", Committed_Stocks: "25", Available_Stocks: "50" },
+  { ID: "3", Product_Master: { ID: "303", display_value: "Yeast" }, Stock_On_Hand: "200", Committed_Stocks: "50", Available_Stocks: "200" },
+  { ID: "4", Product_Master: { ID: "101", display_value: "Margherita Pizza" }, Stock_On_Hand: "0", Committed_Stocks: "0", Available_Stocks: "0" },
+];
+
+const SCRAP_WAREHOUSE_STOCK = [
+  { ID: "1", Product_Master: { ID: "301", display_value: "Salt" }, Scrap_Quantity: "0" },
+  { ID: "2", Product_Master: { ID: "302", display_value: "Olive Oil" }, Scrap_Quantity: "0" },
+  { ID: "3", Product_Master: { ID: "303", display_value: "Yeast" }, Scrap_Quantity: "0" },
+  { ID: "4", Product_Master: { ID: "101", display_value: "Margherita Pizza" }, Scrap_Quantity: "0" },
+];
+
+const PRODUCTION_STOCK = [
+  { ID: "1", Product_Master: { ID: "301", display_value: "Salt" }, Stock_On_Hand: "0", Committed_Stocks: "50" },
+  { ID: "2", Product_Master: { ID: "302", display_value: "Olive Oil" }, Stock_On_Hand: "0", Committed_Stocks: "25" },
+  { ID: "3", Product_Master: { ID: "303", display_value: "Yeast" }, Stock_On_Hand: "0", Committed_Stocks: "50" },
 ];
 
 const SEQUENCE_MASTER = [
@@ -168,6 +182,8 @@ const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.BOM_MASTER_REPORT]: BOM_MASTER,
   [CONFIG.BOM_ITEMS_REPORT]: BOM_ITEMS,
   [CONFIG.MAIN_WAREHOUSE_STOCK_REPORT]: MAIN_WAREHOUSE_STOCK,
+  [CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT]: SCRAP_WAREHOUSE_STOCK,
+  [CONFIG.PRODUCTION_STOCK_REPORT]: PRODUCTION_STOCK,
   [CONFIG.SEQUENCE_MASTER_REPORT]: SEQUENCE_MASTER,
   [CONFIG.WAREHOUSE_REPORT]: WAREHOUSE_MASTER,
   [CONFIG.EMPLOYEE_REPORT]: EMPLOYEES,

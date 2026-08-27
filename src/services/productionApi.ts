@@ -70,6 +70,13 @@ export const CONFIG = {
   FINISHED_GOODS_CONSUMPTIONS_REPORT: "Finished_Goods_Cunsumptions_Report",
   CONSUMPTION_ITEMS_FORM: "Consumption_Items",
   CONSUMPTION_ITEMS_REPORT: "Consumption_Items_Report",
+
+  // Warehouse stock ledgers touched by completing production — confirmed
+  // against the app's .ds export. All three are plain Creator forms (no
+  // external Zoho Inventory connection involved), unlike the separate
+  // "Update Inventory Adjustment" workflow.
+  SCRAP_WAREHOUSE_STOCK_REPORT: "Scrap_Warehouse_Stock_Details_Report",
+  PRODUCTION_STOCK_REPORT: "Production_Stock_Details_Report",
 };
 
 function display(value: any): string {
@@ -924,12 +931,97 @@ export function prepareConsumptionDraft(
   });
 }
 
+// Mirrors the native "Update the Scrap Warehouse" workflow (Consumption_Entry,
+// record event = on add, on success) — bumps the Main/Scrap/Production
+// warehouse stock detail rows for both the finished goods produced and the
+// raw materials consumed. Unlike "Update Inventory Adjustment" (which calls
+// out to Zoho Inventory via an org-specific connection and is intentionally
+// NOT replicated here), this one only touches plain Creator forms, so it's
+// fully reachable from widget JS — it just needs replicating client-side
+// because "on add" record-event workflows don't fire for records created
+// through the JS SDK's addRecords, only through Creator's own form UI.
+//
+// Matches the native script's own gate exactly: both branches only update
+// anything if a Scrap_Warehouse_Stock_Details row already exists for that
+// product (its `count() > 0` check) — and, matching the native script, the
+// raw-material branch deliberately leaves Main_Warehouse_Stock_Details's
+// Available_Stocks untouched (only the finished-good branch recomputes it).
+function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promise<any> {
+  const finishedGoodUpdates = draft.finishedGoods.map(function (fg): Promise<any[]> {
+    if (!fg.itemId) return Promise.resolve([]);
+    return Promise.all([
+      getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`),
+      getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`),
+    ]).then(function (results) {
+      const scrapRows = results[0];
+      const mainRows = results[1];
+      if (!scrapRows.length) return Promise.resolve([]);
+
+      const updates = scrapRows
+        .map(function (row: any) {
+          return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, row.ID, {
+            Scrap_Quantity: (parseFloat(display(row.Scrap_Quantity)) || 0) + fg.scrapQuantity,
+          });
+        })
+        .concat(
+          mainRows.map(function (row: any) {
+            const newStockOnHand = (parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity;
+            return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, row.ID, {
+              Stock_On_Hand: newStockOnHand,
+              Available_Stocks: newStockOnHand,
+            });
+          })
+        );
+      return Promise.all(updates);
+    });
+  });
+
+  const rawMaterialUpdates = draft.rawMaterials.map(function (rm): Promise<any[]> {
+    if (!rm.productId) return Promise.resolve([]);
+    return Promise.all([
+      getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`),
+      getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`),
+      getRecords(CONFIG.PRODUCTION_STOCK_REPORT, `Product_Master == ${rm.productId}`),
+    ]).then(function (results) {
+      const scrapRows = results[0];
+      const mainRows = results[1];
+      const productionRows = results[2];
+      if (!scrapRows.length) return Promise.resolve([]);
+
+      const updates = mainRows
+        .map(function (row: any) {
+          return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, row.ID, {
+            Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
+            Stock_On_Hand: (parseFloat(display(row.Stock_On_Hand)) || 0) - rm.allocatedQuantity,
+          });
+        })
+        .concat(
+          productionRows.map(function (row: any) {
+            return updateRecord(CONFIG.PRODUCTION_STOCK_REPORT, row.ID, {
+              Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
+            });
+          })
+        )
+        .concat(
+          scrapRows.map(function (row: any) {
+            return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, row.ID, {
+              Scrap_Quantity: (parseFloat(display(row.Scrap_Quantity)) || 0) + rm.scrapQuantity,
+            });
+          })
+        );
+      return Promise.all(updates);
+    });
+  });
+
+  return Promise.all(finishedGoodUpdates.concat(rawMaterialUpdates));
+}
+
 // Writes a confirmed draft: the Consumption_Entry header, its two subform
 // rows (Finished_Goods_Cunsumptions, Consumption_Items), flips the
 // Production Target to "Completed" (mirroring the native form's on-success
-// workflow), and finally bumps the Sequence_Master counter — only after
-// everything else has succeeded, so a failed/partial commit doesn't burn a
-// sequence number.
+// workflow), bumps the Sequence_Master counter, and updates warehouse stock
+// (see updateWarehouseStockForConsumption) — only after everything else has
+// succeeded, so a failed/partial commit doesn't burn a sequence number.
 export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<ConsumptionEntryRow> {
   return addRecord(CONFIG.CONSUMPTION_ENTRY_FORM, {
     Consumption_ID: draft.consumptionId,
@@ -967,7 +1059,11 @@ export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<Co
       Status: "Completed" as ProductionTargetStatus,
     });
 
-    return Promise.all(finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate])).then(
+    const warehouseStockUpdate = updateWarehouseStockForConsumption(draft);
+
+    return Promise.all(
+      finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate, warehouseStockUpdate])
+    ).then(
       function () {
         return bumpConsumptionSequence(draft.sequenceRowId, draft.sequenceConsumptionNo).then(function () {
           return {
