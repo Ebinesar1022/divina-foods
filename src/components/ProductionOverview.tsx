@@ -407,7 +407,7 @@ export default function ProductionOverview({
   const progressPercent = computeProgress(currentIndex, procurementSkipped);
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: "auto", p: { xs: 2, md: 3 } }}>
+    <Box sx={{ width: "100%", maxWidth: 1380, mx: "auto", p: { xs: 1.5, sm: 2.5, md: 3.5 } }}>
       <ProjectHeader
         record={record}
         progressPercent={progressPercent}
@@ -417,14 +417,23 @@ export default function ProductionOverview({
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", lg: "2fr 1fr" },
-          alignItems: "stretch",
-          gap: 3,
-          mt: 3,
+          gridTemplateColumns: { xs: "1fr", lg: "1fr 340px", xl: "1fr 360px" },
+          alignItems: "start",
+          gap: { xs: 2.5, md: 3 },
+          mt: { xs: 2.5, md: 3 },
         }}
       >
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-          <Paper elevation={0} sx={{ borderRadius: "16px", p: { xs: 1, md: 2 } }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, width: "100%" }}>
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: "16px",
+              p: { xs: 1, sm: 1.5 },
+              border: "1px solid #E2E8F0",
+              bgcolor: "#FFFFFF",
+              boxShadow: "0 2px 12px rgba(15, 23, 42, 0.04)",
+            }}
+          >
             <PipelineStepper
               currentStageKey={stageKey}
               currentIndex={currentIndex}
@@ -433,25 +442,56 @@ export default function ProductionOverview({
             />
           </Paper>
 
-          <Paper elevation={0} sx={{ borderRadius: "16px" }}>
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: "16px",
+              border: "1px solid #E2E8F0",
+              bgcolor: "#FFFFFF",
+              boxShadow: "0 2px 12px rgba(15, 23, 42, 0.04)",
+              overflow: "hidden",
+            }}
+          >
             <Tabs
               value={activeTab}
               onChange={(_, v) => setActiveTab(v)}
               variant="scrollable"
               scrollButtons="auto"
-              sx={{ px: 2, borderBottom: "1px solid #E2E8F0" }}
+              sx={{
+                px: { xs: 1, sm: 2 },
+                bgcolor: "#F8FAFC",
+                borderBottom: "1px solid #E2E8F0",
+                minHeight: 48,
+                "& .MuiTab-root": {
+                  fontWeight: 600,
+                  fontSize: { xs: 13, sm: 13.5 },
+                  textTransform: "none",
+                  minHeight: 48,
+                  px: { xs: 1.75, sm: 2.5 },
+                  color: "#64748B",
+                  "&.Mui-selected": {
+                    color: "#2563EB",
+                    fontWeight: 700,
+                  },
+                },
+                "& .MuiTabs-indicator": {
+                  height: 3,
+                  borderRadius: "3px 3px 0 0",
+                  backgroundColor: "#2563EB",
+                },
+              }}
             >
               {TABS.map((t) => (
                 <Tab key={t.key} value={t.key} label={t.label} />
               ))}
             </Tabs>
 
-            <Box sx={{ p: { xs: 2, md: 3 } }}>
+            <Box sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               {activeTab === "overview" && (
                 <Box
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" },
+                    gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
                     gap: 2,
                   }}
                 >
@@ -942,12 +982,28 @@ function InfoCard({
   valueNode?: React.ReactNode;
 }) {
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: "12px" }}>
-      <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 0.5 }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: { xs: 1.5, sm: 2 },
+        borderRadius: "12px",
+        borderColor: "#E2E8F0",
+        bgcolor: "#F8FAFC",
+        transition: "transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease",
+        "&:hover": {
+          borderColor: "#CBD5E1",
+          bgcolor: "#FFFFFF",
+          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+        },
+      }}
+    >
+      <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#64748B", mb: 0.5, letterSpacing: "0.01em" }}>
         {label}
       </Typography>
       {valueNode || (
-        <Typography sx={{ fontWeight: 600 }}>{value || "—"}</Typography>
+        <Typography sx={{ fontWeight: 700, fontSize: { xs: 13.5, sm: 14.5 }, color: "#0F172A", wordBreak: "break-word" }}>
+          {value || "—"}
+        </Typography>
       )}
     </Paper>
   );
@@ -975,35 +1031,43 @@ function CenteredStateCard({
     <Paper
       variant="outlined"
       sx={{
-        p: { xs: 3, md: 4 },
-        borderRadius: "14px",
+        p: { xs: 3, sm: 4 },
+        borderRadius: "16px",
         textAlign: "center",
-        bgcolor: "#F8FAFC",
+        bgcolor: "#FAFBFD",
         borderStyle: "dashed",
         borderColor: "#CBD5E1",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         gap: 2,
+        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.02)",
       }}
     >
       <Box
         sx={{
-          width: 48,
-          height: 48,
-          borderRadius: "12px",
+          width: 52,
+          height: 52,
+          borderRadius: "14px",
           bgcolor: iconBg,
           color: iconColor,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          boxShadow: `0 4px 12px ${iconColor}20`,
         }}
       >
         {icon}
       </Box>
       <Box sx={{ maxWidth: 480 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: 16, color: "#0F172A", mb: 0.5 }}>{title}</Typography>
-        {description && <Typography sx={{ fontSize: 13.5, color: "#64748B" }}>{description}</Typography>}
+        <Typography sx={{ fontWeight: 700, fontSize: 16.5, color: "#0F172A", mb: 0.75 }}>
+          {title}
+        </Typography>
+        {description && (
+          <Typography sx={{ fontSize: 13.5, color: "#64748B", lineHeight: 1.5 }}>
+            {description}
+          </Typography>
+        )}
       </Box>
       {action}
     </Paper>

@@ -8,11 +8,11 @@ export interface StageConfig {
 }
 
 export const STAGES: StageConfig[] = [
-  { key: "production_target", label: "Production Target", tabKey: "overview", iconName: "GpsFixed" },
-  { key: "mrp", label: "Material Requirement & Planning", tabKey: "mrp", iconName: "AssignmentTurnedIn" },
-  { key: "procurement", label: "Procurement", tabKey: "procurement", iconName: "LocalShipping" },
-  { key: "production_inprogress", label: "Production In progress", tabKey: "in_progress", iconName: "Autorenew" },
-  { key: "consumption_entry", label: "Consumption Entry", tabKey: "consumption_entry", iconName: "DoneAll" },
+  { key: "production_target", label: "Production Target", tabKey: "overview", iconName: "TrackChanges" },
+  { key: "mrp", label: "Material Requirement & Planning", tabKey: "mrp", iconName: "Schema" },
+  { key: "procurement", label: "Procurement", tabKey: "procurement", iconName: "ShoppingCart" },
+  { key: "production_inprogress", label: "Production In progress", tabKey: "in_progress", iconName: "PrecisionManufacturing" },
+  { key: "consumption_entry", label: "Consumption Entry", tabKey: "consumption_entry", iconName: "ChecklistRtl" },
 ];
 
 export const TOTAL_STAGES = STAGES.length;
