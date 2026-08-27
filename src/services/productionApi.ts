@@ -12,18 +12,24 @@ import type {
   ConsumptionEntryDraft,
   ConsumptionEntryRow,
   CreateMrpResult,
+  CreatePoDraft,
   EmployeeOption,
   FinishedGoodTargetRow,
   MrpDetailData,
   MrpDraft,
   MrpRow,
-  ProcurementRow,
+  NonStockItemRow,
+  PaymentTermOption,
+  PoLineRow,
   ProductionInProgressRow,
   ProductionTargetRow,
   ProductionTargetStatus,
+  PurchaseOrderDetail,
   RawMaterialNeedRow,
   RawMaterialStockRow,
+  ReceivePoDraft,
   StartProductionDetails,
+  SupplierOption,
 } from "../types";
 
 declare global {
@@ -67,7 +73,21 @@ export const CONFIG = {
   // Non_Stock_Items_Report?MRP_ID=<MRP_ID>, which reads from this
   // separate Non_Stock_Items form, NOT Raw_Materials.
   NON_STOCK_ITEMS_FORM: "Non_Stock_Items",
+  NON_STOCK_ITEMS_REPORT: "Non_Stock_Items_Report",
   UOM_MASTER_REPORT: "UOM_Master_Report",
+
+  // Confirmed against the app's .ds export (Divina_Foods_7.ds) — the full
+  // Procurement flow: Purchase_Order has a PO_Line_Items grid (per-product
+  // order lines), Purchase_Receive has a Receive_Items grid (per-product
+  // received quantities for one receipt against one PO).
+  PURCHASE_ORDER_FORM: "Purchase_Order",
+  PO_LINE_ITEMS_FORM: "PO_Line_Items",
+  PO_LINE_ITEMS_REPORT: "PO_Line_Items_Report",
+  PURCHASE_RECEIVE_FORM: "Purchase_Receive",
+  RECEIVE_ITEMS_FORM: "Receive_Items",
+  RECEIVE_ITEMS_REPORT: "Receive_Items_Report",
+  SUPPLIER_REPORT: "Supplier_Report",
+  PAYMENT_TERM_REPORT: "Payment_Term_Report",
 
   // Confirmed against the app's .ds export (Divina_Foods_5.ds) —
   // Consumption_Entry's two grids (Finished_Good, Raw_Material_Consumptions)
@@ -263,46 +283,329 @@ export function fetchMrpRecord(productionTargetRecordId: string): Promise<MrpRow
   });
 }
 
-// ───────────── Procurement (Purchase Order + Purchase Receive, merged) ─────────────
-export function fetchProcurementRecords(productionTargetId: string): Promise<ProcurementRow[]> {
-  const criteria = `Production_Target_ID == "${productionTargetId}"`;
+// ───────────── Procurement (Non_Stock_Items → Purchase Order → Purchase Receive) ─────────────
+// NOTE: the previous version of this file matched Purchase_Order/
+// Purchase_Receive against a `Production_Target_ID` field that doesn't
+// exist on either form (confirmed against the .ds export) — every read
+// here silently returned zero rows, which is why the Procurement tab only
+// ever showed plain status text. Purchase_Order only relates to a
+// Production Target indirectly, via its MRP_ID lookup, so everything below
+// is keyed off the MRP's own record ID instead.
 
-  const purchaseOrders = getRecords(CONFIG.PURCHASE_ORDER_REPORT, criteria).then(function (rows) {
+// Shortfall raw materials still needing a PO (or already covered by one) —
+// backs the "Needed Items" selection list in the Procurement tab.
+export function fetchNonStockItemsForMrp(mrpRecordId: string): Promise<NonStockItemRow[]> {
+  if (!mrpRecordId) return Promise.resolve([]);
+  const criteria = `MRP_ID == ${mrpRecordId}`;
+  return getRecords(CONFIG.NON_STOCK_ITEMS_REPORT, criteria).then(function (rows) {
     return rows.map(function (r: any) {
       return {
-        id: r.ID,
-        type: "purchase_order" as const,
-        recordNo: display(r.PO_No) || display(r.Purchase_Order_ID),
-        mrpId: display(r.MRP_ID),
-        productionTargetId: display(r.Production_Target_ID),
-        date: display(r.Date_field),
-        supplier: display(r.Supplier),
-        receivedBy: "",
-        status: display(r.Status),
+        id: display(r.ID),
+        productId: lookupId(r.Product),
+        productName: display(r.Product),
+        uomId: lookupId(r.UOM),
+        uomName: display(r.UOM),
+        stockOnHand: parseFloat(display(r.Stock_On_Hand)) || 0,
+        stockRequired: parseFloat(display(r.Stock_Required)) || 0,
+        allocateQuantity: parseFloat(display(r.Allocate_Quantity)) || 0,
+        neededQuantity: parseFloat(display(r.Needed_Quantity)) || 0,
+        status: (display(r.Status) || "Needs Purchase") as NonStockItemRow["status"],
       };
     });
   });
+}
 
-  const purchaseReceives = getRecords(CONFIG.PURCHASE_RECEIVE_REPORT, criteria).then(function (rows) {
+export function fetchSuppliers(): Promise<SupplierOption[]> {
+  return getRecords(CONFIG.SUPPLIER_REPORT).then(function (rows) {
     return rows.map(function (r: any) {
       return {
-        id: r.ID,
-        type: "purchase_receive" as const,
-        recordNo: display(r.PR_No) || display(r.Purchase_Receive_ID),
-        mrpId: display(r.MRP_ID),
-        productionTargetId: display(r.Production_Target_ID),
-        date: display(r.Date_field),
-        supplier: display(r.Supplier),
-        receivedBy: display(r.Received_By),
-        status: display(r.Status),
+        id: display(r.ID),
+        name: formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Code) || "Unnamed",
       };
     });
   });
+}
 
-  return Promise.all([purchaseOrders, purchaseReceives]).then(function (results) {
-    return [...results[0], ...results[1]].sort(function (a, b) {
-      return a.date < b.date ? 1 : -1;
+export function fetchPaymentTerms(): Promise<PaymentTermOption[]> {
+  return getRecords(CONFIG.PAYMENT_TERM_REPORT).then(function (rows) {
+    return rows.map(function (r: any) {
+      return {
+        id: display(r.ID),
+        name: display(r.Payment_Terms),
+      };
     });
+  });
+}
+
+// ───────────── Create Purchase Order: draft → commit ─────────────
+
+function generatePoNumber(sequenceRow: any): string {
+  const prefix = display(sequenceRow.Purchase_Name);
+  const currentNo = parseInt(display(sequenceRow.Purchase_No), 10) || 0;
+  return prefix + String(currentNo).padStart(3, "0");
+}
+
+function bumpPoSequence(sequenceRowId: string, currentPurchaseNo: number): Promise<any> {
+  return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
+    Purchase_No: currentPurchaseNo + 1,
+  });
+}
+
+// Computes the draft; writes nothing to Zoho. selectedItems are the
+// Non_Stock_Items rows the user checked in the Procurement tab — Order
+// Quantity defaults to Needed Quantity (editable), Unit Price starts at 0
+// (must have a value before submit, mirroring the native form's own
+// "must have Unit_Price" rule).
+export function prepareCreatePoDraft(
+  mrpRecordId: string,
+  selectedItems: NonStockItemRow[]
+): Promise<CreatePoDraft> {
+  if (!selectedItems.length) {
+    return Promise.reject(new Error("Select at least one item to create a Purchase Order."));
+  }
+  return fetchSequenceMasterRow().then(function (sequenceRow) {
+    return {
+      poNumber: generatePoNumber(sequenceRow),
+      poDate: new Date().toISOString().slice(0, 10),
+      mrpRecordId: mrpRecordId,
+      supplierId: "",
+      paymentTermsId: "",
+      expectedDeliveryDate: "",
+      lines: selectedItems.map(function (item) {
+        return {
+          nonStockItemId: item.id,
+          productId: item.productId,
+          productName: item.productName,
+          uomId: item.uomId,
+          uomName: item.uomName,
+          neededQuantity: item.neededQuantity,
+          orderQuantity: item.neededQuantity,
+          unitPrice: 0,
+        };
+      }),
+      sequenceRowId: sequenceRow.ID,
+      sequencePurchaseNo: parseInt(display(sequenceRow.Purchase_No), 10) || 0,
+    };
+  });
+}
+
+// Writes a confirmed draft: the Purchase_Order header, its PO_Line_Items
+// rows, bumps the sequence, and flips each covered Non_Stock_Items row to
+// "PO Created" — mirroring the native "Generate Purchase Order ID" /
+// "Po update in Inventory" workflows (minus the Zoho Inventory sync call,
+// which is out of scope — same boundary as every other zoho.inventory.*
+// call in this app).
+export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: string; poNumber: string }> {
+  return addRecord(CONFIG.PURCHASE_ORDER_FORM, {
+    PO_Number: draft.poNumber,
+    PO_Date: formatDateStringForZoho(draft.poDate),
+    MRP_ID: draft.mrpRecordId,
+    Supplier_Name: draft.supplierId,
+    Payment_Terms: draft.paymentTermsId,
+    Expected_Delivery_Date: formatDateStringForZoho(draft.expectedDeliveryDate),
+    Status: "Not Received",
+  }).then(function (poRecord) {
+    const poRecordId: string = display(poRecord.ID);
+
+    return runSequentially(draft.lines, function (line) {
+      const lineTotal = roundQty(line.orderQuantity * line.unitPrice);
+      return addRecord(CONFIG.PO_LINE_ITEMS_FORM, {
+        PO_Number: poRecordId,
+        Product: line.productId,
+        UOM: line.uomId,
+        Needed_Quantity: line.neededQuantity,
+        Order_Qty: line.orderQuantity,
+        Unit_Price: line.unitPrice,
+        Line_Total: lineTotal,
+      });
+    })
+      .then(function () {
+        return runSequentially(draft.lines, function (line) {
+          return updateRecord(CONFIG.NON_STOCK_ITEMS_REPORT, line.nonStockItemId, {
+            Status: "PO Created",
+          });
+        });
+      })
+      .then(function () {
+        return bumpPoSequence(draft.sequenceRowId, draft.sequencePurchaseNo);
+      })
+      .then(function () {
+        return { poRecordId: poRecordId, poNumber: draft.poNumber };
+      });
+  });
+}
+
+// ───────────── Read Purchase Orders (+ line items) for an MRP ─────────────
+
+export function fetchPurchaseOrdersForMrp(mrpRecordId: string): Promise<PurchaseOrderDetail[]> {
+  if (!mrpRecordId) return Promise.resolve([]);
+  const criteria = `MRP_ID == ${mrpRecordId}`;
+  return getRecords(CONFIG.PURCHASE_ORDER_REPORT, criteria).then(function (rows) {
+    return runSequentially(rows, function (r: any) {
+      const poId = display(r.ID);
+      return getRecords(CONFIG.PO_LINE_ITEMS_REPORT, `PO_Number == ${poId}`).then(function (lineRows) {
+        const lines: PoLineRow[] = lineRows.map(function (line: any) {
+          return {
+            id: display(line.ID),
+            productId: lookupId(line.Product),
+            productName: display(line.Product),
+            uomName: display(line.UOM),
+            orderQuantity: parseFloat(display(line.Order_Qty)) || 0,
+            receivedQuantity: parseFloat(display(line.Received_Qty)) || 0,
+            unitPrice: parseFloat(display(line.Unit_Price)) || 0,
+            lineTotal: parseFloat(display(line.Line_Total)) || 0,
+          };
+        });
+        return {
+          id: poId,
+          poNumber: display(r.PO_Number),
+          poDate: display(r.PO_Date),
+          mrpRecordId: mrpRecordId,
+          supplierId: lookupId(r.Supplier_Name),
+          supplierName: formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Name),
+          status: display(r.Status) || "Not Received",
+          grandTotal: parseFloat(display(r.Grand_Total)) || 0,
+          lines: lines,
+        };
+      });
+    }).then(function (details) {
+      return details.sort(function (a, b) {
+        return a.poDate < b.poDate ? 1 : -1;
+      });
+    });
+  });
+}
+
+// ───────────── Receive Purchase Order: draft → commit ─────────────
+
+function generateReceiveNo(sequenceRow: any): string {
+  const prefix = display(sequenceRow.Receive_Name);
+  const currentNo = parseInt(display(sequenceRow.Receive_No), 10) || 0;
+  return prefix + String(currentNo).padStart(3, "0");
+}
+
+function bumpReceiveSequence(sequenceRowId: string, currentReceiveNo: number): Promise<any> {
+  return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
+    Receive_No: currentReceiveNo + 1,
+  });
+}
+
+// Only lines with Pending Qty > 0 are included — Receivable Qty defaults
+// to the full pending amount (editable down for a partial receipt).
+export function prepareReceivePoDraft(po: PurchaseOrderDetail): Promise<ReceivePoDraft> {
+  const pendingLines = po.lines.filter(function (line) {
+    return line.orderQuantity - line.receivedQuantity > 0;
+  });
+  if (!pendingLines.length) {
+    return Promise.reject(new Error("Every line on this Purchase Order has already been received."));
+  }
+
+  return Promise.all([fetchSequenceMasterRow(), fetchDefaultWarehouseId()]).then(function (results) {
+    const sequenceRow = results[0];
+    const warehouseId = results[1];
+
+    return {
+      receiveNo: generateReceiveNo(sequenceRow),
+      receiveDate: new Date().toISOString().slice(0, 10),
+      purchaseOrderRecordId: po.id,
+      supplierId: po.supplierId,
+      warehouseId: warehouseId,
+      lines: pendingLines.map(function (line) {
+        const pending = roundQty(line.orderQuantity - line.receivedQuantity);
+        return {
+          poLineId: line.id,
+          productId: line.productId,
+          productName: line.productName,
+          uomId: "", // resolved just before commit, see commitReceivePo
+          uomName: line.uomName,
+          orderedQuantity: line.orderQuantity,
+          receivedQuantitySoFar: line.receivedQuantity,
+          pendingQuantity: pending,
+          receivableQuantity: pending,
+        };
+      }),
+      sequenceRowId: sequenceRow.ID,
+      sequenceReceiveNo: parseInt(display(sequenceRow.Receive_No), 10) || 0,
+    };
+  });
+}
+
+// Writes a confirmed draft: the Purchase_Receive header, its Receive_Items
+// rows, bumps the sequence, then calls the "ProcessPurchaseReceive" Custom
+// API — mirroring the native "Update Received Qty to PO" / "Refresh MRP
+// After PR" workflows (bumping PO_Line_Items.Received_Qty, warehouse
+// Stock_On_Hand, re-allocating the MRP's Raw_Materials, and rolling the PO/
+// MRP/Production Target statuses up) — all of that is genuinely
+// interdependent multi-record math, so it runs server-side in one call
+// rather than being replicated client-side (same reasoning as
+// allocate_Stock_On_Production_Start and UpdateWarehouse).
+export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
+  return runSequentially(draft.lines, function (line) {
+    return resolveUomMasterId(line.uomName).then(function (uomMasterId) {
+      return { ...line, uomId: uomMasterId };
+    });
+  }).then(function (linesWithUom) {
+    return addRecord(CONFIG.PURCHASE_RECEIVE_FORM, {
+      Receive_No: draft.receiveNo,
+      Purchase_Order_No: draft.purchaseOrderRecordId,
+      Receive_Date: formatDateStringForZoho(draft.receiveDate),
+      Supplier: draft.supplierId,
+      Warehouse: draft.warehouseId,
+    }).then(function (receiveRecord) {
+      const receiveRecordId: string = display(receiveRecord.ID);
+
+      return runSequentially(linesWithUom, function (line) {
+        return addRecord(CONFIG.RECEIVE_ITEMS_FORM, {
+          Receive_No: receiveRecordId,
+          Product_Name: line.productId,
+          UOM: line.uomId,
+          Ordered_Qty: line.orderedQuantity,
+          Received_Qty: line.receivedQuantitySoFar,
+          Receivable_Qty: line.receivableQuantity,
+          Pending_Qty: roundQty(line.pendingQuantity - line.receivableQuantity),
+        });
+      })
+        .then(function () {
+          return bumpReceiveSequence(draft.sequenceRowId, draft.sequenceReceiveNo);
+        })
+        .then(function () {
+          return processPurchaseReceive(receiveRecordId);
+        });
+    });
+  });
+}
+
+// ⚠️ Fill these in once the "ProcessPurchaseReceive" Custom API is
+// published (Settings → APIs, same drill as UpdateWarehouse).
+const PROCESS_PURCHASE_RECEIVE_API = {
+  api_name: "ProcessPurchaseReceive",
+  workspace_name: "info_divinafoodco",
+  public_key: "",
+};
+
+function processPurchaseReceive(receiveRecordId: string): Promise<any> {
+  if (!PROCESS_PURCHASE_RECEIVE_API.public_key) {
+    return Promise.reject(
+      new Error(
+        "ProcessPurchaseReceive Custom API isn't wired up yet — the receipt was recorded, but stock/MRP status won't update until this is configured."
+      )
+    );
+  }
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: PROCESS_PURCHASE_RECEIVE_API.api_name,
+    workspace_name: PROCESS_PURCHASE_RECEIVE_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      receive_id: receiveRecordId,
+    },
+    public_key: PROCESS_PURCHASE_RECEIVE_API.public_key,
+  }).then(function (resp: any) {
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
+      return Promise.reject(new Error((result && result.message) || "Failed to process the purchase receive."));
+    }
+    return resp;
   });
 }
 
@@ -1158,7 +1461,8 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
   record: ProductionTargetRow | null;
   mrpRecord: MrpRow | null;
   mrpDetails: MrpDetailData | null;
-  procurementRecords: ProcurementRow[];
+  nonStockItems: NonStockItemRow[];
+  procurementRecords: PurchaseOrderDetail[];
   productionInProgress: ProductionInProgressRow[];
   consumptionEntries: ConsumptionEntryRow[];
 }> {
@@ -1168,32 +1472,36 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
         record: null as ProductionTargetRow | null,
         mrpRecord: null as MrpRow | null,
         mrpDetails: null as MrpDetailData | null,
-        procurementRecords: [] as ProcurementRow[],
+        nonStockItems: [] as NonStockItemRow[],
+        procurementRecords: [] as PurchaseOrderDetail[],
         productionInProgress: [] as ProductionInProgressRow[],
         consumptionEntries: [] as ConsumptionEntryRow[],
       });
     }
 
     return fetchMrpRecord(record.id).then(function (mrpRecord) {
-      // The procurement-required signal lives on Production_Targets.Status,
-      // not on the MRP record (see types.ts) — only meaningful once an MRP
-      // actually exists, hence the !!mrpRecord guard.
-      const procurementNeeded = !!mrpRecord && record.status === "Waiting for Stock";
-
       const mrpDetailsPromise =
         mrpRecord ? fetchMrpDetails(mrpRecord, record.id) : Promise.resolve(null as MrpDetailData | null);
+      const nonStockItemsPromise = mrpRecord
+        ? fetchNonStockItemsForMrp(mrpRecord.id)
+        : Promise.resolve([] as NonStockItemRow[]);
+      const purchaseOrdersPromise = mrpRecord
+        ? fetchPurchaseOrdersForMrp(mrpRecord.id)
+        : Promise.resolve([] as PurchaseOrderDetail[]);
 
       return Promise.all([
-        procurementNeeded ? fetchProcurementRecords(productionTargetId) : Promise.resolve([] as ProcurementRow[]),
+        purchaseOrdersPromise,
         fetchProductionInProgress(productionTargetId),
         fetchConsumptionEntries(record.id),
         mrpDetailsPromise,
+        nonStockItemsPromise,
       ]).then(function (rest) {
         return {
           record,
           mrpRecord,
           mrpDetails: rest[3] as MrpDetailData | null,
-          procurementRecords: rest[0] as ProcurementRow[],
+          nonStockItems: rest[4] as NonStockItemRow[],
+          procurementRecords: rest[0] as PurchaseOrderDetail[],
           productionInProgress: rest[1],
           consumptionEntries: rest[2],
         };

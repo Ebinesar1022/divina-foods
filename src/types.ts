@@ -7,8 +7,6 @@ export type StageKey =
 
 export type StageState = "done" | "active" | "pending" | "skipped";
 
-export type ProcurementRecordType = "purchase_order" | "purchase_receive";
-
 // Confirmed against the app's .ds export — Production_Targets.Status is the
 // field that carries both stage progression AND whether procurement is
 // needed. Material_Requirement_Planning has its own unrelated Status field
@@ -38,16 +36,108 @@ export interface MrpRow {
   status: "False" | "True"; // MRP's own Status field — unrelated to stock
 }
 
-export interface ProcurementRow {
+// ───────────── Procurement ─────────────
+
+// A Non_Stock_Items row — a shortfall raw material still awaiting a
+// Purchase Order, or already covered by one ("PO Created").
+export interface NonStockItemRow {
   id: string;
-  type: ProcurementRecordType;
-  recordNo: string; // "PO-xxx" or "PR-xxx"
-  mrpId: string;
-  productionTargetId: string;
-  date: string;
-  supplier: string;
-  receivedBy: string;
-  status: string;
+  productId: string;
+  productName: string;
+  uomId: string;
+  uomName: string;
+  stockOnHand: number;
+  stockRequired: number;
+  allocateQuantity: number;
+  neededQuantity: number;
+  status: "Needs Purchase" | "PO Created";
+}
+
+export interface SupplierOption {
+  id: string;
+  name: string;
+}
+
+export interface PaymentTermOption {
+  id: string;
+  name: string;
+}
+
+// One PO_Line_Items row.
+export interface PoLineRow {
+  id: string;
+  productId: string;
+  productName: string;
+  uomName: string;
+  orderQuantity: number;
+  receivedQuantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+// A Purchase_Order plus its line items — the primary read shape the
+// Procurement tab renders (list of POs, each with a "Receive" action once
+// it still has pending quantity).
+export interface PurchaseOrderDetail {
+  id: string;
+  poNumber: string;
+  poDate: string;
+  mrpRecordId: string;
+  supplierId: string;
+  supplierName: string;
+  status: string; // "Not Received" | "Partially Received" | "Received"
+  grandTotal: number;
+  lines: PoLineRow[];
+}
+
+// ───────────── Create Purchase Order draft ─────────────
+
+export interface PoLineDraftRow {
+  nonStockItemId: string;
+  productId: string;
+  productName: string;
+  uomId: string;
+  uomName: string;
+  neededQuantity: number;
+  orderQuantity: number;
+  unitPrice: number;
+}
+
+export interface CreatePoDraft {
+  poNumber: string;
+  poDate: string; // "YYYY-MM-DD"
+  mrpRecordId: string;
+  supplierId: string;
+  paymentTermsId: string;
+  expectedDeliveryDate: string; // "YYYY-MM-DD"
+  lines: PoLineDraftRow[];
+  sequenceRowId: string;
+  sequencePurchaseNo: number;
+}
+
+// ───────────── Receive Purchase Order draft ─────────────
+
+export interface ReceiveLineDraftRow {
+  poLineId: string;
+  productId: string;
+  productName: string;
+  uomId: string;
+  uomName: string;
+  orderedQuantity: number;
+  receivedQuantitySoFar: number;
+  pendingQuantity: number;
+  receivableQuantity: number;
+}
+
+export interface ReceivePoDraft {
+  receiveNo: string;
+  receiveDate: string; // "YYYY-MM-DD"
+  purchaseOrderRecordId: string;
+  supplierId: string;
+  warehouseId: string;
+  lines: ReceiveLineDraftRow[];
+  sequenceRowId: string;
+  sequenceReceiveNo: number;
 }
 
 export interface ProductionInProgressRow {

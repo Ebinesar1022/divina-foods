@@ -4,7 +4,7 @@ import * as Icons from "@mui/icons-material";
 import CheckIcon from "@mui/icons-material/Check";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { STAGES, stepState } from "../config/stages.config";
-import type { ConsumptionEntryRow, MrpRow, ProcurementRow, ProductionTargetRow } from "../types";
+import type { ConsumptionEntryRow, MrpRow, ProductionTargetRow, PurchaseOrderDetail } from "../types";
 
 interface ActivityTimelineProps {
   currentIndex: number;
@@ -12,7 +12,7 @@ interface ActivityTimelineProps {
   procurementSkipped: boolean;
   record: ProductionTargetRow;
   mrpRecord: MrpRow | null;
-  procurementRecords: ProcurementRow[];
+  procurementRecords: PurchaseOrderDetail[];
   consumptionEntries: ConsumptionEntryRow[];
 }
 
@@ -48,7 +48,7 @@ function subtextFor(
   state: string,
   record: ProductionTargetRow,
   mrpRecord: MrpRow | null,
-  procurementRecords: ProcurementRow[],
+  procurementRecords: PurchaseOrderDetail[],
   consumptionEntries: ConsumptionEntryRow[]
 ): string {
   if (state === "skipped") return "Skipped — Stock Available";
@@ -61,7 +61,7 @@ function subtextFor(
       return mrpRecord ? [mrpRecord.date, mrpRecord.createdBy].filter(Boolean).join(" · ") || "—" : "—";
     case "procurement": {
       const latest = procurementRecords[0];
-      return latest ? [latest.date, latest.supplier].filter(Boolean).join(" · ") : "In progress";
+      return latest ? [latest.poDate, latest.supplierName].filter(Boolean).join(" · ") : "In progress";
     }
     case "production_inprogress":
       return [record.startDate, record.assignedTo].filter(Boolean).join(" · ") || "—";

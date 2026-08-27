@@ -81,6 +81,31 @@ const RAW_MATERIALS = [
 
 const PURCHASE_ORDERS: any[] = [];
 const PURCHASE_RECEIVES: any[] = [];
+const PO_LINE_ITEMS: any[] = [];
+const RECEIVE_ITEMS: any[] = [];
+
+const NON_STOCK_ITEMS = [
+  {
+    ID: "1",
+    MRP_ID: { ID: "1", display_value: "MRP-077" },
+    Product: { ID: "301", display_value: "Salt" },
+    UOM: { ID: "401", display_value: "Kilogram" },
+    Stock_On_Hand: "0.00",
+    Stock_Required: "50.00",
+    Allocate_Quantity: "0.00",
+    Needed_Quantity: "50.00",
+    Status: "Needs Purchase",
+  },
+];
+
+const SUPPLIERS = [
+  { ID: "1", Supplier_Code: "SUP-001", Supplier_Name: { prefix: "", first_name: "Acme", last_name: "Foods" } },
+];
+
+const PAYMENT_TERMS = [
+  { ID: "1", Payment_Terms: "Net 30" },
+  { ID: "2", Payment_Terms: "Due on Receipt" },
+];
 
 const PRODUCTION_INPROGRESS = [
   {
@@ -156,6 +181,10 @@ const SEQUENCE_MASTER = [
     Order_No: "11",
     Consumption_Name: "CNE-",
     Consumption_No: "21",
+    Purchase_Name: "PO-",
+    Purchase_No: "12",
+    Receive_Name: "REC-",
+    Receive_No: "5",
   },
 ];
 
@@ -180,6 +209,11 @@ const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.RAW_MATERIALS_REPORT]: RAW_MATERIALS,
   [CONFIG.PURCHASE_ORDER_REPORT]: PURCHASE_ORDERS,
   [CONFIG.PURCHASE_RECEIVE_REPORT]: PURCHASE_RECEIVES,
+  [CONFIG.PO_LINE_ITEMS_REPORT]: PO_LINE_ITEMS,
+  [CONFIG.RECEIVE_ITEMS_REPORT]: RECEIVE_ITEMS,
+  [CONFIG.NON_STOCK_ITEMS_REPORT]: NON_STOCK_ITEMS,
+  [CONFIG.SUPPLIER_REPORT]: SUPPLIERS,
+  [CONFIG.PAYMENT_TERM_REPORT]: PAYMENT_TERMS,
   [CONFIG.PRODUCTION_INPROGRESS_REPORT]: PRODUCTION_INPROGRESS,
   [CONFIG.CONSUMPTION_ENTRY_REPORT]: CONSUMPTION_ENTRY,
   [CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT]: FINISHED_GOODS_CONSUMPTIONS,

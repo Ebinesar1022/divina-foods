@@ -19,6 +19,8 @@ import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
+import ShoppingCartCheckoutIcon from "@mui/icons-material/ShoppingCartCheckout";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
 import ProjectHeader from "./ProjectHeader";
@@ -28,15 +30,23 @@ import StatusChip from "./StatusChip";
 import CreateMrpDialog from "./CreateMrpDialog";
 import InitiateProductionDialog from "./InitiateProductionDialog";
 import ConsumptionEntryDialog from "./ConsumptionEntryDialog";
+import CreatePoDialog from "./CreatePoDialog";
+import ReceivePoDialog from "./ReceivePoDialog";
 import MrpReportView from "./MrpReportView";
 import FoodProductionLoader from "./FoodProductionLoader";
 import {
   commitMrpDraft,
   commitConsumptionEntry,
+  commitCreatePo,
+  commitReceivePo,
   fetchEmployees,
+  fetchPaymentTerms,
   fetchProductionOverview,
+  fetchSuppliers,
   prepareConsumptionDraft,
+  prepareCreatePoDraft,
   prepareMrpDraft,
+  prepareReceivePoDraft,
   startProduction,
   allocateStockOnProductionStart,
 } from "../services/productionApi";
@@ -49,13 +59,18 @@ import {
 import type {
   ConsumptionEntryDraft,
   ConsumptionEntryRow,
+  CreatePoDraft,
   EmployeeOption,
   MrpDetailData,
   MrpDraft,
   MrpRow,
-  ProcurementRow,
+  NonStockItemRow,
+  PaymentTermOption,
   ProductionInProgressRow,
   ProductionTargetRow,
+  PurchaseOrderDetail,
+  ReceivePoDraft,
+  SupplierOption,
 } from "../types";
 
 const TABS = [
@@ -114,7 +129,8 @@ interface OverviewData {
   record: ProductionTargetRow | null;
   mrpRecord: MrpRow | null;
   mrpDetails?: MrpDetailData | null;
-  procurementRecords: ProcurementRow[];
+  nonStockItems: NonStockItemRow[];
+  procurementRecords: PurchaseOrderDetail[];
   productionInProgress: ProductionInProgressRow[];
   consumptionEntries: ConsumptionEntryRow[];
 }
@@ -164,6 +180,28 @@ export default function ProductionOverview({
   const [consumptionCommitting, setConsumptionCommitting] = useState(false);
   const preparingConsumptionRef = useRef(false);
   const committingConsumptionRef = useRef(false);
+
+  // Procurement: select shortfall items → Create Purchase Order.
+  const [selectedNonStockItemIds, setSelectedNonStockItemIds] = useState<string[]>([]);
+  const [createPoDialogOpen, setCreatePoDialogOpen] = useState(false);
+  const [createPoDraft, setCreatePoDraft] = useState<CreatePoDraft | null>(null);
+  const [createPoDraftError, setCreatePoDraftError] = useState("");
+  const [createPoCommitError, setCreatePoCommitError] = useState("");
+  const [createPoCommitting, setCreatePoCommitting] = useState(false);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [paymentTerms, setPaymentTerms] = useState<PaymentTermOption[]>([]);
+  const preparingCreatePoRef = useRef(false);
+  const committingCreatePoRef = useRef(false);
+
+  // Procurement: Receive a Purchase Order.
+  const [receivePoDialogOpen, setReceivePoDialogOpen] = useState(false);
+  const [receivingPo, setReceivingPo] = useState<PurchaseOrderDetail | null>(null);
+  const [receivePoDraft, setReceivePoDraft] = useState<ReceivePoDraft | null>(null);
+  const [receivePoDraftError, setReceivePoDraftError] = useState("");
+  const [receivePoCommitError, setReceivePoCommitError] = useState("");
+  const [receivePoCommitting, setReceivePoCommitting] = useState(false);
+  const preparingReceivePoRef = useRef(false);
+  const committingReceivePoRef = useRef(false);
 
   useEffect(() => {
     setLoading(true);
@@ -379,6 +417,131 @@ export default function ProductionOverview({
       });
   }
 
+  function handleToggleSelectNonStockItem(id: string) {
+    setSelectedNonStockItemIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function handleOpenCreatePo() {
+    if (!data || !data.mrpRecord) return;
+    const selectedItems = (data.nonStockItems || []).filter((item) =>
+      selectedNonStockItemIds.includes(item.id),
+    );
+    if (!selectedItems.length) return;
+    if (preparingCreatePoRef.current) return;
+    preparingCreatePoRef.current = true;
+    setCreatePoDialogOpen(true);
+    setCreatePoDraft(null);
+    setCreatePoDraftError("");
+    setCreatePoCommitError("");
+    Promise.all([
+      prepareCreatePoDraft(data.mrpRecord.id, selectedItems),
+      fetchSuppliers(),
+      fetchPaymentTerms(),
+    ])
+      .then(function (results) {
+        setCreatePoDraft(results[0]);
+        setSuppliers(results[1]);
+        setPaymentTerms(results[2]);
+      })
+      .catch(function (err: any) {
+        setCreatePoDraftError((err && err.message) || "Failed to prepare the Purchase Order. Please try again.");
+      })
+      .finally(function () {
+        preparingCreatePoRef.current = false;
+      });
+  }
+
+  function handleCancelCreatePoDraft() {
+    if (committingCreatePoRef.current) return;
+    setCreatePoDialogOpen(false);
+    setCreatePoDraft(null);
+    setCreatePoDraftError("");
+    setCreatePoCommitError("");
+  }
+
+  function handleConfirmCreatePo() {
+    if (!createPoDraft) return;
+    if (committingCreatePoRef.current) return;
+    committingCreatePoRef.current = true;
+    setCreatePoCommitting(true);
+    setCreatePoCommitError("");
+    commitCreatePo(createPoDraft)
+      .then(function () {
+        return fetchProductionOverview(productionTargetId).then(function (result) {
+          setData(result);
+        });
+      })
+      .then(function () {
+        setCreatePoDialogOpen(false);
+        setCreatePoDraft(null);
+        setSelectedNonStockItemIds([]);
+      })
+      .catch(function (err: any) {
+        setCreatePoCommitError((err && err.message) || "Failed to create the Purchase Order. Please try again.");
+      })
+      .finally(function () {
+        committingCreatePoRef.current = false;
+        setCreatePoCommitting(false);
+      });
+  }
+
+  function handleOpenReceivePo(po: PurchaseOrderDetail) {
+    if (preparingReceivePoRef.current) return;
+    preparingReceivePoRef.current = true;
+    setReceivingPo(po);
+    setReceivePoDialogOpen(true);
+    setReceivePoDraft(null);
+    setReceivePoDraftError("");
+    setReceivePoCommitError("");
+    prepareReceivePoDraft(po)
+      .then(function (draft) {
+        setReceivePoDraft(draft);
+      })
+      .catch(function (err: any) {
+        setReceivePoDraftError((err && err.message) || "Failed to prepare the receipt. Please try again.");
+      })
+      .finally(function () {
+        preparingReceivePoRef.current = false;
+      });
+  }
+
+  function handleCancelReceivePoDraft() {
+    if (committingReceivePoRef.current) return;
+    setReceivePoDialogOpen(false);
+    setReceivingPo(null);
+    setReceivePoDraft(null);
+    setReceivePoDraftError("");
+    setReceivePoCommitError("");
+  }
+
+  function handleConfirmReceivePo() {
+    if (!receivePoDraft) return;
+    if (committingReceivePoRef.current) return;
+    committingReceivePoRef.current = true;
+    setReceivePoCommitting(true);
+    setReceivePoCommitError("");
+    commitReceivePo(receivePoDraft)
+      .then(function () {
+        return fetchProductionOverview(productionTargetId).then(function (result) {
+          setData(result);
+        });
+      })
+      .then(function () {
+        setReceivePoDialogOpen(false);
+        setReceivingPo(null);
+        setReceivePoDraft(null);
+      })
+      .catch(function (err: any) {
+        setReceivePoCommitError((err && err.message) || "Failed to record the receipt. Please try again.");
+      })
+      .finally(function () {
+        committingReceivePoRef.current = false;
+        setReceivePoCommitting(false);
+      });
+  }
+
   if (loading || !data || !data.record) {
     return (
       <Box
@@ -400,7 +563,10 @@ export default function ProductionOverview({
 
   const { record, mrpRecord, procurementRecords, consumptionEntries } = data;
   const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
-  const neededItems = (data.mrpDetails?.rawMaterials || []).filter((rm) => rm.status === "Needs Purchase");
+  // Non_Stock_Items is the source of truth here (not Raw_Materials) — once a
+  // PO is raised for an item its Status flips to "PO Created" and it drops
+  // out of this list, matching the native Non_Stock_Items_Report filter.
+  const needsPurchaseItems = (data.nonStockItems || []).filter((item) => item.status === "Needs Purchase");
   const stageKey = stageKeyFromStatus(record.status);
   const currentIndex = stageIndex(stageKey);
   const isFullyComplete = stageKey === "consumption_entry";
@@ -559,33 +725,60 @@ export default function ProductionOverview({
                         iconBg="#FEF3C7"
                         iconColor="#D97706"
                         title="Procurement Needed"
-                        description="Raise purchase orders for the raw materials below. Once everything has arrived, head to Initiate Production to start the run."
+                        description="Select the items below to raise a Purchase Order. Once everything has been received, this target moves on to Initiate Production automatically."
                       />
 
                       <Box>
-                        <Typography sx={{ fontWeight: 700, mb: 1 }}>Needed Items</Typography>
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+                          <Typography sx={{ fontWeight: 700 }}>Needed Items</Typography>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<ShoppingCartCheckoutIcon />}
+                            disabled={!selectedNonStockItemIds.length}
+                            onClick={handleOpenCreatePo}
+                            sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                          >
+                            Create Purchase Order{selectedNonStockItemIds.length ? ` (${selectedNonStockItemIds.length})` : ""}
+                          </Button>
+                        </Box>
                         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
                           <Table size="small">
                             <TableHead>
                               <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                                <TableCell padding="checkbox" />
                                 <TableCell>Product Name</TableCell>
                                 <TableCell>UOM</TableCell>
                                 <TableCell align="right">Needed Quantity</TableCell>
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {neededItems.length ? (
-                                neededItems.map((rm) => (
-                                  <TableRow key={rm.productId}>
-                                    <TableCell>{rm.productName}</TableCell>
-                                    <TableCell>{rm.uom}</TableCell>
-                                    <TableCell align="right">{rm.neededQuantity.toFixed(2)}</TableCell>
+                              {needsPurchaseItems.length ? (
+                                needsPurchaseItems.map((item) => (
+                                  <TableRow
+                                    key={item.id}
+                                    hover
+                                    selected={selectedNonStockItemIds.includes(item.id)}
+                                    onClick={() => handleToggleSelectNonStockItem(item.id)}
+                                    sx={{ cursor: "pointer" }}
+                                  >
+                                    <TableCell padding="checkbox">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedNonStockItemIds.includes(item.id)}
+                                        onChange={() => handleToggleSelectNonStockItem(item.id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                    </TableCell>
+                                    <TableCell>{item.productName}</TableCell>
+                                    <TableCell>{item.uomName}</TableCell>
+                                    <TableCell align="right">{item.neededQuantity.toFixed(2)}</TableCell>
                                   </TableRow>
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={3} align="center" sx={{ py: 3, color: "#94A3B8" }}>
-                                    No shortfall items found.
+                                  <TableCell colSpan={4} align="center" sx={{ py: 3, color: "#94A3B8" }}>
+                                    No shortfall items pending a Purchase Order.
                                   </TableCell>
                                 </TableRow>
                               )}
@@ -596,35 +789,81 @@ export default function ProductionOverview({
 
                       {procurementRecords.length > 0 && (
                         <Box>
-                          <Typography sx={{ fontWeight: 700, mb: 1 }}>Purchase Orders &amp; Receives</Typography>
-                          {procurementRecords.map((p) => (
-                            <Paper
-                              key={p.id}
-                              variant="outlined"
-                              sx={{ p: 1.5, mb: 1, borderRadius: "12px", display: "flex", justifyContent: "space-between" }}
-                            >
-                              <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                          <Typography sx={{ fontWeight: 700, mb: 1 }}>Purchase Orders</Typography>
+                          {procurementRecords.map((po) => {
+                            const pending = po.lines.reduce(
+                              (sum, l) => sum + Math.max(0, l.orderQuantity - l.receivedQuantity),
+                              0,
+                            );
+                            return (
+                              <Paper
+                                key={po.id}
+                                variant="outlined"
+                                sx={{ p: 1.5, mb: 1.5, borderRadius: "12px" }}
+                              >
                                 <Box
                                   sx={{
-                                    px: 1,
-                                    py: 0.25,
-                                    borderRadius: "6px",
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    bgcolor: p.type === "purchase_order" ? "#EEF2FF" : "#ECFDF5",
-                                    color: p.type === "purchase_order" ? "#4F46E5" : "#059669",
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 1.5,
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    mb: 1,
                                   }}
                                 >
-                                  {p.type === "purchase_order" ? "PO" : "PR"}
+                                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                                    <Typography sx={{ fontWeight: 700 }}>{po.poNumber}</Typography>
+                                    <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                                      {po.poDate}
+                                    </Typography>
+                                    {po.supplierName && (
+                                      <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                                        · {po.supplierName}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                    <StatusChip value={po.status} />
+                                    {pending > 0 && (
+                                      <Button
+                                        variant="outlined"
+                                        size="small"
+                                        startIcon={<LocalShippingIcon />}
+                                        onClick={() => handleOpenReceivePo(po)}
+                                        sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                                      >
+                                        Receive
+                                      </Button>
+                                    )}
+                                  </Box>
                                 </Box>
-                                <Typography sx={{ fontWeight: 600 }}>{p.recordNo}</Typography>
-                                <Typography color="text.secondary" sx={{ fontSize: 13 }}>
-                                  {p.supplier}
-                                </Typography>
-                              </Box>
-                              <StatusChip value={p.status} />
-                            </Paper>
-                          ))}
+                                <TableContainer>
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                        <TableCell>Product</TableCell>
+                                        <TableCell align="right">Ordered</TableCell>
+                                        <TableCell align="right">Received</TableCell>
+                                        <TableCell align="right">Unit Price</TableCell>
+                                        <TableCell align="right">Line Total</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {po.lines.map((line) => (
+                                        <TableRow key={line.id}>
+                                          <TableCell>{line.productName}</TableCell>
+                                          <TableCell align="right">{line.orderQuantity}</TableCell>
+                                          <TableCell align="right">{line.receivedQuantity}</TableCell>
+                                          <TableCell align="right">{line.unitPrice.toFixed(2)}</TableCell>
+                                          <TableCell align="right">{line.lineTotal.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
+                              </Paper>
+                            );
+                          })}
                         </Box>
                       )}
                     </>
@@ -967,6 +1206,31 @@ export default function ProductionOverview({
         onDraftChange={setConsumptionDraft}
         onCancel={handleCancelConsumptionDraft}
         onConfirm={handleConfirmConsumptionEntry}
+      />
+
+      <CreatePoDialog
+        open={createPoDialogOpen}
+        draft={createPoDraft}
+        draftError={createPoDraftError}
+        committing={createPoCommitting}
+        commitError={createPoCommitError}
+        suppliers={suppliers}
+        paymentTerms={paymentTerms}
+        onDraftChange={setCreatePoDraft}
+        onCancel={handleCancelCreatePoDraft}
+        onConfirm={handleConfirmCreatePo}
+      />
+
+      <ReceivePoDialog
+        open={receivePoDialogOpen}
+        poNumber={receivingPo?.poNumber || ""}
+        draft={receivePoDraft}
+        draftError={receivePoDraftError}
+        committing={receivePoCommitting}
+        commitError={receivePoCommitError}
+        onDraftChange={setReceivePoDraft}
+        onCancel={handleCancelReceivePoDraft}
+        onConfirm={handleConfirmReceivePo}
       />
     </Box>
   );
