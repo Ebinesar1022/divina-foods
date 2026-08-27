@@ -20,7 +20,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ShoppingCartCheckoutIcon from "@mui/icons-material/ShoppingCartCheckout";
-import type { CreatePoDraft, PaymentTermOption, PoLineDraftRow, SupplierOption } from "../types";
+import type { CreatePoDraft, PaymentTermOption, PoLineDraftRow, SupplierOption, TaxOption } from "../types";
 
 interface CreatePoDialogProps {
   open: boolean;
@@ -30,9 +30,18 @@ interface CreatePoDialogProps {
   commitError: string;
   suppliers: SupplierOption[];
   paymentTerms: PaymentTermOption[];
+  taxTypes: TaxOption[];
   onDraftChange: (draft: CreatePoDraft) => void;
   onCancel: () => void;
   onConfirm: () => void;
+}
+
+function lineTotalFor(line: PoLineDraftRow): number {
+  return line.orderQuantity * line.unitPrice;
+}
+
+function taxAmountFor(line: PoLineDraftRow): number {
+  return (lineTotalFor(line) * line.taxPercentage) / 100;
 }
 
 export default function CreatePoDialog({
@@ -43,6 +52,7 @@ export default function CreatePoDialog({
   commitError,
   suppliers,
   paymentTerms,
+  taxTypes,
   onDraftChange,
   onCancel,
   onConfirm,
@@ -59,11 +69,22 @@ export default function CreatePoDialog({
     if (patch.unitPrice !== undefined && (isNaN(row.unitPrice) || row.unitPrice < 0)) {
       row.unitPrice = 0;
     }
+    if (patch.taxTypeId !== undefined) {
+      // Auto-fill the rate from the selected tax type — still editable
+      // afterward, same as the native form's Tax_Percentage field.
+      const selectedTax = taxTypes.find((t) => t.id === patch.taxTypeId);
+      row.taxPercentage = selectedTax ? selectedTax.rate : 0;
+    }
+    if (patch.taxPercentage !== undefined && (isNaN(row.taxPercentage) || row.taxPercentage < 0)) {
+      row.taxPercentage = 0;
+    }
     lines[index] = row;
     onDraftChange({ ...draft, lines });
   }
 
-  const grandTotal = draft ? draft.lines.reduce((sum, l) => sum + l.orderQuantity * l.unitPrice, 0) : 0;
+  const subTotal = draft ? draft.lines.reduce((sum, l) => sum + lineTotalFor(l), 0) : 0;
+  const taxTotal = draft ? draft.lines.reduce((sum, l) => sum + taxAmountFor(l), 0) : 0;
+  const grandTotal = subTotal + taxTotal;
   const canSubmit =
     !!draft &&
     !!draft.supplierId &&
@@ -76,7 +97,7 @@ export default function CreatePoDialog({
       open={open}
       onClose={committing ? undefined : onCancel}
       fullWidth
-      maxWidth="md"
+      maxWidth="lg"
       PaperProps={{ sx: { borderRadius: "18px", overflow: "hidden" } }}
     >
       <Box
@@ -185,58 +206,116 @@ export default function CreatePoDialog({
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
                     <TableCell>Product</TableCell>
                     <TableCell align="right">Needed Qty</TableCell>
-                    <TableCell align="right" sx={{ minWidth: 100 }}>
+                    <TableCell align="right" sx={{ minWidth: 90 }}>
                       Order Qty
                     </TableCell>
-                    <TableCell align="right" sx={{ minWidth: 110 }}>
+                    <TableCell align="right" sx={{ minWidth: 100 }}>
                       Unit Price
                     </TableCell>
                     <TableCell align="right">Line Total</TableCell>
+                    <TableCell sx={{ minWidth: 140 }}>Tax Type</TableCell>
+                    <TableCell align="right" sx={{ minWidth: 90 }}>
+                      Tax %
+                    </TableCell>
+                    <TableCell align="right">Tax Amt</TableCell>
+                    <TableCell align="right">Total</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {draft.lines.map((line, index) => (
-                    <TableRow key={line.nonStockItemId}>
-                      <TableCell>
-                        {line.productName}
-                        {line.uomName && (
-                          <Typography component="span" sx={{ fontSize: 12, color: "#94A3B8", ml: 0.5 }}>
-                            ({line.uomName})
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell align="right">{line.neededQuantity}</TableCell>
-                      <TableCell align="right">
-                        <TextField
-                          type="number"
-                          size="small"
-                          value={line.orderQuantity}
-                          disabled={committing}
-                          onChange={(e) => updateLine(index, { orderQuantity: parseFloat(e.target.value) })}
-                          inputProps={{ min: 0, style: { textAlign: "right" } }}
-                          sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <TextField
-                          type="number"
-                          size="small"
-                          value={line.unitPrice}
-                          disabled={committing}
-                          onChange={(e) => updateLine(index, { unitPrice: parseFloat(e.target.value) })}
-                          inputProps={{ min: 0, step: "0.01", style: { textAlign: "right" } }}
-                          sx={{ bgcolor: "#fff", borderRadius: "8px", width: 110 }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">{(line.orderQuantity * line.unitPrice).toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {draft.lines.map((line, index) => {
+                    const lineTotal = lineTotalFor(line);
+                    const taxAmount = taxAmountFor(line);
+                    return (
+                      <TableRow key={line.nonStockItemId}>
+                        <TableCell>
+                          {line.productName}
+                          {line.uomName && (
+                            <Typography component="span" sx={{ fontSize: 12, color: "#94A3B8", ml: 0.5 }}>
+                              ({line.uomName})
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">{line.neededQuantity}</TableCell>
+                        <TableCell align="right">
+                          <TextField
+                            type="number"
+                            size="small"
+                            value={line.orderQuantity}
+                            disabled={committing}
+                            onChange={(e) => updateLine(index, { orderQuantity: parseFloat(e.target.value) })}
+                            inputProps={{ min: 0, style: { textAlign: "right" } }}
+                            sx={{ bgcolor: "#fff", borderRadius: "8px", width: 90 }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <TextField
+                            type="number"
+                            size="small"
+                            value={line.unitPrice}
+                            disabled={committing}
+                            onChange={(e) => updateLine(index, { unitPrice: parseFloat(e.target.value) })}
+                            inputProps={{ min: 0, step: "0.01", style: { textAlign: "right" } }}
+                            sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">{lineTotal.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <TextField
+                            select
+                            size="small"
+                            fullWidth
+                            value={line.taxTypeId}
+                            disabled={committing}
+                            onChange={(e) => updateLine(index, { taxTypeId: e.target.value })}
+                            sx={{ bgcolor: "#fff", borderRadius: "8px" }}
+                          >
+                            <MenuItem value="">
+                              <em>No Tax</em>
+                            </MenuItem>
+                            {taxTypes.map((t) => (
+                              <MenuItem key={t.id} value={t.id}>
+                                {t.name} ({t.rate}%)
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        </TableCell>
+                        <TableCell align="right">
+                          <TextField
+                            type="number"
+                            size="small"
+                            value={line.taxPercentage}
+                            disabled={committing}
+                            onChange={(e) => updateLine(index, { taxPercentage: parseFloat(e.target.value) })}
+                            inputProps={{ min: 0, step: "0.01", style: { textAlign: "right" } }}
+                            sx={{ bgcolor: "#fff", borderRadius: "8px", width: 80 }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">{taxAmount.toFixed(2)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                          {(lineTotal + taxAmount).toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
 
             <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
-              <Typography sx={{ fontWeight: 700, fontSize: 16 }}>Grand Total: {grandTotal.toFixed(2)}</Typography>
+              <Box sx={{ minWidth: 220 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+                  <Typography sx={{ fontSize: 13.5, color: "#64748B" }}>Sub Total</Typography>
+                  <Typography sx={{ fontSize: 13.5 }}>{subTotal.toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+                  <Typography sx={{ fontSize: 13.5, color: "#64748B" }}>Tax</Typography>
+                  <Typography sx={{ fontSize: 13.5 }}>{taxTotal.toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between", pt: 0.5, borderTop: "1px solid #E2E8F0" }}>
+                  <Typography sx={{ fontWeight: 700, fontSize: 16 }}>Grand Total</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: 16 }}>{grandTotal.toFixed(2)}</Typography>
+                </Box>
+              </Box>
             </Box>
 
             {commitError && (
