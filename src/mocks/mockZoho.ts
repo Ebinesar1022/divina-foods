@@ -159,6 +159,11 @@ const SEQUENCE_MASTER = [
   },
 ];
 
+const UOM_MASTER = [
+  { ID: "401", UOM: "Kilogram" },
+  { ID: "402", UOM: "Ltr" },
+];
+
 const WAREHOUSE_MASTER = [
   { ID: "1", Warehouse_Name: "Main Warehouse" },
 ];
@@ -186,6 +191,7 @@ const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.PRODUCTION_STOCK_REPORT]: PRODUCTION_STOCK,
   [CONFIG.SEQUENCE_MASTER_REPORT]: SEQUENCE_MASTER,
   [CONFIG.WAREHOUSE_REPORT]: WAREHOUSE_MASTER,
+  [CONFIG.UOM_MASTER_REPORT]: UOM_MASTER,
   [CONFIG.EMPLOYEE_REPORT]: EMPLOYEES,
 };
 
