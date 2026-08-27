@@ -62,6 +62,13 @@ export const CONFIG = {
 
   EMPLOYEE_REPORT: "Employee_Report",
 
+  // Confirmed against the app's .ds export (Divina_Foods_6.ds) — the
+  // "Required Materials" custom action on the MRP list opens
+  // Non_Stock_Items_Report?MRP_ID=<MRP_ID>, which reads from this
+  // separate Non_Stock_Items form, NOT Raw_Materials.
+  NON_STOCK_ITEMS_FORM: "Non_Stock_Items",
+  UOM_MASTER_REPORT: "UOM_Master_Report",
+
   // Confirmed against the app's .ds export (Divina_Foods_5.ds) —
   // Consumption_Entry's two grids (Finished_Good, Raw_Material_Consumptions)
   // are subform-backing forms, same pattern as MRP's Finished_Goods/Raw_Materials.
@@ -533,6 +540,17 @@ function bumpMrpSequence(sequenceRowId: string, currentMrpNo: number): Promise<a
   });
 }
 
+// Non_Stock_Items.UOM is a lookup to UOM_Master, but our raw-material rows
+// only carry the UOM as plain text (same as the native "Generate MRP ID"
+// workflow's own get_line.UOM) — resolve it the same way that workflow
+// does: match UOM_Master's own UOM text field.
+function resolveUomMasterId(uomText: string): Promise<string> {
+  if (!uomText) return Promise.resolve("");
+  return getRecords(CONFIG.UOM_MASTER_REPORT, `UOM == "${uomText}"`).then(function (rows) {
+    return rows.length ? display(rows[0].ID) : "";
+  });
+}
+
 // The app only ever books MRPs against "Main Warehouse" — no picker needed,
 // just resolve that one Warehouse_Master row's own record ID, which is what
 // gets written into MRP.Warehouse (a lookup to Warehouse_Master).
@@ -680,6 +698,34 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
             Allocate_Quantity: rm.allocateQuantity,
             Needed_Quantity: rm.neededQuantity,
             Status: rm.status,
+          });
+        });
+      })
+      .then(function () {
+        // Mirrors the native "Generate MRP ID" form's own "on add, on
+        // success" workflow, which creates a Non_Stock_Items row for every
+        // raw material line with Needed_Quantity > 0 — this is what backs
+        // the "Required Materials" custom action on the MRP list
+        // (opens Non_Stock_Items_Report?MRP_ID=...). That workflow doesn't
+        // fire for MRPs created via the JS SDK's addRecords, same reason as
+        // every other "on add" workflow replicated in this file, so without
+        // this an MRP created through the widget shows "No Data Available"
+        // there even though its Raw_Materials/procurement status are fine.
+        const shortfallRawMaterials = draft.rawMaterials.filter(function (rm) {
+          return rm.neededQuantity > 0;
+        });
+        return runSequentially(shortfallRawMaterials, function (rm) {
+          return resolveUomMasterId(rm.uom).then(function (uomMasterId) {
+            return addRecord(CONFIG.NON_STOCK_ITEMS_FORM, {
+              MRP_ID: mrpRecordId,
+              Product: rm.productId,
+              UOM: uomMasterId,
+              Stock_On_Hand: rm.stockOnHand,
+              Stock_Required: rm.stockRequired,
+              Allocate_Quantity: rm.allocateQuantity,
+              Needed_Quantity: rm.neededQuantity,
+              Status: "Needs Purchase",
+            });
           });
         });
       })
