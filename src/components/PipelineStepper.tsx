@@ -93,19 +93,20 @@ export default function PipelineStepper({
           const isDone = state === 'done';
 
           return (
-            <Box
-              key={stage.key}
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                flex: isLast ? '0 0 auto' : 1,
-                minWidth: 0,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+            <React.Fragment key={stage.key}>
+              {/* Stage column — node and label share this column, so the
+                  label is always centered on the node regardless of how
+                  much stretchy connector space sits on either side. */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  flexShrink: 0,
+                }}
+              >
                 {/* Main Node with Top-Right Completed Badge */}
-                <Box sx={{ position: 'relative', flexShrink: 0, mx: 'auto' }}>
+                <Box sx={{ position: 'relative', flexShrink: 0 }}>
                   <Box
                     sx={{
                       width: { xs: 46, sm: 50 },
@@ -157,65 +158,68 @@ export default function PipelineStepper({
                   )}
                 </Box>
 
-                {/* Connector Line between stages */}
-                {!isLast && (
-                  <Box
-                    sx={{
-                      flex: 1,
-                      height: 3,
-                      mx: { xs: 0.5, sm: 1 },
-                      bgcolor: styles.connector,
-                      borderRadius: '999px',
-                      ...(state === 'skipped'
-                        ? {
-                            backgroundImage:
-                              'repeating-linear-gradient(to right, #cbd5e1 0 6px, transparent 6px 12px)',
-                            bgcolor: 'transparent',
-                          }
-                        : {}),
-                    }}
-                  />
-                )}
-              </Box>
-
-              {/* Label */}
-              <Box sx={{ textAlign: 'center', mt: 1.25, px: 0.5, maxWidth: 130 }}>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: 'block',
-                    fontWeight: state === 'active' ? 700 : state === 'done' ? 700 : 600,
-                    fontSize: { xs: 11.5, sm: 12 },
-                    lineHeight: 1.3,
-                    color:
-                      state === 'active'
-                        ? '#2563eb'
-                        : state === 'done'
-                        ? '#059669'
-                        : state === 'skipped'
-                        ? '#94a3b8'
-                        : '#64748b',
-                    fontStyle: state === 'skipped' ? 'italic' : 'normal',
-                  }}
-                >
-                  {stage.label}
-                </Typography>
-                {state === 'skipped' && (
+                {/* Label */}
+                <Box sx={{ textAlign: 'center', mt: 1.25, px: 0.5, maxWidth: 130 }}>
                   <Typography
                     variant="caption"
                     sx={{
                       display: 'block',
-                      color: '#94a3b8',
-                      fontStyle: 'italic',
-                      fontSize: 10,
-                      mt: 0.25,
+                      fontWeight: state === 'active' ? 700 : state === 'done' ? 700 : 600,
+                      fontSize: { xs: 11.5, sm: 12 },
+                      lineHeight: 1.3,
+                      color:
+                        state === 'active'
+                          ? '#2563eb'
+                          : state === 'done'
+                          ? '#059669'
+                          : state === 'skipped'
+                          ? '#94a3b8'
+                          : '#64748b',
+                      fontStyle: state === 'skipped' ? 'italic' : 'normal',
                     }}
                   >
-                    Skipped — In Stock
+                    {stage.label}
                   </Typography>
-                )}
+                  {state === 'skipped' && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: 'block',
+                        color: '#94a3b8',
+                        fontStyle: 'italic',
+                        fontSize: 10,
+                        mt: 0.25,
+                      }}
+                    >
+                      Skipped — In Stock
+                    </Typography>
+                  )}
+                </Box>
               </Box>
-            </Box>
+
+              {/* Connector Line between stages — vertically centered on the
+                  node circle above, independent of label height/wrapping. */}
+              {!isLast && (
+                <Box
+                  sx={{
+                    flex: 1,
+                    alignSelf: 'flex-start',
+                    height: 3,
+                    mt: { xs: '21.5px', sm: '23.5px' },
+                    mx: { xs: 0.5, sm: 1 },
+                    bgcolor: styles.connector,
+                    borderRadius: '999px',
+                    ...(state === 'skipped'
+                      ? {
+                          backgroundImage:
+                            'repeating-linear-gradient(to right, #cbd5e1 0 6px, transparent 6px 12px)',
+                          bgcolor: 'transparent',
+                        }
+                      : {}),
+                  }}
+                />
+              )}
+            </React.Fragment>
           );
         })}
       </Box>
