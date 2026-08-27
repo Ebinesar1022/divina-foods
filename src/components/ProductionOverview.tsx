@@ -23,6 +23,7 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
+import ActivityTimeline from "./ActivityTimeline";
 import StatusChip from "./StatusChip";
 import CreateMrpDialog from "./CreateMrpDialog";
 import InitiateProductionDialog from "./InitiateProductionDialog";
@@ -413,461 +414,480 @@ export default function ProductionOverview({
         onBack={() => window.history.back()}
       />
 
-      <Paper
-        elevation={0}
-        sx={{ mt: 3, borderRadius: "16px", p: { xs: 1, md: 2 } }}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", lg: "2fr 1fr" },
+          alignItems: "stretch",
+          gap: 3,
+          mt: 3,
+        }}
       >
-        <PipelineStepper
-          currentStageKey={stageKey}
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+          <Paper elevation={0} sx={{ borderRadius: "16px", p: { xs: 1, md: 2 } }}>
+            <PipelineStepper
+              currentStageKey={stageKey}
+              currentIndex={currentIndex}
+              isFullyComplete={isFullyComplete}
+              procurementSkipped={procurementSkipped}
+            />
+          </Paper>
+
+          <Paper elevation={0} sx={{ borderRadius: "16px" }}>
+            <Tabs
+              value={activeTab}
+              onChange={(_, v) => setActiveTab(v)}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{ px: 2, borderBottom: "1px solid #E2E8F0" }}
+            >
+              {TABS.map((t) => (
+                <Tab key={t.key} value={t.key} label={t.label} />
+              ))}
+            </Tabs>
+
+            <Box sx={{ p: { xs: 2, md: 3 } }}>
+              {activeTab === "overview" && (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" },
+                    gap: 2,
+                  }}
+                >
+                  <InfoCard
+                    label="Production Target ID"
+                    value={record.productionTargetId}
+                  />
+                  <InfoCard label="Date" value={record.date} />
+                  <InfoCard label="Assigned To" value={record.assignedTo} />
+                  <InfoCard
+                    label="Current Status"
+                    valueNode={<StatusChip value={record.status} />}
+                  />
+                </Box>
+              )}
+
+              {activeTab === "mrp" && (
+                <Box>
+                  {mrpRecord ? (
+                    <MrpReportView
+                      mrpRecord={mrpRecord}
+                      mrpDetails={data.mrpDetails}
+                      productionTarget={record}
+                    />
+                  ) : (
+                    <CenteredStateCard
+                      icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
+                      title="No Material Requirement &amp; Planning Yet"
+                      description="Generate the MRP to explode BOMs, evaluate available warehouse stock, and compute needed purchase quantities."
+                      action={
+                        <Button
+                          variant="contained"
+                          size="medium"
+                          startIcon={<AddIcon />}
+                          onClick={handleOpenCreateMrp}
+                          sx={{
+                            borderRadius: "10px",
+                            textTransform: "none",
+                            fontWeight: 600,
+                            px: 2.5,
+                            py: 1,
+                            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+                          }}
+                        >
+                          Create MRP
+                        </Button>
+                      }
+                    />
+                  )}
+                </Box>
+              )}
+
+              {activeTab === "procurement" && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {!mrpRecord ? (
+                    <CenteredStateCard
+                      icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
+                      title="MRP Not Created Yet"
+                      description="Create the Material Requirement &amp; Planning first to see what needs to be procured."
+                    />
+                  ) : record.status === "Waiting for Stock" ? (
+                    <>
+                      <CenteredStateCard
+                        icon={<ShoppingCartOutlinedIcon sx={{ fontSize: 28 }} />}
+                        iconBg="#FEF3C7"
+                        iconColor="#D97706"
+                        title="Procurement Needed"
+                        description="Raise purchase orders for the raw materials below. Once everything has arrived, head to Initiate Production to start the run."
+                      />
+
+                      <Box>
+                        <Typography sx={{ fontWeight: 700, mb: 1 }}>Needed Items</Typography>
+                        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                                <TableCell>Product Name</TableCell>
+                                <TableCell>UOM</TableCell>
+                                <TableCell align="right">Needed Quantity</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {neededItems.length ? (
+                                neededItems.map((rm) => (
+                                  <TableRow key={rm.productId}>
+                                    <TableCell>{rm.productName}</TableCell>
+                                    <TableCell>{rm.uom}</TableCell>
+                                    <TableCell align="right">{rm.neededQuantity.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                ))
+                              ) : (
+                                <TableRow>
+                                  <TableCell colSpan={3} align="center" sx={{ py: 3, color: "#94A3B8" }}>
+                                    No shortfall items found.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </Box>
+
+                      {procurementRecords.length > 0 && (
+                        <Box>
+                          <Typography sx={{ fontWeight: 700, mb: 1 }}>Purchase Orders &amp; Receives</Typography>
+                          {procurementRecords.map((p) => (
+                            <Paper
+                              key={p.id}
+                              variant="outlined"
+                              sx={{ p: 1.5, mb: 1, borderRadius: "12px", display: "flex", justifyContent: "space-between" }}
+                            >
+                              <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                                <Box
+                                  sx={{
+                                    px: 1,
+                                    py: 0.25,
+                                    borderRadius: "6px",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    bgcolor: p.type === "purchase_order" ? "#EEF2FF" : "#ECFDF5",
+                                    color: p.type === "purchase_order" ? "#4F46E5" : "#059669",
+                                  }}
+                                >
+                                  {p.type === "purchase_order" ? "PO" : "PR"}
+                                </Box>
+                                <Typography sx={{ fontWeight: 600 }}>{p.recordNo}</Typography>
+                                <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                                  {p.supplier}
+                                </Typography>
+                              </Box>
+                              <StatusChip value={p.status} />
+                            </Paper>
+                          ))}
+                        </Box>
+                      )}
+                    </>
+                  ) : record.status === "Completed" ? (
+                    <CenteredStateCard
+                      icon={<EmojiEventsOutlinedIcon sx={{ fontSize: 28 }} />}
+                      iconBg="#ECFDF5"
+                      iconColor="#059669"
+                      title="Production Completed!"
+                      description="This target went all the way from MRP through procurement to a finished run. Nice work."
+                    />
+                  ) : (
+                    <CenteredStateCard
+                      icon={<CheckCircleOutlineIcon sx={{ fontSize: 28 }} />}
+                      iconBg="#ECFDF5"
+                      iconColor="#059669"
+                      title="Procurement Complete"
+                      description="All raw materials are available. Head to the Initiate Production tab to start the run."
+                    />
+                  )}
+                </Box>
+              )}
+
+              {activeTab === "initiate_production" && (
+                <Box>
+                  {record.status === "In Progress" ||
+                  record.status === "Completed" ? (
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {/* Outer container with soft light-blue glow */}
+                      <Paper
+                        elevation={0}
+                        variant="outlined"
+                        sx={{
+                          position: "relative",
+                          p: { xs: 2, sm: 2.5 },
+                          borderRadius: "16px",
+                          borderColor: "rgba(59, 130, 246, 0.25)",
+                          bgcolor: "#FFFFFF",
+                          boxShadow: "0 0 24px rgba(59, 130, 246, 0.2)",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {/* Dimmed/muted card grid so stamp pops without losing legibility */}
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+                            gap: 2,
+                            opacity: 0.78,
+                            filter: "contrast(0.95)",
+                            "& .MuiPaper-root": {
+                              bgcolor: "#F8FAFC",
+                              borderColor: "#E2E8F0",
+                            },
+                          }}
+                        >
+                          <InfoCard label="MRP ID" value={mrpRecord?.mrpId} />
+                          <InfoCard
+                            label="Production Target ID"
+                            value={record.productionTargetId}
+                          />
+                          <InfoCard label="Start Date" value={record.startDate} />
+                          <InfoCard label="End Date" value={record.endDate} />
+                          <InfoCard label="Assigned To" value={record.assignedTo} />
+                          <InfoCard
+                            label="Target Status"
+                            valueNode={<StatusChip value={record.status} />}
+                          />
+                        </Box>
+
+                        {/* Bright, high-contrast, perfectly centered stamp */}
+                        <StatusStamp
+                          text={record.status === "Completed" ? "Production Completed" : "Production Started"}
+                          color={record.status === "Completed" ? "#059669" : "#2563eb"}
+                        />
+                      </Paper>
+
+                      {(data.mrpDetails?.finishedGoods?.length ?? 0) > 0 && (
+                        <Box>
+                          <Typography sx={{ fontWeight: 700, mb: 1 }}>Finished Goods</Typography>
+                          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                                  <TableCell>Item</TableCell>
+                                  <TableCell>UOM</TableCell>
+                                  <TableCell align="right">Target Quantity</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {data.mrpDetails!.finishedGoods.map((fg) => (
+                                  <TableRow key={fg.id}>
+                                    <TableCell>{fg.itemName}</TableCell>
+                                    <TableCell>{fg.uomName}</TableCell>
+                                    <TableCell align="right">{fg.targetQuantity}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Box>
+                      )}
+                    </Box>
+                  ) : !mrpRecord ? (
+                    <Alert severity="info" sx={{ borderRadius: "12px" }}>
+                      Create the MRP first before initiating production.
+                    </Alert>
+                  ) : isProcurementRequired(record.status) ? (
+                    <Alert severity="warning" sx={{ borderRadius: "12px" }}>
+                      Procurement must be completed before production can start.
+                    </Alert>
+                  ) : (
+                    <Box>
+                      <Button
+                        variant="contained"
+                        startIcon={<PlayCircleIcon />}
+                        onClick={handleOpenInitiateProduction}
+                        sx={{ borderRadius: "10px", textTransform: "none" }}
+                      >
+                        Start Production
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              )}
+
+              {activeTab === "in_progress" && (
+                <Box>
+                  {record.status === "In Progress" ? (
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
+                          gap: 2,
+                        }}
+                      >
+                        <InfoCard label="Production Target ID" value={record.productionTargetId} />
+                        <InfoCard label="Start Date" value={record.startDate} />
+                        <InfoCard label="End Date" value={record.endDate} />
+                        <InfoCard label="Assigned To" value={record.assignedTo} />
+                        <InfoCard label="Status" valueNode={<StatusChip value={record.status} />} />
+                      </Box>
+
+                      <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
+                        <Button
+                          variant="contained"
+                          color="success"
+                          size="large"
+                          startIcon={<TaskAltIcon />}
+                          onClick={handleOpenCompleteProduction}
+                          sx={{
+                            borderRadius: "12px",
+                            textTransform: "none",
+                            fontWeight: 700,
+                            px: 3.5,
+                            py: 1.25,
+                            boxShadow: "0 8px 20px rgba(5, 150, 105, 0.25)",
+                          }}
+                        >
+                          Complete Production
+                        </Button>
+                      </Box>
+                    </Box>
+                  ) : record.status === "Completed" ? (
+                    <CenteredStateCard
+                      icon={<EmojiEventsOutlinedIcon sx={{ fontSize: 28 }} />}
+                      iconBg="#ECFDF5"
+                      iconColor="#059669"
+                      title="Production Completed"
+                      description="Consumption has been logged and this run is fully wrapped up. See the Consumption Entry tab for the full breakdown."
+                    />
+                  ) : (
+                    <CenteredStateCard
+                      icon={<PlayCircleIcon sx={{ fontSize: 28 }} />}
+                      title="Not In Progress Yet"
+                      description="Start production from the Initiate Production tab first."
+                    />
+                  )}
+                </Box>
+              )}
+
+              {activeTab === "consumption_entry" && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {consumptionEntries.length ? (
+                    consumptionEntries.map((entry) => (
+                      <Paper key={entry.id} variant="outlined" sx={{ borderRadius: "14px", overflow: "hidden" }}>
+                        <Box
+                          sx={{
+                            px: 2.5,
+                            py: 1.75,
+                            bgcolor: "#ECFDF5",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            flexWrap: "wrap",
+                            gap: 1,
+                          }}
+                        >
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                            <TaskAltIcon sx={{ color: "#059669" }} />
+                            <Box>
+                              <Typography sx={{ fontWeight: 700 }}>{entry.consumptionId}</Typography>
+                              <Typography sx={{ fontSize: 12, color: "#64748B" }}>{entry.date}</Typography>
+                            </Box>
+                          </Box>
+                          {entry.remarks && (
+                            <Typography sx={{ fontSize: 13, color: "#475569", fontStyle: "italic" }}>
+                              "{entry.remarks}"
+                            </Typography>
+                          )}
+                        </Box>
+
+                        <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2.5 }}>
+                          {entry.finishedGoods.length > 0 && (
+                            <Box>
+                              <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>Finished Goods</Typography>
+                              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                      <TableCell>Item</TableCell>
+                                      <TableCell align="right">Target</TableCell>
+                                      <TableCell align="right">Produced</TableCell>
+                                      <TableCell align="right">Scrap</TableCell>
+                                      <TableCell>Batch No</TableCell>
+                                      <TableCell>Expiry</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {entry.finishedGoods.map((fg) => (
+                                      <TableRow key={fg.id}>
+                                        <TableCell>{fg.itemName}</TableCell>
+                                        <TableCell align="right">{fg.targetQuantity}</TableCell>
+                                        <TableCell align="right">{fg.producedQuantity}</TableCell>
+                                        <TableCell align="right">{fg.scrapQuantity}</TableCell>
+                                        <TableCell>{fg.batchNo || "—"}</TableCell>
+                                        <TableCell>{fg.expiryDate || "—"}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+                            </Box>
+                          )}
+
+                          {entry.rawMaterials.length > 0 && (
+                            <Box>
+                              <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>
+                                Raw Materials Consumed
+                              </Typography>
+                              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
+                                      <TableCell>Raw Material</TableCell>
+                                      <TableCell>UOM</TableCell>
+                                      <TableCell align="right">Allocated</TableCell>
+                                      <TableCell align="right">Consumed</TableCell>
+                                      <TableCell align="right">Scrap</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {entry.rawMaterials.map((rm) => (
+                                      <TableRow key={rm.id}>
+                                        <TableCell>{rm.productName}</TableCell>
+                                        <TableCell>{rm.uom}</TableCell>
+                                        <TableCell align="right">{rm.allocatedQuantity}</TableCell>
+                                        <TableCell align="right">{rm.consumedQuantity}</TableCell>
+                                        <TableCell align="right">{rm.scrapQuantity}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+                            </Box>
+                          )}
+                        </Box>
+                      </Paper>
+                    ))
+                  ) : (
+                    <CenteredStateCard
+                      icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
+                      title="No Consumption Entries Yet"
+                      description="Once production is completed, the logged consumption details will appear here."
+                    />
+                  )}
+                </Box>
+              )}
+            </Box>
+          </Paper>
+        </Box>
+
+        <ActivityTimeline
           currentIndex={currentIndex}
           isFullyComplete={isFullyComplete}
           procurementSkipped={procurementSkipped}
+          record={record}
+          mrpRecord={mrpRecord}
+          procurementRecords={procurementRecords}
+          consumptionEntries={consumptionEntries}
         />
-      </Paper>
-
-      <Paper elevation={0} sx={{ mt: 3, borderRadius: "16px" }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_, v) => setActiveTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{ px: 2, borderBottom: "1px solid #E2E8F0" }}
-        >
-          {TABS.map((t) => (
-            <Tab key={t.key} value={t.key} label={t.label} />
-          ))}
-        </Tabs>
-
-        <Box sx={{ p: { xs: 2, md: 3 } }}>
-          {activeTab === "overview" && (
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "repeat(4, 1fr)" },
-                gap: 2,
-              }}
-            >
-              <InfoCard
-                label="Production Target ID"
-                value={record.productionTargetId}
-              />
-              <InfoCard label="Date" value={record.date} />
-              <InfoCard label="Assigned To" value={record.assignedTo} />
-              <InfoCard
-                label="Current Status"
-                valueNode={<StatusChip value={record.status} />}
-              />
-            </Box>
-          )}
-
-          {activeTab === "mrp" && (
-            <Box>
-              {mrpRecord ? (
-                <MrpReportView
-                  mrpRecord={mrpRecord}
-                  mrpDetails={data.mrpDetails}
-                  productionTarget={record}
-                />
-              ) : (
-                <CenteredStateCard
-                  icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
-                  title="No Material Requirement &amp; Planning Yet"
-                  description="Generate the MRP to explode BOMs, evaluate available warehouse stock, and compute needed purchase quantities."
-                  action={
-                    <Button
-                      variant="contained"
-                      size="medium"
-                      startIcon={<AddIcon />}
-                      onClick={handleOpenCreateMrp}
-                      sx={{
-                        borderRadius: "10px",
-                        textTransform: "none",
-                        fontWeight: 600,
-                        px: 2.5,
-                        py: 1,
-                        boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
-                      }}
-                    >
-                      Create MRP
-                    </Button>
-                  }
-                />
-              )}
-            </Box>
-          )}
-
-          {activeTab === "procurement" && (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              {!mrpRecord ? (
-                <CenteredStateCard
-                  icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
-                  title="MRP Not Created Yet"
-                  description="Create the Material Requirement &amp; Planning first to see what needs to be procured."
-                />
-              ) : record.status === "Waiting for Stock" ? (
-                <>
-                  <CenteredStateCard
-                    icon={<ShoppingCartOutlinedIcon sx={{ fontSize: 28 }} />}
-                    iconBg="#FEF3C7"
-                    iconColor="#D97706"
-                    title="Procurement Needed"
-                    description="Raise purchase orders for the raw materials below. Once everything has arrived, head to Initiate Production to start the run."
-                  />
-
-                  <Box>
-                    <Typography sx={{ fontWeight: 700, mb: 1 }}>Needed Items</Typography>
-                    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
-                            <TableCell>Product Name</TableCell>
-                            <TableCell>UOM</TableCell>
-                            <TableCell align="right">Needed Quantity</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {neededItems.length ? (
-                            neededItems.map((rm) => (
-                              <TableRow key={rm.productId}>
-                                <TableCell>{rm.productName}</TableCell>
-                                <TableCell>{rm.uom}</TableCell>
-                                <TableCell align="right">{rm.neededQuantity.toFixed(2)}</TableCell>
-                              </TableRow>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={3} align="center" sx={{ py: 3, color: "#94A3B8" }}>
-                                No shortfall items found.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </Box>
-
-                  {procurementRecords.length > 0 && (
-                    <Box>
-                      <Typography sx={{ fontWeight: 700, mb: 1 }}>Purchase Orders &amp; Receives</Typography>
-                      {procurementRecords.map((p) => (
-                        <Paper
-                          key={p.id}
-                          variant="outlined"
-                          sx={{ p: 1.5, mb: 1, borderRadius: "12px", display: "flex", justifyContent: "space-between" }}
-                        >
-                          <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                            <Box
-                              sx={{
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: "6px",
-                                fontSize: 11,
-                                fontWeight: 700,
-                                bgcolor: p.type === "purchase_order" ? "#EEF2FF" : "#ECFDF5",
-                                color: p.type === "purchase_order" ? "#4F46E5" : "#059669",
-                              }}
-                            >
-                              {p.type === "purchase_order" ? "PO" : "PR"}
-                            </Box>
-                            <Typography sx={{ fontWeight: 600 }}>{p.recordNo}</Typography>
-                            <Typography color="text.secondary" sx={{ fontSize: 13 }}>
-                              {p.supplier}
-                            </Typography>
-                          </Box>
-                          <StatusChip value={p.status} />
-                        </Paper>
-                      ))}
-                    </Box>
-                  )}
-                </>
-              ) : record.status === "Completed" ? (
-                <CenteredStateCard
-                  icon={<EmojiEventsOutlinedIcon sx={{ fontSize: 28 }} />}
-                  iconBg="#ECFDF5"
-                  iconColor="#059669"
-                  title="Production Completed!"
-                  description="This target went all the way from MRP through procurement to a finished run. Nice work."
-                />
-              ) : (
-                <CenteredStateCard
-                  icon={<CheckCircleOutlineIcon sx={{ fontSize: 28 }} />}
-                  iconBg="#ECFDF5"
-                  iconColor="#059669"
-                  title="Procurement Complete"
-                  description="All raw materials are available. Head to the Initiate Production tab to start the run."
-                />
-              )}
-            </Box>
-          )}
-
-          {activeTab === "initiate_production" && (
-            <Box>
-              {record.status === "In Progress" ||
-              record.status === "Completed" ? (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  {/* Outer container with soft light-blue glow */}
-                  <Paper
-                    elevation={0}
-                    variant="outlined"
-                    sx={{
-                      position: "relative",
-                      p: { xs: 2, sm: 2.5 },
-                      borderRadius: "16px",
-                      borderColor: "rgba(59, 130, 246, 0.25)",
-                      bgcolor: "#FFFFFF",
-                      boxShadow: "0 0 24px rgba(59, 130, 246, 0.2)",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {/* Dimmed/muted card grid so stamp pops without losing legibility */}
-                    <Box
-                      sx={{
-                        display: "grid",
-                        gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-                        gap: 2,
-                        opacity: 0.78,
-                        filter: "contrast(0.95)",
-                        "& .MuiPaper-root": {
-                          bgcolor: "#F8FAFC",
-                          borderColor: "#E2E8F0",
-                        },
-                      }}
-                    >
-                      <InfoCard label="MRP ID" value={mrpRecord?.mrpId} />
-                      <InfoCard
-                        label="Production Target ID"
-                        value={record.productionTargetId}
-                      />
-                      <InfoCard label="Start Date" value={record.startDate} />
-                      <InfoCard label="End Date" value={record.endDate} />
-                      <InfoCard label="Assigned To" value={record.assignedTo} />
-                      <InfoCard
-                        label="Target Status"
-                        valueNode={<StatusChip value={record.status} />}
-                      />
-                    </Box>
-
-                    {/* Bright, high-contrast, perfectly centered stamp */}
-                    <StatusStamp
-                      text={record.status === "Completed" ? "Production Completed" : "Production Started"}
-                      color={record.status === "Completed" ? "#059669" : "#2563eb"}
-                    />
-                  </Paper>
-
-                  {(data.mrpDetails?.finishedGoods?.length ?? 0) > 0 && (
-                    <Box>
-                      <Typography sx={{ fontWeight: 700, mb: 1 }}>Finished Goods</Typography>
-                      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
-                              <TableCell>Item</TableCell>
-                              <TableCell>UOM</TableCell>
-                              <TableCell align="right">Target Quantity</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {data.mrpDetails!.finishedGoods.map((fg) => (
-                              <TableRow key={fg.id}>
-                                <TableCell>{fg.itemName}</TableCell>
-                                <TableCell>{fg.uomName}</TableCell>
-                                <TableCell align="right">{fg.targetQuantity}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </Box>
-                  )}
-                </Box>
-              ) : !mrpRecord ? (
-                <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                  Create the MRP first before initiating production.
-                </Alert>
-              ) : isProcurementRequired(record.status) ? (
-                <Alert severity="warning" sx={{ borderRadius: "12px" }}>
-                  Procurement must be completed before production can start.
-                </Alert>
-              ) : (
-                <Box>
-                  <Button
-                    variant="contained"
-                    startIcon={<PlayCircleIcon />}
-                    onClick={handleOpenInitiateProduction}
-                    sx={{ borderRadius: "10px", textTransform: "none" }}
-                  >
-                    Start Production
-                  </Button>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {activeTab === "in_progress" && (
-            <Box>
-              {record.status === "In Progress" ? (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-                      gap: 2,
-                    }}
-                  >
-                    <InfoCard label="Production Target ID" value={record.productionTargetId} />
-                    <InfoCard label="Start Date" value={record.startDate} />
-                    <InfoCard label="End Date" value={record.endDate} />
-                    <InfoCard label="Assigned To" value={record.assignedTo} />
-                    <InfoCard label="Status" valueNode={<StatusChip value={record.status} />} />
-                  </Box>
-
-                  <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      size="large"
-                      startIcon={<TaskAltIcon />}
-                      onClick={handleOpenCompleteProduction}
-                      sx={{
-                        borderRadius: "12px",
-                        textTransform: "none",
-                        fontWeight: 700,
-                        px: 3.5,
-                        py: 1.25,
-                        boxShadow: "0 8px 20px rgba(5, 150, 105, 0.25)",
-                      }}
-                    >
-                      Complete Production
-                    </Button>
-                  </Box>
-                </Box>
-              ) : record.status === "Completed" ? (
-                <CenteredStateCard
-                  icon={<EmojiEventsOutlinedIcon sx={{ fontSize: 28 }} />}
-                  iconBg="#ECFDF5"
-                  iconColor="#059669"
-                  title="Production Completed"
-                  description="Consumption has been logged and this run is fully wrapped up. See the Consumption Entry tab for the full breakdown."
-                />
-              ) : (
-                <CenteredStateCard
-                  icon={<PlayCircleIcon sx={{ fontSize: 28 }} />}
-                  title="Not In Progress Yet"
-                  description="Start production from the Initiate Production tab first."
-                />
-              )}
-            </Box>
-          )}
-
-          {activeTab === "consumption_entry" && (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {consumptionEntries.length ? (
-                consumptionEntries.map((entry) => (
-                  <Paper key={entry.id} variant="outlined" sx={{ borderRadius: "14px", overflow: "hidden" }}>
-                    <Box
-                      sx={{
-                        px: 2.5,
-                        py: 1.75,
-                        bgcolor: "#ECFDF5",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        flexWrap: "wrap",
-                        gap: 1,
-                      }}
-                    >
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                        <TaskAltIcon sx={{ color: "#059669" }} />
-                        <Box>
-                          <Typography sx={{ fontWeight: 700 }}>{entry.consumptionId}</Typography>
-                          <Typography sx={{ fontSize: 12, color: "#64748B" }}>{entry.date}</Typography>
-                        </Box>
-                      </Box>
-                      {entry.remarks && (
-                        <Typography sx={{ fontSize: 13, color: "#475569", fontStyle: "italic" }}>
-                          "{entry.remarks}"
-                        </Typography>
-                      )}
-                    </Box>
-
-                    <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2.5 }}>
-                      {entry.finishedGoods.length > 0 && (
-                        <Box>
-                          <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>Finished Goods</Typography>
-                          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
-                                  <TableCell>Item</TableCell>
-                                  <TableCell align="right">Target</TableCell>
-                                  <TableCell align="right">Produced</TableCell>
-                                  <TableCell align="right">Scrap</TableCell>
-                                  <TableCell>Batch No</TableCell>
-                                  <TableCell>Expiry</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {entry.finishedGoods.map((fg) => (
-                                  <TableRow key={fg.id}>
-                                    <TableCell>{fg.itemName}</TableCell>
-                                    <TableCell align="right">{fg.targetQuantity}</TableCell>
-                                    <TableCell align="right">{fg.producedQuantity}</TableCell>
-                                    <TableCell align="right">{fg.scrapQuantity}</TableCell>
-                                    <TableCell>{fg.batchNo || "—"}</TableCell>
-                                    <TableCell>{fg.expiryDate || "—"}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableContainer>
-                        </Box>
-                      )}
-
-                      {entry.rawMaterials.length > 0 && (
-                        <Box>
-                          <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>
-                            Raw Materials Consumed
-                          </Typography>
-                          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F8FAFC" } }}>
-                                  <TableCell>Raw Material</TableCell>
-                                  <TableCell>UOM</TableCell>
-                                  <TableCell align="right">Allocated</TableCell>
-                                  <TableCell align="right">Consumed</TableCell>
-                                  <TableCell align="right">Scrap</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {entry.rawMaterials.map((rm) => (
-                                  <TableRow key={rm.id}>
-                                    <TableCell>{rm.productName}</TableCell>
-                                    <TableCell>{rm.uom}</TableCell>
-                                    <TableCell align="right">{rm.allocatedQuantity}</TableCell>
-                                    <TableCell align="right">{rm.consumedQuantity}</TableCell>
-                                    <TableCell align="right">{rm.scrapQuantity}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableContainer>
-                        </Box>
-                      )}
-                    </Box>
-                  </Paper>
-                ))
-              ) : (
-                <CenteredStateCard
-                  icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
-                  title="No Consumption Entries Yet"
-                  description="Once production is completed, the logged consumption details will appear here."
-                />
-              )}
-            </Box>
-          )}
-        </Box>
-      </Paper>
+      </Box>
 
       <CreateMrpDialog
         open={mrpDialogOpen}
