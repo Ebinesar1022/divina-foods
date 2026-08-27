@@ -41,6 +41,7 @@ import {
   commitReceivePo,
   fetchEmployees,
   fetchPaymentTerms,
+  fetchTaxTypes,
   fetchProductionOverview,
   fetchSuppliers,
   prepareConsumptionDraft,
@@ -66,6 +67,7 @@ import type {
   MrpRow,
   NonStockItemRow,
   PaymentTermOption,
+  TaxOption,
   ProductionInProgressRow,
   ProductionTargetRow,
   PurchaseOrderDetail,
@@ -190,6 +192,7 @@ export default function ProductionOverview({
   const [createPoCommitting, setCreatePoCommitting] = useState(false);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTermOption[]>([]);
+  const [taxTypes, setTaxTypes] = useState<TaxOption[]>([]);
   const preparingCreatePoRef = useRef(false);
   const committingCreatePoRef = useRef(false);
 
@@ -439,11 +442,13 @@ export default function ProductionOverview({
       prepareCreatePoDraft(data.mrpRecord.id, selectedItems),
       fetchSuppliers(),
       fetchPaymentTerms(),
+      fetchTaxTypes(),
     ])
       .then(function (results) {
         setCreatePoDraft(results[0]);
         setSuppliers(results[1]);
         setPaymentTerms(results[2]);
+        setTaxTypes(results[3]);
       })
       .catch(function (err: any) {
         setCreatePoDraftError((err && err.message) || "Failed to prepare the Purchase Order. Please try again.");
@@ -846,6 +851,8 @@ export default function ProductionOverview({
                                         <TableCell align="right">Received</TableCell>
                                         <TableCell align="right">Unit Price</TableCell>
                                         <TableCell align="right">Line Total</TableCell>
+                                        <TableCell align="right">Tax</TableCell>
+                                        <TableCell align="right">Total</TableCell>
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -856,11 +863,28 @@ export default function ProductionOverview({
                                           <TableCell align="right">{line.receivedQuantity}</TableCell>
                                           <TableCell align="right">{line.unitPrice.toFixed(2)}</TableCell>
                                           <TableCell align="right">{line.lineTotal.toFixed(2)}</TableCell>
+                                          <TableCell align="right">
+                                            {line.taxAmount > 0
+                                              ? `${line.taxAmount.toFixed(2)} (${line.taxPercentage}%)`
+                                              : "—"}
+                                          </TableCell>
+                                          <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                            {(line.lineTotal + line.taxAmount).toFixed(2)}
+                                          </TableCell>
                                         </TableRow>
                                       ))}
                                     </TableBody>
                                   </Table>
                                 </TableContainer>
+                                <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
+                                  <Typography sx={{ fontSize: 13, color: "#64748B" }}>
+                                    Sub Total {po.subTotal.toFixed(2)} &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
+                                    &nbsp;·&nbsp;{" "}
+                                  </Typography>
+                                  <Typography sx={{ fontSize: 13, fontWeight: 700, ml: 0.5 }}>
+                                    Grand Total {po.grandTotal.toFixed(2)}
+                                  </Typography>
+                                </Box>
                               </Paper>
                             );
                           })}
@@ -1216,6 +1240,7 @@ export default function ProductionOverview({
         commitError={createPoCommitError}
         suppliers={suppliers}
         paymentTerms={paymentTerms}
+        taxTypes={taxTypes}
         onDraftChange={setCreatePoDraft}
         onCancel={handleCancelCreatePoDraft}
         onConfirm={handleConfirmCreatePo}

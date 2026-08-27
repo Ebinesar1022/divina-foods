@@ -30,6 +30,7 @@ import type {
   ReceivePoDraft,
   StartProductionDetails,
   SupplierOption,
+  TaxOption,
 } from "../types";
 
 declare global {
@@ -88,6 +89,7 @@ export const CONFIG = {
   RECEIVE_ITEMS_REPORT: "Receive_Items_Report",
   SUPPLIER_REPORT: "Supplier_Report",
   PAYMENT_TERM_REPORT: "Payment_Term_Report",
+  TAX_MASTER_REPORT: "Tax_Master_Report",
 
   // Confirmed against the app's .ds export (Divina_Foods_5.ds) —
   // Consumption_Entry's two grids (Finished_Good, Raw_Material_Consumptions)
@@ -337,6 +339,18 @@ export function fetchPaymentTerms(): Promise<PaymentTermOption[]> {
   });
 }
 
+export function fetchTaxTypes(): Promise<TaxOption[]> {
+  return getRecords(CONFIG.TAX_MASTER_REPORT, `Status == "Active"`).then(function (rows) {
+    return rows.map(function (r: any) {
+      return {
+        id: display(r.ID),
+        name: display(r.Tax_Name),
+        rate: parseFloat(display(r.Tax_Rate)) || 0,
+      };
+    });
+  });
+}
+
 // ───────────── Create Purchase Order: draft → commit ─────────────
 
 function generatePoNumber(sequenceRow: any): string {
@@ -381,6 +395,8 @@ export function prepareCreatePoDraft(
           neededQuantity: item.neededQuantity,
           orderQuantity: item.neededQuantity,
           unitPrice: 0,
+          taxTypeId: "",
+          taxPercentage: 0,
         };
       }),
       sequenceRowId: sequenceRow.ID,
@@ -396,6 +412,27 @@ export function prepareCreatePoDraft(
 // which is out of scope — same boundary as every other zoho.inventory.*
 // call in this app).
 export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: string; poNumber: string }> {
+  // Mirrors the native line-item workflows (Calculate Unit Price / Get Tax
+  // Amount): Line_Total is pre-tax (Order Qty × Unit Price), Tax_Amount is
+  // Line_Total × Tax_Percentage / 100, and the header's Sub_Total/Tax_Amount/
+  // Grand_Total are just the sums of those across every line.
+  const computedLines = draft.lines.map(function (line) {
+    const lineTotal = roundQty(line.orderQuantity * line.unitPrice);
+    const taxAmount = roundQty((lineTotal * line.taxPercentage) / 100);
+    return { line: line, lineTotal: lineTotal, taxAmount: taxAmount };
+  });
+  const subTotal = roundQty(
+    computedLines.reduce(function (sum, l) {
+      return sum + l.lineTotal;
+    }, 0)
+  );
+  const taxTotal = roundQty(
+    computedLines.reduce(function (sum, l) {
+      return sum + l.taxAmount;
+    }, 0)
+  );
+  const grandTotal = roundQty(subTotal + taxTotal);
+
   return addRecord(CONFIG.PURCHASE_ORDER_FORM, {
     PO_Number: draft.poNumber,
     PO_Date: formatDateStringForZoho(draft.poDate),
@@ -407,23 +444,34 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
   }).then(function (poRecord) {
     const poRecordId: string = display(poRecord.ID);
 
-    return runSequentially(draft.lines, function (line) {
-      const lineTotal = roundQty(line.orderQuantity * line.unitPrice);
-      return addRecord(CONFIG.PO_LINE_ITEMS_FORM, {
+    return runSequentially(computedLines, function (entry) {
+      const line = entry.line;
+      const payload: Record<string, any> = {
         PO_Number: poRecordId,
         Product: line.productId,
         UOM: line.uomId,
         Needed_Quantity: line.neededQuantity,
         Order_Qty: line.orderQuantity,
         Unit_Price: line.unitPrice,
-        Line_Total: lineTotal,
-      });
+        Line_Total: entry.lineTotal,
+        Tax_Percentage: line.taxPercentage,
+        Tax_Amount: entry.taxAmount,
+      };
+      if (line.taxTypeId) payload.Tax_Type = line.taxTypeId;
+      return addRecord(CONFIG.PO_LINE_ITEMS_FORM, payload);
     })
       .then(function () {
         return runSequentially(draft.lines, function (line) {
           return updateRecord(CONFIG.NON_STOCK_ITEMS_REPORT, line.nonStockItemId, {
             Status: "PO Created",
           });
+        });
+      })
+      .then(function () {
+        return updateRecord(CONFIG.PURCHASE_ORDER_REPORT, poRecordId, {
+          Sub_Total: subTotal,
+          Tax_Amount: taxTotal,
+          Grand_Total: grandTotal,
         });
       })
       .then(function () {
@@ -453,6 +501,8 @@ export function fetchPurchaseOrdersForMrp(mrpRecordId: string): Promise<Purchase
             orderQuantity: parseFloat(display(line.Order_Qty)) || 0,
             receivedQuantity: parseFloat(display(line.Received_Qty)) || 0,
             unitPrice: parseFloat(display(line.Unit_Price)) || 0,
+            taxPercentage: parseFloat(display(line.Tax_Percentage)) || 0,
+            taxAmount: parseFloat(display(line.Tax_Amount)) || 0,
             lineTotal: parseFloat(display(line.Line_Total)) || 0,
           };
         });
@@ -464,6 +514,8 @@ export function fetchPurchaseOrdersForMrp(mrpRecordId: string): Promise<Purchase
           supplierId: lookupId(r.Supplier_Name),
           supplierName: formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Name),
           status: display(r.Status) || "Not Received",
+          subTotal: parseFloat(display(r.Sub_Total)) || 0,
+          taxAmount: parseFloat(display(r.Tax_Amount)) || 0,
           grandTotal: parseFloat(display(r.Grand_Total)) || 0,
           lines: lines,
         };

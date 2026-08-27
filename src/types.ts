@@ -63,6 +63,12 @@ export interface PaymentTermOption {
   name: string;
 }
 
+export interface TaxOption {
+  id: string;
+  name: string;
+  rate: number; // percentage, e.g. 5 for 5%
+}
+
 // One PO_Line_Items row.
 export interface PoLineRow {
   id: string;
@@ -72,6 +78,8 @@ export interface PoLineRow {
   orderQuantity: number;
   receivedQuantity: number;
   unitPrice: number;
+  taxPercentage: number;
+  taxAmount: number;
   lineTotal: number;
 }
 
@@ -86,6 +94,8 @@ export interface PurchaseOrderDetail {
   supplierId: string;
   supplierName: string;
   status: string; // "Not Received" | "Partially Received" | "Received"
+  subTotal: number;
+  taxAmount: number;
   grandTotal: number;
   lines: PoLineRow[];
 }
@@ -101,6 +111,8 @@ export interface PoLineDraftRow {
   neededQuantity: number;
   orderQuantity: number;
   unitPrice: number;
+  taxTypeId: string; // "" = no tax on this line
+  taxPercentage: number; // auto-filled from the selected tax type, editable
 }
 
 export interface CreatePoDraft {
