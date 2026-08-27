@@ -575,12 +575,11 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
   });
 }
 
-// ⚠️ Fill these in once the "ProcessPurchaseReceive" Custom API is
-// published (Settings → APIs, same drill as UpdateWarehouse).
+// Published as "UpdatePR" in Microservices (function: ProcessPurchaseReceive).
 const PROCESS_PURCHASE_RECEIVE_API = {
-  api_name: "ProcessPurchaseReceive",
+  api_name: "UpdatePR",
   workspace_name: "info_divinafoodco",
-  public_key: "",
+  public_key: "dq5NsNjaEPBpSQ4z9fgH9mp7x",
 };
 
 function processPurchaseReceive(receiveRecordId: string): Promise<any> {
