@@ -321,49 +321,50 @@ export function fetchConsumptionEntries(productionTargetRecordId: string): Promi
   const criteria = `Production_Target == ${productionTargetRecordId}`;
   return getRecords(CONFIG.CONSUMPTION_ENTRY_REPORT, criteria)
     .then(function (rows) {
-      return Promise.all(
-        rows.map(function (r: any) {
-          const entryId = display(r.ID);
-          return Promise.all([
-            getRecords(CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT, `Consumption_Entry == ${entryId}`),
-            getRecords(CONFIG.CONSUMPTION_ITEMS_REPORT, `Consumption_ID == ${entryId}`),
-          ]).then(function (sub) {
-            const finishedGoods = sub[0].map(function (fg: any) {
-              return {
-                id: display(fg.ID),
-                itemId: lookupId(fg.Finished_Good),
-                itemName: display(fg.Finished_Good),
-                uom: "",
-                targetQuantity: parseFloat(display(fg.Target_Quantity)) || 0,
-                producedQuantity: parseFloat(display(fg.Produced_Quantity)) || 0,
-                scrapQuantity: parseFloat(display(fg.Scrap_Quantity)) || 0,
-                batchNo: display(fg.Batch_No),
-                expiryDate: display(fg.Expiry_Date),
-              };
-            });
-            const rawMaterials = sub[1].map(function (rm: any) {
-              return {
-                id: display(rm.ID),
-                productId: lookupId(rm.Raw_Material),
-                productName: display(rm.Raw_Material),
-                uom: display(rm.UOM),
-                allocatedQuantity: parseFloat(display(rm.Allocated_Quantity)) || 0,
-                consumedQuantity: parseFloat(display(rm.Consumed_Quantity)) || 0,
-                scrapQuantity: parseFloat(display(rm.Scrap_Quantity)) || 0,
-              };
-            });
+      // Sequential (not Promise.all) — see runSequentially's comment:
+      // enough entries fired at once trips Creator's cap on simultaneous
+      // in-flight API calls (code 2955).
+      return runSequentially(rows, function (r: any) {
+        const entryId = display(r.ID);
+        return Promise.all([
+          getRecords(CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT, `Consumption_Entry == ${entryId}`),
+          getRecords(CONFIG.CONSUMPTION_ITEMS_REPORT, `Consumption_ID == ${entryId}`),
+        ]).then(function (sub) {
+          const finishedGoods = sub[0].map(function (fg: any) {
             return {
-              id: entryId,
-              consumptionId: display(r.Consumption_ID),
-              productionTargetId: display(r.Production_Target),
-              date: display(r.Date_field),
-              remarks: display(r.Remarks),
-              finishedGoods: finishedGoods,
-              rawMaterials: rawMaterials,
+              id: display(fg.ID),
+              itemId: lookupId(fg.Finished_Good),
+              itemName: display(fg.Finished_Good),
+              uom: "",
+              targetQuantity: parseFloat(display(fg.Target_Quantity)) || 0,
+              producedQuantity: parseFloat(display(fg.Produced_Quantity)) || 0,
+              scrapQuantity: parseFloat(display(fg.Scrap_Quantity)) || 0,
+              batchNo: display(fg.Batch_No),
+              expiryDate: display(fg.Expiry_Date),
             };
           });
-        })
-      );
+          const rawMaterials = sub[1].map(function (rm: any) {
+            return {
+              id: display(rm.ID),
+              productId: lookupId(rm.Raw_Material),
+              productName: display(rm.Raw_Material),
+              uom: display(rm.UOM),
+              allocatedQuantity: parseFloat(display(rm.Allocated_Quantity)) || 0,
+              consumedQuantity: parseFloat(display(rm.Consumed_Quantity)) || 0,
+              scrapQuantity: parseFloat(display(rm.Scrap_Quantity)) || 0,
+            };
+          });
+          return {
+            id: entryId,
+            consumptionId: display(r.Consumption_ID),
+            productionTargetId: display(r.Production_Target),
+            date: display(r.Date_field),
+            remarks: display(r.Remarks),
+            finishedGoods: finishedGoods,
+            rawMaterials: rawMaterials,
+          };
+        });
+      });
     })
     .then(function (entries) {
       return entries.sort(function (a, b) {
@@ -451,7 +452,10 @@ function fetchStockOnHand(productId: string): Promise<number> {
 // duplicate raw materials across multiple finished-good lines, then compares
 // the aggregated requirement to current stock to work out what's short.
 function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promise<RawMaterialNeedRow[]> {
-  const bomPromises = finishedGoods.map(function (fg) {
+  // Sequential (not Promise.all) — see runSequentially's comment: enough
+  // finished goods/raw materials fired at once trips Creator's cap on
+  // simultaneous in-flight API calls (code 2955).
+  return runSequentially(finishedGoods, function (fg) {
     return fetchBomItemsForProduct(fg.itemId).then(function (bomItems) {
       return bomItems.map(function (item) {
         return {
@@ -462,9 +466,7 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
         };
       });
     });
-  });
-
-  return Promise.all(bomPromises).then(function (perFinishedGood) {
+  }).then(function (perFinishedGood) {
     const aggregated = new Map<string, { productId: string; productName: string; uom: string; stockRequired: number }>();
 
     perFinishedGood.forEach(function (lines) {
@@ -485,11 +487,9 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
 
     const aggregatedList = Array.from(aggregated.values());
 
-    return Promise.all(
-      aggregatedList.map(function (rm) {
-        return fetchStockOnHand(rm.productId);
-      })
-    ).then(function (stockLevels) {
+    return runSequentially(aggregatedList, function (rm) {
+      return fetchStockOnHand(rm.productId);
+    }).then(function (stockLevels) {
       return aggregatedList.map(function (rm, index) {
         const stockOnHand = stockLevels[index];
         const allocateQuantity = Math.min(stockOnHand, rm.stockRequired);
@@ -657,43 +657,47 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
     // copied over, MRP_ID set), rather than re-linking the rows already
     // attached to the Production Target — those stay exactly as they
     // were, under Production_Target_ID only.
-    const finishedGoodInserts = draft.finishedGoods.map(function (fg) {
+    //
+    // Sequential (not Promise.all) — see runSequentially's comment: enough
+    // finished goods/raw materials fired at once trips Creator's cap on
+    // simultaneous in-flight API calls (code 2955).
+    return runSequentially(draft.finishedGoods, function (fg) {
       return addRecord(CONFIG.FINISHED_GOODS_FORM, {
         MRP_ID: mrpRecordId,
         Item: fg.itemId,
         UOM: fg.uomId,
         Target_Quantity: fg.targetQuantity,
       });
-    });
-
-    const rawMaterialInserts = draft.rawMaterials.map(function (rm) {
-      return addRecord(CONFIG.RAW_MATERIALS_FORM, {
-        MRP_ID: mrpRecordId,
-        Product_Name: rm.productId,
-        UOM: rm.uom,
-        Stock_On_hand: rm.stockOnHand,
-        Stock_Required: rm.stockRequired,
-        Allocate_Quantity: rm.allocateQuantity,
-        Needed_Quantity: rm.neededQuantity,
-        Status: rm.status,
-      });
-    });
-
-    const productionTargetUpdate = updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
-      Status: productionTargetStatus,
-    });
-
-    return Promise.all(finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate])).then(
-      function () {
-        return bumpMrpSequence(draft.sequenceRowId, draft.sequenceMrpNo).then(function () {
-          return {
-            mrpRecordId: mrpRecordId,
-            mrpId: draft.mrpId,
-            rawMaterials: draft.rawMaterials,
-          };
+    })
+      .then(function () {
+        return runSequentially(draft.rawMaterials, function (rm) {
+          return addRecord(CONFIG.RAW_MATERIALS_FORM, {
+            MRP_ID: mrpRecordId,
+            Product_Name: rm.productId,
+            UOM: rm.uom,
+            Stock_On_hand: rm.stockOnHand,
+            Stock_Required: rm.stockRequired,
+            Allocate_Quantity: rm.allocateQuantity,
+            Needed_Quantity: rm.neededQuantity,
+            Status: rm.status,
+          });
         });
-      }
-    );
+      })
+      .then(function () {
+        return updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
+          Status: productionTargetStatus,
+        });
+      })
+      .then(function () {
+        return bumpMrpSequence(draft.sequenceRowId, draft.sequenceMrpNo);
+      })
+      .then(function () {
+        return {
+          mrpRecordId: mrpRecordId,
+          mrpId: draft.mrpId,
+          rawMaterials: draft.rawMaterials,
+        };
+      });
   });
 }
 
