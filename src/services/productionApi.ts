@@ -132,6 +132,28 @@ function getRecords(reportName: string, criteria?: string, maxRecords = 200): Pr
     });
 }
 
+// Zoho Creator enforces a low cap on simultaneous in-flight API calls per
+// session — firing a get/update for every line of a multi-line record
+// (several finished goods, several raw materials, each needing 2-3 lookups
+// plus updates) via Promise.all blows past that cap and every call past it
+// comes back `{ code: 2955, description: "You have reached the maximum
+// number of API calls that can be simultaneously initiated at a time." }`.
+// Chains each item's work with .then() instead, one request at a time.
+function runSequentially<T, R>(items: T[], task: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  return items
+    .reduce(function (chain: Promise<void>, item) {
+      return chain.then(function () {
+        return task(item).then(function (result) {
+          results.push(result);
+        });
+      });
+    }, Promise.resolve())
+    .then(function () {
+      return results;
+    });
+}
+
 // Generic create — every write this widget does (MRP header, Finished_Goods
 // links, Raw_Materials rows) goes through this one function.
 function addRecord(formName: string, data: Record<string, any>): Promise<any> {
@@ -947,73 +969,68 @@ export function prepareConsumptionDraft(
 // raw-material branch deliberately leaves Main_Warehouse_Stock_Details's
 // Available_Stocks untouched (only the finished-good branch recomputes it).
 function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promise<any> {
-  const finishedGoodUpdates = draft.finishedGoods.map(function (fg): Promise<any[]> {
+  return runSequentially(draft.finishedGoods, function (fg): Promise<any[]> {
     if (!fg.itemId) return Promise.resolve([]);
-    return Promise.all([
-      getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`),
-      getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`),
-    ]).then(function (results) {
-      const scrapRows = results[0];
-      const mainRows = results[1];
+    return getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`).then(function (
+      scrapRows
+    ) {
       if (!scrapRows.length) return Promise.resolve([]);
-
-      const updates = scrapRows
-        .map(function (row: any) {
+      return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${fg.itemId}`).then(function (
+        mainRows
+      ) {
+        return runSequentially(scrapRows, function (row: any) {
           return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, row.ID, {
             Scrap_Quantity: (parseFloat(display(row.Scrap_Quantity)) || 0) + fg.scrapQuantity,
           });
-        })
-        .concat(
-          mainRows.map(function (row: any) {
+        }).then(function () {
+          return runSequentially(mainRows, function (row: any) {
             const newStockOnHand = (parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity;
             return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, row.ID, {
               Stock_On_Hand: newStockOnHand,
               Available_Stocks: newStockOnHand,
             });
-          })
-        );
-      return Promise.all(updates);
-    });
-  });
-
-  const rawMaterialUpdates = draft.rawMaterials.map(function (rm): Promise<any[]> {
-    if (!rm.productId) return Promise.resolve([]);
-    return Promise.all([
-      getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`),
-      getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`),
-      getRecords(CONFIG.PRODUCTION_STOCK_REPORT, `Product_Master == ${rm.productId}`),
-    ]).then(function (results) {
-      const scrapRows = results[0];
-      const mainRows = results[1];
-      const productionRows = results[2];
-      if (!scrapRows.length) return Promise.resolve([]);
-
-      const updates = mainRows
-        .map(function (row: any) {
-          return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, row.ID, {
-            Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
-            Stock_On_Hand: (parseFloat(display(row.Stock_On_Hand)) || 0) - rm.allocatedQuantity,
           });
-        })
-        .concat(
-          productionRows.map(function (row: any) {
-            return updateRecord(CONFIG.PRODUCTION_STOCK_REPORT, row.ID, {
-              Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
-            });
-          })
-        )
-        .concat(
-          scrapRows.map(function (row: any) {
-            return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, row.ID, {
-              Scrap_Quantity: (parseFloat(display(row.Scrap_Quantity)) || 0) + rm.scrapQuantity,
-            });
-          })
-        );
-      return Promise.all(updates);
+        });
+      });
+    });
+  }).then(function () {
+    return runSequentially(draft.rawMaterials, function (rm): Promise<any[]> {
+      if (!rm.productId) return Promise.resolve([]);
+      return getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`).then(function (
+        scrapRows
+      ) {
+        if (!scrapRows.length) return Promise.resolve([]);
+        return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, `Product_Master == ${rm.productId}`).then(function (
+          mainRows
+        ) {
+          return getRecords(CONFIG.PRODUCTION_STOCK_REPORT, `Product_Master == ${rm.productId}`).then(function (
+            productionRows
+          ) {
+            return runSequentially(mainRows, function (row: any) {
+              return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, row.ID, {
+                Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
+                Stock_On_Hand: (parseFloat(display(row.Stock_On_Hand)) || 0) - rm.allocatedQuantity,
+              });
+            })
+              .then(function () {
+                return runSequentially(productionRows, function (row: any) {
+                  return updateRecord(CONFIG.PRODUCTION_STOCK_REPORT, row.ID, {
+                    Committed_Stocks: (parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity,
+                  });
+                });
+              })
+              .then(function () {
+                return runSequentially(scrapRows, function (row: any) {
+                  return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, row.ID, {
+                    Scrap_Quantity: (parseFloat(display(row.Scrap_Quantity)) || 0) + rm.scrapQuantity,
+                  });
+                });
+              });
+          });
+        });
+      });
     });
   });
-
-  return Promise.all(finishedGoodUpdates.concat(rawMaterialUpdates));
 }
 
 // Writes a confirmed draft: the Consumption_Entry header, its two subform
@@ -1031,7 +1048,12 @@ export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<Co
   }).then(function (entryRecord) {
     const entryId: string = display(entryRecord.ID);
 
-    const finishedGoodInserts = draft.finishedGoods.map(function (fg) {
+    // Every step below is chained sequentially (not fired in parallel via
+    // Promise.all) — see runSequentially's comment: a multi-line entry
+    // (several finished goods + several raw materials, each needing its own
+    // insert/lookup/update calls) fired all at once trips Zoho Creator's cap
+    // on simultaneous in-flight API calls (code 2955).
+    return runSequentially(draft.finishedGoods, function (fg) {
       const payload: Record<string, any> = {
         Consumption_Entry: entryId,
         Finished_Good: fg.itemId,
@@ -1042,46 +1064,45 @@ export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<Co
       if (fg.batchNo) payload.Batch_No = fg.batchNo;
       if (fg.expiryDate) payload.Expiry_Date = formatDateStringForZoho(fg.expiryDate);
       return addRecord(CONFIG.FINISHED_GOODS_CONSUMPTIONS_FORM, payload);
-    });
-
-    const rawMaterialInserts = draft.rawMaterials.map(function (rm) {
-      return addRecord(CONFIG.CONSUMPTION_ITEMS_FORM, {
-        Consumption_ID: entryId,
-        Raw_Material: rm.productId,
-        UOM: rm.uom,
-        Allocated_Quantity: rm.allocatedQuantity,
-        Consumed_Quantity: rm.consumedQuantity,
-        Scrap_Quantity: rm.scrapQuantity,
-      });
-    });
-
-    const productionTargetUpdate = updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
-      Status: "Completed" as ProductionTargetStatus,
-    });
-
-    const warehouseStockUpdate = updateWarehouseStockForConsumption(draft);
-
-    return Promise.all(
-      finishedGoodInserts.concat(rawMaterialInserts).concat([productionTargetUpdate, warehouseStockUpdate])
-    ).then(
-      function () {
-        return bumpConsumptionSequence(draft.sequenceRowId, draft.sequenceConsumptionNo).then(function () {
-          return {
-            id: entryId,
-            consumptionId: draft.consumptionId,
-            productionTargetId: draft.productionTargetId,
-            date: formatDateStringForZoho(draft.date),
-            remarks: draft.remarks,
-            finishedGoods: draft.finishedGoods.map(function (fg) {
-              return { id: "", ...fg };
-            }),
-            rawMaterials: draft.rawMaterials.map(function (rm) {
-              return { id: "", ...rm };
-            }),
-          };
+    })
+      .then(function () {
+        return runSequentially(draft.rawMaterials, function (rm) {
+          return addRecord(CONFIG.CONSUMPTION_ITEMS_FORM, {
+            Consumption_ID: entryId,
+            Raw_Material: rm.productId,
+            UOM: rm.uom,
+            Allocated_Quantity: rm.allocatedQuantity,
+            Consumed_Quantity: rm.consumedQuantity,
+            Scrap_Quantity: rm.scrapQuantity,
+          });
         });
-      }
-    );
+      })
+      .then(function () {
+        return updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
+          Status: "Completed" as ProductionTargetStatus,
+        });
+      })
+      .then(function () {
+        return updateWarehouseStockForConsumption(draft);
+      })
+      .then(function () {
+        return bumpConsumptionSequence(draft.sequenceRowId, draft.sequenceConsumptionNo);
+      })
+      .then(function () {
+        return {
+          id: entryId,
+          consumptionId: draft.consumptionId,
+          productionTargetId: draft.productionTargetId,
+          date: formatDateStringForZoho(draft.date),
+          remarks: draft.remarks,
+          finishedGoods: draft.finishedGoods.map(function (fg) {
+            return { id: "", ...fg };
+          }),
+          rawMaterials: draft.rawMaterials.map(function (rm) {
+            return { id: "", ...rm };
+          }),
+        };
+      });
   });
 }
 
