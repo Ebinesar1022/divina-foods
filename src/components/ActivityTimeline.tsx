@@ -2,15 +2,9 @@ import * as React from "react";
 import { Box, Paper, Typography } from "@mui/material";
 import * as Icons from "@mui/icons-material";
 import CheckIcon from "@mui/icons-material/Check";
-import RemoveIcon from "@mui/icons-material/Remove";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { STAGES, stepState } from "../config/stages.config";
 import type { ConsumptionEntryRow, MrpRow, ProcurementRow, ProductionTargetRow } from "../types";
-
-// Purely presentational — every value here is already sitting in the
-// Production Overview page's own state (record/mrpRecord/procurementRecords/
-// consumptionEntries) and the same stepState()/STAGES config PipelineStepper
-// already uses. No new fetching, no new business rules.
 
 interface ActivityTimelineProps {
   currentIndex: number;
@@ -29,18 +23,18 @@ const STATE_LABEL: Record<string, string> = {
   skipped: "Skipped",
 };
 
-const STATE_PILL_COLOR: Record<string, string> = {
-  Completed: "#10B981",
-  "In Progress": "#2563EB",
-  Upcoming: "#94A3B8",
-  Skipped: "#94A3B8",
+const STATE_PILL_STYLE: Record<string, { bg: string; color: string; border: string }> = {
+  Completed: { bg: "#ECFDF5", color: "#059669", border: "#A7F3D0" },
+  "In Progress": { bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
+  Upcoming: { bg: "#F8FAFC", color: "#64748B", border: "#E2E8F0" },
+  Skipped: { bg: "#F8FAFC", color: "#94A3B8", border: "#E2E8F0" },
 };
 
-const STATE_NODE_STYLE: Record<string, { bg: string; border: string; fg: string }> = {
-  done: { bg: "#10b981", border: "#10b981", fg: "#ffffff" },
-  active: { bg: "#2563eb", border: "#2563eb", fg: "#ffffff" },
-  pending: { bg: "#ffffff", border: "#cbd5e1", fg: "#94a3b8" },
-  skipped: { bg: "#f1f5f9", border: "#cbd5e1", fg: "#94a3b8" },
+const STATE_NODE_STYLE: Record<string, { bg: string; border: string; fg: string; shadow?: string }> = {
+  done: { bg: "#ECFDF5", border: "#10B981", fg: "#059669", shadow: "0 2px 8px rgba(16, 185, 129, 0.15)" },
+  active: { bg: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)", border: "#2563eb", fg: "#ffffff", shadow: "0 4px 12px rgba(37, 99, 235, 0.25)" },
+  pending: { bg: "#ffffff", border: "#e2e8f0", fg: "#94a3b8", shadow: "none" },
+  skipped: { bg: "#f8fafc", border: "#cbd5e1", fg: "#94a3b8", shadow: "none" },
 };
 
 function StageIcon({ iconName, sx }: { iconName: string; sx?: object }) {
@@ -90,10 +84,35 @@ export default function ActivityTimeline({
   consumptionEntries,
 }: ActivityTimelineProps) {
   return (
-    <Paper elevation={0} sx={{ borderRadius: "16px", p: { xs: 2, md: 2.5 }, height: "100%" }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2.5 }}>
-        <AccessTimeIcon sx={{ color: "#2563eb", fontSize: 20 }} />
-        <Typography sx={{ fontWeight: 700, fontSize: 15 }}>Activity Timeline</Typography>
+    <Paper
+      elevation={0}
+      sx={{
+        borderRadius: "16px",
+        p: { xs: 2, sm: 2.5 },
+        height: "100%",
+        border: "1px solid #E2E8F0",
+        bgcolor: "#FFFFFF",
+        boxShadow: "0 2px 12px rgba(15, 23, 42, 0.04)",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 3 }}>
+        <Box
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: "8px",
+            bgcolor: "#EFF6FF",
+            color: "#2563EB",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <AccessTimeIcon sx={{ fontSize: 18 }} />
+        </Box>
+        <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>
+          Activity Timeline
+        </Typography>
       </Box>
 
       <Box>
@@ -101,70 +120,98 @@ export default function ActivityTimeline({
           const state = stepState(index, currentIndex, isFullyComplete, procurementSkipped);
           const nodeStyle = STATE_NODE_STYLE[state];
           const label = STATE_LABEL[state];
+          const pillStyle = STATE_PILL_STYLE[label] || STATE_PILL_STYLE.Upcoming;
           const isLast = index === STAGES.length - 1;
+          const isDone = state === "done";
           const subtext = subtextFor(stage.key, state, record, mrpRecord, procurementRecords, consumptionEntries);
 
           return (
-            <Box key={stage.key} sx={{ display: "flex", gap: 1.5 }}>
+            <Box key={stage.key} sx={{ display: "flex", gap: 1.75 }}>
               {/* Node + connector column */}
               <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <Box
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: "50%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    bgcolor: nodeStyle.bg,
-                    border: `2px solid ${nodeStyle.border}`,
-                    flexShrink: 0,
-                  }}
-                >
-                  {state === "done" ? (
-                    <CheckIcon sx={{ color: nodeStyle.fg, fontSize: 16 }} />
-                  ) : state === "skipped" ? (
-                    <RemoveIcon sx={{ color: nodeStyle.fg, fontSize: 14 }} />
-                  ) : (
-                    <StageIcon iconName={stage.iconName} sx={{ color: nodeStyle.fg, fontSize: 16 }} />
+                {/* Main Node with Top-Right Completed Badge */}
+                <Box sx={{ position: "relative", flexShrink: 0 }}>
+                  <Box
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: nodeStyle.bg,
+                      border: `2px solid ${nodeStyle.border}`,
+                      boxShadow: nodeStyle.shadow,
+                    }}
+                  >
+                    <StageIcon
+                      iconName={stage.iconName}
+                      sx={{ color: nodeStyle.fg, fontSize: 18 }}
+                    />
+                  </Box>
+
+                  {/* Top-Right Badge: Only shown if state === 'done' */}
+                  {isDone && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: -3,
+                        right: -3,
+                        width: 15,
+                        height: 15,
+                        borderRadius: "50%",
+                        bgcolor: "#10b981",
+                        border: "1.5px solid #ffffff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 1px 4px rgba(16, 185, 129, 0.4)",
+                        zIndex: 2,
+                      }}
+                    >
+                      <CheckIcon sx={{ color: "#ffffff", fontSize: 10, stroke: "#ffffff", strokeWidth: 0.5 }} />
+                    </Box>
                   )}
                 </Box>
+
                 {!isLast && (
                   <Box
                     sx={{
                       width: 2,
                       flex: 1,
-                      minHeight: 28,
+                      minHeight: 32,
                       bgcolor: state === "done" ? "#10b981" : "#e2e8f0",
-                      my: 0.5,
+                      my: 0.75,
+                      borderRadius: "999px",
                     }}
                   />
                 )}
               </Box>
 
               {/* Content */}
-              <Box sx={{ flex: 1, minWidth: 0, pb: isLast ? 0 : 2.5 }}>
-                <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+              <Box sx={{ flex: 1, minWidth: 0, pb: isLast ? 0 : 3 }}>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                   <Typography
                     sx={{
                       fontWeight: 700,
                       fontSize: 13.5,
-                      color: state === "done" ? "#059669" : state === "active" ? "#2563eb" : "#0F172A",
+                      color: state === "done" ? "#059669" : state === "active" ? "#2563eb" : "#1e293b",
                     }}
                   >
                     {stage.label}
                   </Typography>
                   <Box
                     sx={{
-                      px: 1,
+                      px: 1.1,
                       py: 0.25,
                       borderRadius: "999px",
                       fontSize: 10.5,
                       fontWeight: 700,
                       flexShrink: 0,
                       whiteSpace: "nowrap",
-                      color: STATE_PILL_COLOR[label],
-                      bgcolor: `${STATE_PILL_COLOR[label]}18`,
+                      color: pillStyle.color,
+                      bgcolor: pillStyle.bg,
+                      border: `1px solid ${pillStyle.border}`,
                     }}
                   >
                     {label}
@@ -174,7 +221,7 @@ export default function ActivityTimeline({
                   sx={{
                     fontSize: 12,
                     color: "#64748B",
-                    mt: 0.25,
+                    mt: 0.5,
                     fontStyle: state === "skipped" || state === "pending" ? "italic" : "normal",
                   }}
                 >
@@ -188,3 +235,4 @@ export default function ActivityTimeline({
     </Paper>
   );
 }
+

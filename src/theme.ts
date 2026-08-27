@@ -3,25 +3,38 @@ import { createTheme } from "@mui/material/styles";
 const theme = createTheme({
   typography: {
     fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    h1: { fontWeight: 800 },
-    h2: { fontWeight: 800 },
-    h3: { fontWeight: 700 },
-    h4: { fontWeight: 700 },
-    h5: { fontWeight: 700 },
+    h1: { fontWeight: 800, letterSpacing: "-0.025em" },
+    h2: { fontWeight: 800, letterSpacing: "-0.02em" },
+    h3: { fontWeight: 700, letterSpacing: "-0.015em" },
+    h4: { fontWeight: 700, letterSpacing: "-0.01em" },
+    h5: { fontWeight: 700, letterSpacing: "-0.01em" },
     h6: { fontWeight: 600 },
-    button: { textTransform: "none", fontWeight: 600 },
+    button: { textTransform: "none", fontWeight: 600, letterSpacing: "0.01em" },
   },
   palette: {
     mode: "light",
     primary: {
       main: "#2563eb",
-      light: "#0ea5e9",
-      dark: "#1e3a8a",
+      light: "#3b82f6",
+      dark: "#1d4ed8",
     },
-    success: { main: "#10b981" },
-    error: { main: "#ef4444" },
+    success: {
+      main: "#10b981",
+      light: "#34d399",
+      dark: "#059669",
+    },
+    error: {
+      main: "#ef4444",
+      light: "#f87171",
+      dark: "#dc2626",
+    },
+    warning: {
+      main: "#f59e0b",
+      light: "#fbbf24",
+      dark: "#d97706",
+    },
     background: {
-      default: "#f0f4ff",
+      default: "#f1f5f9",
       paper: "#FFFFFF",
     },
     text: {
@@ -36,9 +49,16 @@ const theme = createTheme({
   components: {
     MuiCssBaseline: {
       styleOverrides: {
-        html: { overflowX: "hidden", scrollBehavior: "smooth" },
+        html: {
+          overflowX: "hidden",
+          scrollBehavior: "smooth",
+          boxSizing: "border-box",
+        },
+        "*, *::before, *::after": {
+          boxSizing: "inherit",
+        },
         body: {
-          backgroundColor: "#f0f4ff",
+          backgroundColor: "#f1f5f9",
           color: "#0F172A",
           overflowX: "hidden",
           WebkitFontSmoothing: "antialiased",
@@ -50,12 +70,32 @@ const theme = createTheme({
           backgroundColor: "rgba(148, 163, 184, 0.4)",
           borderRadius: "999px",
         },
+        "*::-webkit-scrollbar-thumb:hover": {
+          backgroundColor: "rgba(100, 116, 139, 0.6)",
+        },
       },
     },
     MuiPaper: {
-      styleOverrides: { root: { backgroundImage: "none" } },
+      styleOverrides: {
+        root: {
+          backgroundImage: "none",
+          transition: "box-shadow 0.2s ease, border-color 0.2s ease",
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10,
+          boxShadow: "none",
+          "&:hover": {
+            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+          },
+        },
+      },
     },
   },
 });
 
 export default theme;
+
