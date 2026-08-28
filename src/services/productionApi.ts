@@ -138,6 +138,17 @@ function roundQty(value: number): number {
   return Math.round((value + Number.EPSILON) * 10000) / 10000;
 }
 
+// Same IEEE754-noise problem as roundQty, but for currency fields
+// (Unit_Price, Line_Total, Tax_Amount, Sub_Total, Grand_Total). Those are
+// configured in Creator with 2 decimal places, not 4 — rounding tax math
+// (Line_Total * Tax_Percentage / 100) to 4 decimals routinely leaves a
+// 3rd/4th decimal digit (e.g. 9.9998), which Creator rejects the same way
+// with "<Field> has exceeded its maximum digits" (code 3001).
+function roundMoney(value: number): number {
+  if (!isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 // Employee.Employee_Name is a "name"-type field — comes back as
 // { prefix, first_name, last_name, suffix }, matching the displayformat
 // used for Assigned_To lookups elsewhere in the app (Production_Targets,
@@ -417,21 +428,21 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
   // Line_Total × Tax_Percentage / 100, and the header's Sub_Total/Tax_Amount/
   // Grand_Total are just the sums of those across every line.
   const computedLines = draft.lines.map(function (line) {
-    const lineTotal = roundQty(line.orderQuantity * line.unitPrice);
-    const taxAmount = roundQty((lineTotal * line.taxPercentage) / 100);
+    const lineTotal = roundMoney(line.orderQuantity * line.unitPrice);
+    const taxAmount = roundMoney((lineTotal * line.taxPercentage) / 100);
     return { line: line, lineTotal: lineTotal, taxAmount: taxAmount };
   });
-  const subTotal = roundQty(
+  const subTotal = roundMoney(
     computedLines.reduce(function (sum, l) {
       return sum + l.lineTotal;
     }, 0)
   );
-  const taxTotal = roundQty(
+  const taxTotal = roundMoney(
     computedLines.reduce(function (sum, l) {
       return sum + l.taxAmount;
     }, 0)
   );
-  const grandTotal = roundQty(subTotal + taxTotal);
+  const grandTotal = roundMoney(subTotal + taxTotal);
 
   return addRecord(CONFIG.PURCHASE_ORDER_FORM, {
     PO_Number: draft.poNumber,
@@ -452,9 +463,9 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
         UOM: line.uomId,
         Needed_Quantity: line.neededQuantity,
         Order_Qty: line.orderQuantity,
-        Unit_Price: line.unitPrice,
+        Unit_Price: roundMoney(line.unitPrice),
         Line_Total: entry.lineTotal,
-        Tax_Percentage: line.taxPercentage,
+        Tax_Percentage: roundQty(line.taxPercentage),
         Tax_Amount: entry.taxAmount,
       };
       if (line.taxTypeId) payload.Tax_Type = line.taxTypeId;
