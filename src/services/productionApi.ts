@@ -250,34 +250,52 @@ function updateRecord(reportName: string, recordId: string, data: Record<string,
 }
 
 // ───────────── Production Target ─────────────
+function mapProductionTargetRow(r: any): ProductionTargetRow {
+  return {
+    id: r.ID,
+    productionTargetId: display(r.Production_Target_ID),
+    date: display(r.Date_field),
+    assignedTo: display(r.Assigned_To),
+    assignedToId: lookupId(r.Assigned_To),
+    startDate: display(r.Start_Date),
+    endDate: display(r.End_Date),
+    status: display(r.Status) as ProductionTargetRow["status"],
+    notes: display(r.Notes),
+  };
+}
+
 // The widget's own "open_production_over_v1" click action passes the
 // display Production_Target_ID (e.g. "PT-118"), but several of the app's
-// other status-filtered report pages (Waiting for Stock, Ready For
-// Production, Production Inprogress, Completed Production Target, Planned
-// Production Target) wire their "Open Production Overview" click action to
-// input.ID instead — the row's raw Zoho record ID (e.g. 3150000000047136).
-// Both land here as the same production_target_id widget param, so detect
-// which one we got: all-digits means it's the raw record ID (matched
-// unquoted, per Creator's numeric-ID criteria rule), anything else is the
-// display ID (a text field, so quoted). Getting this wrong silently matches
-// zero rows — see the loading-forever guard below for what that used to do.
+// other status-filtered report pages (Ready For Production, Production
+// Inprogress, Completed Production Target, Planned Production Target) wire
+// their "Open Production Overview" click action to input.ID instead — the
+// row's raw Zoho record ID (e.g. 3150000000047136). Both land here as the
+// same production_target_id widget param, so detect which one we got:
+// all-digits means it's the raw record ID (matched unquoted, per Creator's
+// numeric-ID criteria rule), anything else is the display ID (a text
+// field, so quoted).
 export function fetchProductionTarget(productionTargetId: string): Promise<ProductionTargetRow | null> {
   const trimmedId = productionTargetId.trim();
-  const criteria = /^\d+$/.test(trimmedId) ? `ID == ${trimmedId}` : `Production_Target_ID == "${trimmedId}"`;
+  const isRecordId = /^\d+$/.test(trimmedId);
+  const criteria = isRecordId ? `ID == ${trimmedId}` : `Production_Target_ID == "${trimmedId}"`;
   return getRecords(CONFIG.PRODUCTION_TARGET_REPORT, criteria).then(function (rows) {
-    if (!rows.length) return null;
-    const r = rows[0];
-    return {
-      id: r.ID,
-      productionTargetId: display(r.Production_Target_ID),
-      date: display(r.Date_field),
-      assignedTo: display(r.Assigned_To),
-      assignedToId: lookupId(r.Assigned_To),
-      startDate: display(r.Start_Date),
-      endDate: display(r.End_Date),
-      status: display(r.Status) as ProductionTargetRow["status"],
-      notes: display(r.Notes),
-    };
+    if (rows.length) return mapProductionTargetRow(rows[0]);
+    if (!isRecordId) return null;
+
+    // The "Waiting for Stock" report page is built on
+    // Material_Requirement_Planning (filtered to Production_Target.Status
+    // == "Waiting for Stock"), not on Production_Targets — its click
+    // action passes that MRP row's own ID, which will never match a
+    // Production_Targets row. Retry treating the ID as an MRP record and
+    // follow its Production_Target lookup to the real target.
+    return getRecords(CONFIG.MRP_REPORT, `ID == ${trimmedId}`).then(function (mrpRows) {
+      if (!mrpRows.length) return null;
+      const targetRecordId = lookupId(mrpRows[0].Production_Target);
+      if (!targetRecordId) return null;
+      return getRecords(CONFIG.PRODUCTION_TARGET_REPORT, `ID == ${targetRecordId}`).then(function (targetRows) {
+        return targetRows.length ? mapProductionTargetRow(targetRows[0]) : null;
+      });
+    });
   });
 }
 
