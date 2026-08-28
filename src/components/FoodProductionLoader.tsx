@@ -1,56 +1,64 @@
 import { Box, Typography, keyframes } from "@mui/material";
 
-// Keyframe animations for food production dynamics
+// Keyframe animations for gourmet pizza production dynamics
+const pizzaHoverAndSpin = keyframes`
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(180deg); }
+  100% { transform: translateY(0px) rotate(360deg); }
+`;
+
 const steamFloat1 = keyframes`
-  0% { transform: translateY(0) scaleX(1) scaleY(1); opacity: 0; }
-  30% { opacity: 0.75; }
-  100% { transform: translateY(-36px) scaleX(1.4) scaleY(1.2); opacity: 0; }
+  0% { transform: translateY(0) scaleX(1); opacity: 0; }
+  30% { opacity: 0.8; }
+  100% { transform: translateY(-38px) scaleX(1.4) translateX(6px); opacity: 0; }
 `;
 
 const steamFloat2 = keyframes`
   0% { transform: translateY(0) scaleX(1); opacity: 0; }
   40% { opacity: 0.85; }
-  100% { transform: translateY(-42px) scaleX(1.6) translateX(8px); opacity: 0; }
+  100% { transform: translateY(-44px) scaleX(1.6) translateX(-8px); opacity: 0; }
 `;
 
 const steamFloat3 = keyframes`
   0% { transform: translateY(0) scaleX(1); opacity: 0; }
-  35% { opacity: 0.7; }
-  100% { transform: translateY(-38px) scaleX(1.3) translateX(-6px); opacity: 0; }
+  35% { opacity: 0.75; }
+  100% { transform: translateY(-40px) scaleX(1.3) translateX(10px); opacity: 0; }
 `;
 
-const potSimmer = keyframes`
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-1.5px) rotate(-0.8deg); }
-  75% { transform: translateY(1.5px) rotate(0.8deg); }
+const toppingRain1 = keyframes`
+  0% { transform: translateY(-24px) rotate(0deg) scale(0.6); opacity: 0; }
+  30% { opacity: 1; transform: translateY(-6px) rotate(45deg) scale(1); }
+  75% { opacity: 0.95; transform: translateY(14px) rotate(90deg) scale(0.9); }
+  100% { transform: translateY(28px) rotate(135deg) scale(0.4); opacity: 0; }
 `;
 
-const bubblePop = keyframes`
-  0% { transform: translateY(6px) scale(0.3); opacity: 0; }
-  50% { opacity: 0.9; }
-  100% { transform: translateY(-14px) scale(1.1); opacity: 0; }
+const toppingRain2 = keyframes`
+  0% { transform: translateY(-26px) rotate(0deg) scale(0.5); opacity: 0; }
+  35% { opacity: 1; transform: translateY(-4px) rotate(-60deg) scale(1); }
+  80% { opacity: 0.9; transform: translateY(16px) rotate(-120deg) scale(0.85); }
+  100% { transform: translateY(30px) rotate(-180deg) scale(0.3); opacity: 0; }
 `;
 
-const gearSpin = keyframes`
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+const toppingRain3 = keyframes`
+  0% { transform: translateY(-22px) rotate(0deg) scale(0.7); opacity: 0; }
+  25% { opacity: 1; transform: translateY(-2px) rotate(30deg) scale(1); }
+  70% { opacity: 0.9; transform: translateY(18px) rotate(75deg) scale(0.8); }
+  100% { transform: translateY(32px) rotate(110deg) scale(0.3); opacity: 0; }
+`;
+
+const ovenGlowPulse = keyframes`
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.18); opacity: 0.95; }
+`;
+
+const sparkleTwinkle = keyframes`
+  0%, 100% { transform: scale(0.4) rotate(0deg); opacity: 0.2; }
+  50% { transform: scale(1.15) rotate(180deg); opacity: 1; }
 `;
 
 const shimmerBar = keyframes`
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
-`;
-
-const ingredientFloat = keyframes`
-  0% { transform: translateY(-16px) rotate(0deg) scale(0.7); opacity: 0; }
-  30% { opacity: 1; transform: translateY(-4px) rotate(45deg) scale(1); }
-  80% { opacity: 0.9; transform: translateY(12px) rotate(90deg) scale(0.8); }
-  100% { transform: translateY(22px) rotate(120deg) scale(0.4); opacity: 0; }
-`;
-
-const pulseGlow = keyframes`
-  0%, 100% { transform: scale(1); opacity: 0.5; }
-  50% { transform: scale(1.15); opacity: 0.85; }
 `;
 
 interface FoodProductionLoaderProps {
@@ -60,11 +68,11 @@ interface FoodProductionLoaderProps {
 }
 
 export default function FoodProductionLoader({
-  text = "Processing Production Data…",
-  subtext = "Checking inventory stocks & exploding recipe BOMs",
+  text = "Baking Production Batch…",
+  subtext = "Formulating recipes, exploding BOMs & allocating warehouse stock",
   size = "medium",
 }: FoodProductionLoaderProps) {
-  const scale = size === "small" ? 0.75 : size === "large" ? 1.2 : 1;
+  const scale = size === "small" ? 0.78 : size === "large" ? 1.25 : 1;
 
   return (
     <Box
@@ -73,299 +81,314 @@ export default function FoodProductionLoader({
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        py: size === "small" ? 2 : size === "large" ? 8 : 5,
+        py: size === "small" ? 2 : size === "large" ? 7 : 4.5,
         px: 2,
         userSelect: "none",
       }}
     >
-      {/* Visual Animation Container */}
+      {/* Visual Animation Stage Container */}
       <Box
         sx={{
           position: "relative",
-          width: 140 * scale,
-          height: 120 * scale,
+          width: 150 * scale,
+          height: 130 * scale,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           mb: 2.5,
         }}
       >
-        {/* Ambient Radial Glow */}
+        {/* Warm Wood-Fired Stone Oven Ambient Glow */}
         <Box
           sx={{
             position: "absolute",
-            width: 130 * scale,
-            height: 130 * scale,
+            width: 140 * scale,
+            height: 140 * scale,
             borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(37,99,235,0.18) 0%, rgba(14,165,233,0.12) 40%, transparent 70%)",
-            animation: `${pulseGlow} 3s ease-in-out infinite`,
+            background:
+              "radial-gradient(circle, rgba(245,158,11,0.28) 0%, rgba(239,68,68,0.16) 45%, rgba(37,99,235,0.06) 70%, transparent 80%)",
+            animation: `${ovenGlowPulse} 3.2s ease-in-out infinite`,
             zIndex: 0,
           }}
         />
 
-        {/* Industrial / Automation Gear in background */}
+        {/* Floating Oven Baking Sparkles */}
         <Box
           sx={{
             position: "absolute",
-            top: 6 * scale,
-            right: 8 * scale,
-            zIndex: 1,
-            opacity: 0.4,
-            animation: `${gearSpin} 12s linear infinite`,
-            transformOrigin: "center",
-          }}
-        >
-          <svg width={36 * scale} height={36 * scale} viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 15a3 3 0 100-6 3 3 0 000 6z"
-              stroke="#2563eb"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
-              stroke="#2563eb"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Box>
-
-        {/* Small Automation Gear */}
-        <Box
-          sx={{
-            position: "absolute",
-            bottom: 12 * scale,
-            left: 10 * scale,
-            zIndex: 1,
-            opacity: 0.3,
-            animation: `${gearSpin} 8s linear infinite reverse`,
-            transformOrigin: "center",
-          }}
-        >
-          <svg width={26 * scale} height={26 * scale} viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 15a3 3 0 100-6 3 3 0 000 6z"
-              stroke="#0ea5e9"
-              strokeWidth="2"
-            />
-            <path
-              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
-              stroke="#0ea5e9"
-              strokeWidth="2"
-            />
-          </svg>
-        </Box>
-
-        {/* Rising Steam Trails */}
-        <Box
-          sx={{
-            position: "absolute",
-            top: 8 * scale,
-            left: "40%",
+            top: 14 * scale,
+            right: 18 * scale,
             width: 8 * scale,
-            height: 22 * scale,
+            height: 8 * scale,
+            color: "#F59E0B",
+            animation: `${sparkleTwinkle} 2.2s ease-in-out infinite`,
+            zIndex: 1,
+          }}
+        >
+          ✦
+        </Box>
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: 20 * scale,
+            left: 14 * scale,
+            width: 6 * scale,
+            height: 6 * scale,
+            color: "#EF4444",
+            animation: `${sparkleTwinkle} 2.6s ease-in-out infinite 0.8s`,
+            zIndex: 1,
+          }}
+        >
+          ✦
+        </Box>
+
+        {/* Rising Hot Oven Steam Trails */}
+        <Box
+          sx={{
+            position: "absolute",
+            top: 2 * scale,
+            left: "38%",
+            width: 9 * scale,
+            height: 24 * scale,
             borderRadius: "50%",
-            background: "linear-gradient(to top, rgba(37,99,235,0.6), transparent)",
-            animation: `${steamFloat1} 2s ease-out infinite`,
-            zIndex: 2,
+            background: "linear-gradient(to top, rgba(245,158,11,0.6), rgba(255,255,255,0.8), transparent)",
+            animation: `${steamFloat1} 2.2s ease-out infinite`,
+            zIndex: 4,
+          }}
+        />
+        <Box
+          sx={{
+            position: "absolute",
+            top: -2 * scale,
+            left: "52%",
+            width: 11 * scale,
+            height: 28 * scale,
+            borderRadius: "50%",
+            background: "linear-gradient(to top, rgba(239,68,68,0.5), rgba(255,255,255,0.85), transparent)",
+            animation: `${steamFloat2} 2.6s ease-out infinite 0.7s`,
+            zIndex: 4,
           }}
         />
         <Box
           sx={{
             position: "absolute",
             top: 4 * scale,
-            left: "52%",
-            width: 10 * scale,
-            height: 26 * scale,
-            borderRadius: "50%",
-            background: "linear-gradient(to top, rgba(14,165,233,0.7), transparent)",
-            animation: `${steamFloat2} 2.4s ease-out infinite 0.6s`,
-            zIndex: 2,
-          }}
-        />
-        <Box
-          sx={{
-            position: "absolute",
-            top: 6 * scale,
             left: "64%",
             width: 8 * scale,
-            height: 20 * scale,
+            height: 22 * scale,
             borderRadius: "50%",
-            background: "linear-gradient(to top, rgba(16,185,129,0.6), transparent)",
-            animation: `${steamFloat3} 2.1s ease-out infinite 1.2s`,
-            zIndex: 2,
+            background: "linear-gradient(to top, rgba(16,185,129,0.5), rgba(255,255,255,0.75), transparent)",
+            animation: `${steamFloat3} 2.4s ease-out infinite 1.3s`,
+            zIndex: 4,
           }}
         />
 
-        {/* Falling Ingredient Particles into Pot */}
+        {/* Cascading Fresh Ingredients onto Pizza */}
+        {/* 1. Fresh Basil Leaf */}
         <Box
           sx={{
             position: "absolute",
-            top: 20 * scale,
-            left: "32%",
-            width: 7 * scale,
+            top: 10 * scale,
+            left: "30%",
+            width: 12 * scale,
             height: 7 * scale,
+            borderRadius: "80% 0 80% 0",
+            bgcolor: "#10B981",
+            boxShadow: "0 0 6px rgba(16,185,129,0.7)",
+            animation: `${toppingRain1} 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite`,
+            zIndex: 5,
+          }}
+        />
+        {/* 2. Sliced Pepperoni disc */}
+        <Box
+          sx={{
+            position: "absolute",
+            top: 8 * scale,
+            left: "66%",
+            width: 10 * scale,
+            height: 10 * scale,
             borderRadius: "50%",
-            bgcolor: "#F59E0B", // Gold / Spice / Grain
-            boxShadow: "0 0 6px rgba(245,158,11,0.8)",
-            animation: `${ingredientFloat} 2s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.2s`,
-            zIndex: 4,
+            bgcolor: "#DC2626",
+            border: "1.5px solid #991B1B",
+            boxShadow: "0 0 6px rgba(220,38,38,0.7)",
+            animation: `${toppingRain2} 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.8s`,
+            zIndex: 5,
           }}
         />
+        {/* 3. Golden Melted Cheese / Olive topping */}
         <Box
           sx={{
             position: "absolute",
-            top: 16 * scale,
-            left: "68%",
-            width: 6 * scale,
-            height: 6 * scale,
-            borderRadius: "40%",
-            bgcolor: "#10B981", // Fresh Herb / Green
-            boxShadow: "0 0 6px rgba(16,185,129,0.8)",
-            animation: `${ingredientFloat} 2.3s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.9s`,
-            zIndex: 4,
-          }}
-        />
-        <Box
-          sx={{
-            position: "absolute",
-            top: 18 * scale,
+            top: 12 * scale,
             left: "50%",
-            width: 6 * scale,
-            height: 6 * scale,
+            width: 8 * scale,
+            height: 8 * scale,
             borderRadius: "50%",
-            bgcolor: "#EF4444", // Tomato / Fresh Red
-            boxShadow: "0 0 6px rgba(239,68,68,0.8)",
-            animation: `${ingredientFloat} 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite 1.5s`,
-            zIndex: 4,
+            bgcolor: "#1E293B",
+            border: "2px solid #F59E0B",
+            animation: `${toppingRain3} 2.7s cubic-bezier(0.4, 0, 0.2, 1) infinite 1.5s`,
+            zIndex: 5,
           }}
         />
 
-        {/* Main Cooking Pot / Production Vat */}
+        {/* Main Animated Pizza Pie with Wooden Peel Shadow */}
         <Box
           sx={{
             position: "relative",
             zIndex: 3,
-            animation: `${potSimmer} 3s ease-in-out infinite`,
+            animation: `${pizzaHoverAndSpin} 14s linear infinite`,
             display: "flex",
-            flexDirection: "column",
             alignItems: "center",
-            mt: 2 * scale,
+            justifyContent: "center",
+            filter: "drop-shadow(0 10px 20px rgba(180, 83, 9, 0.28))",
           }}
         >
-          {/* Pot SVG */}
+          {/* Detailed SVG Pizza */}
           <svg
-            width={86 * scale}
-            height={68 * scale}
-            viewBox="0 0 86 68"
+            width={100 * scale}
+            height={100 * scale}
+            viewBox="0 0 120 120"
             fill="none"
-            style={{ filter: "drop-shadow(0 8px 16px rgba(30,58,138,0.22))" }}
           >
             <defs>
-              <linearGradient id="potGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#1e3a8a" />
-                <stop offset="50%" stopColor="#2563eb" />
-                <stop offset="100%" stopColor="#0284c7" />
+              {/* Crispy Golden Pizza Crust Gradient */}
+              <radialGradient id="crustGrad" cx="50%" cy="50%" r="50%">
+                <stop offset="70%" stopColor="#D97706" />
+                <stop offset="88%" stopColor="#B45309" />
+                <stop offset="100%" stopColor="#78350F" />
+              </radialGradient>
+
+              {/* Rich Tomato Sauce Base */}
+              <radialGradient id="sauceGrad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#EF4444" />
+                <stop offset="85%" stopColor="#DC2626" />
+                <stop offset="100%" stopColor="#B91C1C" />
+              </radialGradient>
+
+              {/* Bubbling Melted Mozzarella Cheese */}
+              <radialGradient id="cheeseGrad" cx="45%" cy="45%" r="55%">
+                <stop offset="0%" stopColor="#FEF08A" />
+                <stop offset="60%" stopColor="#FDE047" />
+                <stop offset="100%" stopColor="#F59E0B" />
+              </radialGradient>
+
+              {/* Pepperoni Slices Gradient */}
+              <radialGradient id="pepGrad" cx="35%" cy="35%" r="65%">
+                <stop offset="0%" stopColor="#EF4444" />
+                <stop offset="70%" stopColor="#B91C1C" />
+                <stop offset="100%" stopColor="#7F1D1D" />
+              </radialGradient>
+
+              {/* Basil Green Gradient */}
+              <linearGradient id="basilGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#34D399" />
+                <stop offset="100%" stopColor="#059669" />
               </linearGradient>
-              <linearGradient id="liquidGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#38bdf8" />
-                <stop offset="50%" stopColor="#10b981" />
-                <stop offset="100%" stopColor="#38bdf8" />
-              </linearGradient>
-              <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#93c5fd" />
-                <stop offset="50%" stopColor="#ffffff" />
-                <stop offset="100%" stopColor="#93c5fd" />
+
+              {/* Mushroom Gradient */}
+              <linearGradient id="mushGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#F4F4F5" />
+                <stop offset="100%" stopColor="#A1A1AA" />
               </linearGradient>
             </defs>
 
-            {/* Left Pot Handle */}
+            {/* Base Crust (Outer Rim) */}
+            <circle cx="60" cy="60" r="56" fill="url(#crustGrad)" />
+            <circle cx="60" cy="60" r="54" stroke="#FDE68A" strokeWidth="1" strokeDasharray="3 2" opacity="0.6" />
+
+            {/* Rich Tomato Sauce Bed */}
+            <circle cx="60" cy="60" r="48" fill="url(#sauceGrad)" />
+
+            {/* Melted Mozzarella Layer */}
+            <circle cx="60" cy="60" r="45" fill="url(#cheeseGrad)" />
+
+            {/* Cheese bubbling spots */}
+            <circle cx="50" cy="40" r="14" fill="#FEF9C3" opacity="0.75" />
+            <circle cx="72" cy="55" r="12" fill="#FEF9C3" opacity="0.65" />
+            <circle cx="48" cy="74" r="13" fill="#FEF9C3" opacity="0.7" />
+
+            {/* Pepperoni Slices */}
+            {/* Top Right */}
+            <circle cx="75" cy="40" r="8" fill="url(#pepGrad)" stroke="#7F1D1D" strokeWidth="1" />
+            <circle cx="73" cy="38" r="1.5" fill="#F87171" opacity="0.7" />
+            <circle cx="77" cy="42" r="1.2" fill="#F87171" opacity="0.7" />
+
+            {/* Bottom Right */}
+            <circle cx="78" cy="75" r="8" fill="url(#pepGrad)" stroke="#7F1D1D" strokeWidth="1" />
+            <circle cx="76" cy="73" r="1.5" fill="#F87171" opacity="0.7" />
+
+            {/* Bottom Center */}
+            <circle cx="52" cy="85" r="7.5" fill="url(#pepGrad)" stroke="#7F1D1D" strokeWidth="1" />
+
+            {/* Left */}
+            <circle cx="35" cy="60" r="8" fill="url(#pepGrad)" stroke="#7F1D1D" strokeWidth="1" />
+            <circle cx="33" cy="58" r="1.5" fill="#F87171" opacity="0.7" />
+
+            {/* Top Center-Left */}
+            <circle cx="42" cy="38" r="7.5" fill="url(#pepGrad)" stroke="#7F1D1D" strokeWidth="1" />
+
+            {/* Fresh Green Basil Leaves */}
             <path
-              d="M14 26 C6 26, 4 38, 14 42"
-              stroke="#1e3a8a"
-              strokeWidth="4"
-              strokeLinecap="round"
+              d="M60 32 C65 26, 74 30, 68 37 C63 36, 61 34, 60 32 Z"
+              fill="url(#basilGrad)"
+              stroke="#047857"
+              strokeWidth="0.75"
             />
-            {/* Right Pot Handle */}
             <path
-              d="M72 26 C80 26, 82 38, 72 42"
-              stroke="#1e3a8a"
-              strokeWidth="4"
-              strokeLinecap="round"
+              d="M40 70 C34 66, 36 57, 43 61 C43 66, 42 68, 40 70 Z"
+              fill="url(#basilGrad)"
+              stroke="#047857"
+              strokeWidth="0.75"
+            />
+            <path
+              d="M68 62 C74 58, 80 64, 76 70 C70 69, 69 65, 68 62 Z"
+              fill="url(#basilGrad)"
+              stroke="#047857"
+              strokeWidth="0.75"
+            />
+            <path
+              d="M56 50 C52 44, 60 40, 64 46 C60 48, 58 49, 56 50 Z"
+              fill="url(#basilGrad)"
+              stroke="#047857"
+              strokeWidth="0.75"
             />
 
-            {/* Main Pot Body */}
+            {/* Sliced Black Olives */}
+            <circle cx="62" cy="78" r="4" fill="#0F172A" />
+            <circle cx="62" cy="78" r="2" fill="#FDE047" />
+
+            <circle cx="85" cy="56" r="3.5" fill="#0F172A" />
+            <circle cx="85" cy="56" r="1.8" fill="#FDE047" />
+
+            <circle cx="34" cy="46" r="3.5" fill="#0F172A" />
+            <circle cx="34" cy="46" r="1.8" fill="#FDE047" />
+
+            {/* Sliced Mushrooms */}
             <path
-              d="M16 22 L20 54 C21 61, 65 61, 66 54 L70 22 Z"
-              fill="url(#potGrad)"
+              d="M50 56 C50 52, 57 52, 57 56 L55 60 L52 60 Z"
+              fill="url(#mushGrad)"
+              stroke="#71717A"
+              strokeWidth="0.6"
             />
 
-            {/* Simmering Liquid Surface */}
-            <ellipse cx="43" cy="24" rx="24" ry="5.5" fill="url(#liquidGrad)" opacity="0.9" />
+            {/* 6 Pizza Slice Cut Lines (Subtle artisan cut scoring) */}
+            <line x1="60" y1="12" x2="60" y2="108" stroke="#78350F" strokeWidth="1.2" opacity="0.45" strokeDasharray="3 2" />
+            <line x1="18" y1="36" x2="102" y2="84" stroke="#78350F" strokeWidth="1.2" opacity="0.45" strokeDasharray="3 2" />
+            <line x1="18" y1="84" x2="102" y2="36" stroke="#78350F" strokeWidth="1.2" opacity="0.45" strokeDasharray="3 2" />
 
-            {/* Glossy Pot Rim */}
-            <ellipse
-              cx="43"
-              cy="22"
-              rx="27"
-              ry="4.5"
-              fill="none"
-              stroke="url(#rimGrad)"
-              strokeWidth="2.5"
-            />
-
-            {/* Chef / Production Emblem on Pot */}
-            <circle cx="43" cy="40" r="8" fill="#ffffff" opacity="0.25" />
-            <path
-              d="M40 38 L43 35 L46 38 M43 35 L43 45"
-              stroke="#ffffff"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity="0.9"
-            />
+            {/* Center Cheese Melt Ring */}
+            <circle cx="60" cy="60" r="5" fill="#FEF08A" opacity="0.8" />
           </svg>
-
-          {/* Bubbles over the liquid */}
-          <Box
-            sx={{
-              position: "absolute",
-              top: 14 * scale,
-              left: 32 * scale,
-              width: 5 * scale,
-              height: 5 * scale,
-              borderRadius: "50%",
-              bgcolor: "#fff",
-              opacity: 0.8,
-              animation: `${bubblePop} 1.6s ease-in infinite`,
-            }}
-          />
-          <Box
-            sx={{
-              position: "absolute",
-              top: 12 * scale,
-              left: 48 * scale,
-              width: 6 * scale,
-              height: 6 * scale,
-              borderRadius: "50%",
-              bgcolor: "#6ee7b7",
-              opacity: 0.8,
-              animation: `${bubblePop} 2s ease-in infinite 0.7s`,
-            }}
-          />
         </Box>
       </Box>
 
       {/* Primary Status Text */}
       <Typography
         sx={{
-          fontWeight: 700,
-          fontSize: size === "small" ? 13 : size === "large" ? 17 : 15,
+          fontWeight: 800,
+          fontSize: size === "small" ? 13.5 : size === "large" ? 17.5 : 15.5,
           color: "#0F172A",
-          letterSpacing: "-0.01em",
+          letterSpacing: "-0.02em",
           textAlign: "center",
           mb: 0.5,
         }}
@@ -380,8 +403,8 @@ export default function FoodProductionLoader({
             fontSize: size === "small" ? 11.5 : size === "large" ? 13.5 : 12.5,
             color: "#64748B",
             textAlign: "center",
-            maxWidth: 380,
-            lineHeight: 1.4,
+            maxWidth: 400,
+            lineHeight: 1.45,
             mb: 2,
           }}
         >
@@ -389,15 +412,16 @@ export default function FoodProductionLoader({
         </Typography>
       )}
 
-      {/* Shimmering Animated Food Production Line Progress Bar */}
+      {/* Gourmet Food Production Shimmer Progress Indicator */}
       <Box
         sx={{
-          width: 180 * scale,
-          height: 5,
+          width: 190 * scale,
+          height: 6,
           borderRadius: "999px",
           bgcolor: "#E2E8F0",
           overflow: "hidden",
           position: "relative",
+          boxShadow: "inset 0 1px 2px rgba(0,0,0,0.06)",
         }}
       >
         <Box
@@ -405,12 +429,14 @@ export default function FoodProductionLoader({
             width: "100%",
             height: "100%",
             borderRadius: "999px",
-            background: "linear-gradient(90deg, #2563eb 0%, #38bdf8 30%, #10b981 60%, #2563eb 100%)",
+            background:
+              "linear-gradient(90deg, #DC2626 0%, #F59E0B 25%, #10B981 50%, #2563EB 75%, #DC2626 100%)",
             backgroundSize: "200% 100%",
-            animation: `${shimmerBar} 2s linear infinite`,
+            animation: `${shimmerBar} 2.2s linear infinite`,
           }}
         />
       </Box>
     </Box>
   );
 }
+
