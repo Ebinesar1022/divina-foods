@@ -402,19 +402,46 @@ export default function ProductionOverview({
     const committedDraft = consumptionDraft;
     commitConsumptionEntry(committedDraft)
       .then(function (newEntry) {
-        return fetchProductionOverview(productionTargetId).then(function (result) {
-          // Same reasoning as Create MRP's commit: if Creator report
-          // indexing hasn't caught up to the subform rows just written,
-          // fall back to the entry we just built from the confirmed draft
-          // so the tabs reflect it immediately.
-          const entries =
-            result.consumptionEntries && result.consumptionEntries.length ? result.consumptionEntries : [newEntry];
-          setData({ ...result, consumptionEntries: entries });
-        });
-      })
-      .then(function () {
+        // Close the dialog as soon as the write succeeds. On some browsers
+        // the follow-up overview refresh can lag or stall, and we do not want
+        // the modal visibility to depend on that second, best-effort step.
         setConsumptionDialogOpen(false);
         setConsumptionDraft(null);
+        setConsumptionDraftError("");
+        setConsumptionCommitError("");
+
+        return fetchProductionOverview(productionTargetId)
+          .then(function (result) {
+            // Same reasoning as Create MRP's commit: if Creator report
+            // indexing hasn't caught up to the subform rows just written,
+            // fall back to the entry we just built from the confirmed draft
+            // so the tabs reflect it immediately.
+            const entries =
+              result.consumptionEntries && result.consumptionEntries.length
+                ? result.consumptionEntries
+                : [newEntry];
+            setData({ ...result, consumptionEntries: entries });
+          })
+          .catch(function (refreshErr: any) {
+            // The commit already succeeded, so keep the UI responsive even if
+            // the refresh path fails temporarily. We still update the current
+            // page with the confirmed entry so the user is not left looking at
+            // stale data.
+            console.error("Failed to refresh production overview after completing production.", refreshErr);
+            setData(function (prev) {
+              if (!prev) return prev;
+              const nextEntries =
+                prev.consumptionEntries && prev.consumptionEntries.length ? prev.consumptionEntries : [newEntry];
+              return {
+                ...prev,
+                record: prev.record ? { ...prev.record, status: "Completed" } : prev.record,
+                consumptionEntries: nextEntries,
+              };
+            });
+          });
+      })
+      .then(function () {
+        // No-op: the dialog is already closed once the commit succeeds.
       })
       .catch(function (err: any) {
         setConsumptionCommitError(
