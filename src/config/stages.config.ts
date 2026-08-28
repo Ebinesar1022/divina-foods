@@ -43,6 +43,29 @@ export function isProcurementRequired(status: ProductionTargetStatus | null): bo
   return status === "Waiting for Stock";
 }
 
+// Which tab the widget should land on when it's opened fresh for a given
+// Production Target — matches the native app's own status-filtered report
+// pages (Planned Production Target, Waiting for Stock, Ready For
+// Production, Production Inprogress, Completed Production Target): whatever
+// status a record shows up under is also where its next action lives, so
+// opening the widget from that record should drop the user straight there
+// instead of always defaulting to Overview. Distinct from STATUS_TO_STAGE
+// above — that one drives the pipeline stepper's 5 stage icons, this one
+// picks the tab and also covers "Released" (Ready For Production), which
+// the stepper folds into the mrp stage but which has its own
+// Initiate Production tab.
+const STATUS_TO_TAB: Record<ProductionTargetStatus, string> = {
+  Planned: "mrp",
+  Released: "initiate_production",
+  "Waiting for Stock": "procurement",
+  "In Progress": "in_progress",
+  Completed: "consumption_entry",
+};
+
+export function initialTabForStatus(status: ProductionTargetStatus): string {
+  return STATUS_TO_TAB[status] ?? "overview";
+}
+
 export function computeProgress(currentIndex: number, procurementSkipped: boolean): number {
   const effectiveTotal = procurementSkipped ? TOTAL_STAGES - 1 : TOTAL_STAGES;
   const effectiveIndex =

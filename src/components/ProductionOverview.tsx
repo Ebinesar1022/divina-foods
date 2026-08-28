@@ -52,6 +52,7 @@ import {
 } from "../services/productionApi";
 import {
   computeProgress,
+  initialTabForStatus,
   isProcurementRequired,
   stageIndex,
   stageKeyFromStatus,
@@ -210,6 +211,13 @@ export default function ProductionOverview({
     fetchProductionOverview(productionTargetId).then(function (result) {
       setData(result);
       setLoading(false);
+      // Land on the tab where this record's next action actually lives
+      // (e.g. opened from the "Waiting for Stock" report → Procurement)
+      // instead of always defaulting to Overview. Only happens on this
+      // initial load, not on the refetches after committing a dialog.
+      if (result.record) {
+        setActiveTab(initialTabForStatus(result.record.status));
+      }
     });
   }, [productionTargetId]);
 
@@ -546,7 +554,7 @@ export default function ProductionOverview({
       });
   }
 
-  if (loading || !data || !data.record) {
+  if (loading) {
     return (
       <Box
         sx={{
@@ -561,6 +569,34 @@ export default function ProductionOverview({
           text="Loading Production Overview…"
           subtext="Fetching recipe formulations, stock levels & stage progression"
         />
+      </Box>
+    );
+  }
+
+  // The fetch finished but no Production_Targets row matched — a genuinely
+  // missing/deleted record, or a stale link. Show that plainly instead of
+  // the loader spinning forever (loading is already false at this point).
+  if (!data || !data.record) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "60vh",
+          gap: 1,
+          textAlign: "center",
+          px: 3,
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          Production Target not found
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          No Production Target matches "{productionTargetId}". It may have been deleted, or the link
+          that opened this page may be out of date.
+        </Typography>
       </Box>
     );
   }

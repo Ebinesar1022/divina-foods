@@ -250,8 +250,20 @@ function updateRecord(reportName: string, recordId: string, data: Record<string,
 }
 
 // ───────────── Production Target ─────────────
+// The widget's own "open_production_over_v1" click action passes the
+// display Production_Target_ID (e.g. "PT-118"), but several of the app's
+// other status-filtered report pages (Waiting for Stock, Ready For
+// Production, Production Inprogress, Completed Production Target, Planned
+// Production Target) wire their "Open Production Overview" click action to
+// input.ID instead — the row's raw Zoho record ID (e.g. 3150000000047136).
+// Both land here as the same production_target_id widget param, so detect
+// which one we got: all-digits means it's the raw record ID (matched
+// unquoted, per Creator's numeric-ID criteria rule), anything else is the
+// display ID (a text field, so quoted). Getting this wrong silently matches
+// zero rows — see the loading-forever guard below for what that used to do.
 export function fetchProductionTarget(productionTargetId: string): Promise<ProductionTargetRow | null> {
-  const criteria = `Production_Target_ID == "${productionTargetId}"`;
+  const trimmedId = productionTargetId.trim();
+  const criteria = /^\d+$/.test(trimmedId) ? `ID == ${trimmedId}` : `Production_Target_ID == "${trimmedId}"`;
   return getRecords(CONFIG.PRODUCTION_TARGET_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
     const r = rows[0];
