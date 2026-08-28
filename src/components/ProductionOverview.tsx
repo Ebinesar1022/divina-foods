@@ -5,7 +5,6 @@ import {
   Tabs,
   Typography,
   Paper,
-  Alert,
   Button,
   Table,
   TableBody,
@@ -988,24 +987,43 @@ export default function ProductionOverview({
                       )}
                     </Box>
                   ) : !mrpRecord ? (
-                    <Alert severity="info" sx={{ borderRadius: "12px" }}>
-                      Create the MRP first before initiating production.
-                    </Alert>
+                    <CenteredStateCard
+                      icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}
+                      title="MRP Not Created Yet"
+                      description="Create the Material Requirement & Planning first before initiating production."
+                    />
                   ) : isProcurementRequired(record.status) ? (
-                    <Alert severity="warning" sx={{ borderRadius: "12px" }}>
-                      Procurement must be completed before production can start.
-                    </Alert>
+                    <CenteredStateCard
+                      icon={<ShoppingCartOutlinedIcon sx={{ fontSize: 28 }} />}
+                      iconBg="#FEF3C7"
+                      iconColor="#D97706"
+                      title="Procurement Required"
+                      description="Procurement must be completed before production can start."
+                    />
                   ) : (
-                    <Box>
-                      <Button
-                        variant="contained"
-                        startIcon={<PlayCircleIcon />}
-                        onClick={handleOpenInitiateProduction}
-                        sx={{ borderRadius: "10px", textTransform: "none" }}
-                      >
-                        Start Production
-                      </Button>
-                    </Box>
+                    <CenteredStateCard
+                      icon={<PlayCircleIcon sx={{ fontSize: 28 }} />}
+                      title="Ready to Initiate Production"
+                      description="Materials are verified and available. Click below to schedule dates, assign personnel, and launch the production run."
+                      action={
+                        <Button
+                          variant="contained"
+                          size="medium"
+                          startIcon={<PlayCircleIcon />}
+                          onClick={handleOpenInitiateProduction}
+                          sx={{
+                            borderRadius: "10px",
+                            textTransform: "none",
+                            fontWeight: 600,
+                            px: 2.5,
+                            py: 1,
+                            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+                          }}
+                        >
+                          Start Production
+                        </Button>
+                      }
+                    />
                   )}
                 </Box>
               )}
