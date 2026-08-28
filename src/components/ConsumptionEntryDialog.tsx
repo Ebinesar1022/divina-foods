@@ -48,6 +48,10 @@ export default function ConsumptionEntryDialog({
   onConfirm,
 }: ConsumptionEntryDialogProps) {
   const isPreparing = !draft && !draftError;
+  const isBatchNoValid =
+    !!draft &&
+    draft.finishedGoods.length > 0 &&
+    draft.finishedGoods.every((fg) => typeof fg.batchNo === "string" && fg.batchNo.trim().length > 0);
 
   function updateFinishedGood(index: number, patch: Partial<ConsumptionFinishedGoodDraftRow>) {
     if (!draft) return;
@@ -159,7 +163,7 @@ export default function ConsumptionEntryDialog({
             />
 
             <Typography sx={{ fontWeight: 700, mb: 1 }}>Finished Good Production</Typography>
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px", mb: 3 }}>
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px", mb: 2 }}>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
@@ -169,66 +173,85 @@ export default function ConsumptionEntryDialog({
                       Produced Qty
                     </TableCell>
                     <TableCell align="right">Scrap Qty</TableCell>
-                    <TableCell sx={{ minWidth: 130 }}>Batch No</TableCell>
+                    <TableCell sx={{ minWidth: 140 }}>
+                      Batch No <Box component="span" sx={{ color: "error.main" }}>*</Box>
+                    </TableCell>
                     <TableCell sx={{ minWidth: 150 }}>Expiry Date</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {draft.finishedGoods.map((fg, index) => (
-                    <TableRow key={fg.itemId + index}>
-                      <TableCell>
-                        {fg.itemName}
-                        {fg.uom && (
-                          <Typography component="span" sx={{ fontSize: 12, color: "#94A3B8", ml: 0.5 }}>
-                            ({fg.uom})
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell align="right">{fg.targetQuantity}</TableCell>
-                      <TableCell align="right">
-                        <TextField
-                          type="number"
-                          size="small"
-                          value={fg.producedQuantity}
-                          disabled={committing}
-                          onChange={(e) =>
-                            updateFinishedGood(index, { producedQuantity: parseFloat(e.target.value) })
-                          }
-                          inputProps={{ min: 0, max: fg.targetQuantity, style: { textAlign: "right" } }}
-                          sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
-                        />
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: "#94A3B8" }}>
-                        {fg.scrapQuantity.toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          placeholder="Optional"
-                          value={fg.batchNo}
-                          disabled={committing}
-                          onChange={(e) => updateFinishedGood(index, { batchNo: e.target.value })}
-                          sx={{ bgcolor: "#fff", borderRadius: "8px" }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          type="date"
-                          size="small"
-                          InputLabelProps={{ shrink: true }}
-                          value={fg.expiryDate}
-                          disabled={committing}
-                          onChange={(e) => updateFinishedGood(index, { expiryDate: e.target.value })}
-                          sx={{ bgcolor: "#fff", borderRadius: "8px" }}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {draft.finishedGoods.map((fg, index) => {
+                    const isMissingBatch = !fg.batchNo || !fg.batchNo.trim();
+                    return (
+                      <TableRow key={fg.itemId + index}>
+                        <TableCell>
+                          {fg.itemName}
+                          {fg.uom && (
+                            <Typography component="span" sx={{ fontSize: 12, color: "#94A3B8", ml: 0.5 }}>
+                              ({fg.uom})
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">{fg.targetQuantity}</TableCell>
+                        <TableCell align="right">
+                          <TextField
+                            type="number"
+                            size="small"
+                            value={fg.producedQuantity}
+                            disabled={committing}
+                            onChange={(e) =>
+                              updateFinishedGood(index, { producedQuantity: parseFloat(e.target.value) })
+                            }
+                            inputProps={{ min: 0, max: fg.targetQuantity, style: { textAlign: "right" } }}
+                            sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
+                          />
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: "#94A3B8" }}>
+                          {fg.scrapQuantity.toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            placeholder="Required *"
+                            required
+                            error={isMissingBatch}
+                            value={fg.batchNo}
+                            disabled={committing}
+                            onChange={(e) => updateFinishedGood(index, { batchNo: e.target.value })}
+                            sx={{
+                              bgcolor: "#fff",
+                              borderRadius: "8px",
+                              "& .MuiOutlinedInput-root": {
+                                borderRadius: "8px",
+                              },
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            type="date"
+                            size="small"
+                            InputLabelProps={{ shrink: true }}
+                            value={fg.expiryDate}
+                            disabled={committing}
+                            onChange={(e) => updateFinishedGood(index, { expiryDate: e.target.value })}
+                            sx={{ bgcolor: "#fff", borderRadius: "8px" }}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
 
-            <Typography sx={{ fontWeight: 700, mb: 1 }}>Raw Material Consumption</Typography>
+            {!isBatchNoValid && (
+              <Typography sx={{ color: "#EF4444", fontSize: 12, fontWeight: 600, mb: 2.5, px: 0.5 }}>
+                * Batch No is mandatory for all finished goods.
+              </Typography>
+            )}
+
+            <Typography sx={{ fontWeight: 700, mb: 1, mt: 1 }}>Raw Material Consumption</Typography>
             <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
               <Table size="small">
                 <TableHead>
@@ -302,7 +325,7 @@ export default function ConsumptionEntryDialog({
         </Button>
         <Button
           onClick={onConfirm}
-          disabled={!draft || committing}
+          disabled={!draft || committing || !isBatchNoValid}
           variant="contained"
           color="success"
           startIcon={committing ? <CircularProgress size={16} color="inherit" /> : <TaskAltIcon />}

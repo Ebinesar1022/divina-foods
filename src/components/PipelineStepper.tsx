@@ -20,34 +20,30 @@ const pulse = keyframes`
 
 const STATE_STYLES: Record<
   StageState,
-  { bg: string; border: string; fg: string; connector: string; shadow?: string }
+  { bg: string; border: string; fg: string; shadow?: string }
 > = {
   done: {
     bg: '#ecfdf5',
     border: '#10b981',
     fg: '#059669',
-    connector: '#10b981',
     shadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
   },
   active: {
     bg: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
     border: '#2563eb',
     fg: '#ffffff',
-    connector: '#e2e8f0',
-    shadow: '0 0 0 7px rgba(37, 99, 235, 0.12), 0 6px 16px rgba(37, 99, 235, 0.3)',
+    shadow: '0 6px 16px rgba(37, 99, 235, 0.3)',
   },
   pending: {
-    bg: 'rgba(255,255,255,0.55)',
+    bg: '#ffffff',
     border: '#e2e8f0',
     fg: '#94a3b8',
-    connector: '#e2e8f0',
     shadow: '0 2px 4px rgba(15, 23, 42, 0.02)',
   },
   skipped: {
-    bg: 'rgba(203,213,225,0.16)',
+    bg: '#f8fafc',
     border: '#cbd5e1',
     fg: '#94a3b8',
-    connector: '#cbd5e1',
     shadow: 'none',
   },
 };
@@ -59,7 +55,6 @@ function StageIcon({ iconName, sx }: { iconName: string; sx?: object }) {
 }
 
 export default function PipelineStepper({
-  // currentStageKey,
   currentIndex,
   isFullyComplete,
   procurementSkipped,
@@ -82,30 +77,72 @@ export default function PipelineStepper({
         sx={{
           display: 'flex',
           alignItems: 'flex-start',
-          minWidth: { xs: 580, md: '100%' },
+          minWidth: { xs: 600, md: '100%' },
           width: '100%',
         }}
       >
         {STAGES.map((stage, index) => {
           const state = stepState(index, currentIndex, isFullyComplete, procurementSkipped);
           const styles = STATE_STYLES[state];
-          const isLast = index === STAGES.length - 1;
           const isDone = state === 'done';
+
+          // Connector between (index - 1) and index
+          const prevStageState =
+            index > 0
+              ? stepState(index - 1, currentIndex, isFullyComplete, procurementSkipped)
+              : null;
+          const leftConnectorSkipped = state === 'skipped';
+          const leftConnectorDone = prevStageState === 'done';
+
+          // Connector between index and (index + 1)
+          const nextStageState =
+            index < STAGES.length - 1
+              ? stepState(index + 1, currentIndex, isFullyComplete, procurementSkipped)
+              : null;
+          const rightConnectorSkipped = nextStageState === 'skipped';
+          const rightConnectorDone = state === 'done';
 
           return (
             <Box
               key={stage.key}
               sx={{
+                flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                flex: isLast ? '0 0 auto' : 1,
                 minWidth: 0,
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+              {/* Row with Left Half-Connector, Centered Circle, and Right Half-Connector */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  width: '100%',
+                  position: 'relative',
+                }}
+              >
+                {/* Left Half Connector */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    height: 3,
+                    borderRadius: '999px 0 0 999px',
+                    visibility: index === 0 ? 'hidden' : 'visible',
+                    ...(leftConnectorSkipped
+                      ? {
+                          backgroundImage:
+                            'repeating-linear-gradient(to right, #cbd5e1 0 6px, transparent 6px 12px)',
+                          bgcolor: 'transparent',
+                        }
+                      : {
+                          bgcolor: leftConnectorDone ? '#10b981' : '#e2e8f0',
+                        }),
+                  }}
+                />
+
                 {/* Main Node with Top-Right Completed Badge */}
-                <Box sx={{ position: 'relative', flexShrink: 0, mx: 'auto' }}>
+                <Box sx={{ position: 'relative', flexShrink: 0, zIndex: 2 }}>
                   <Box
                     sx={{
                       width: { xs: 46, sm: 50 },
@@ -148,7 +185,7 @@ export default function PipelineStepper({
                         alignItems: 'center',
                         justifyContent: 'center',
                         boxShadow: '0 2px 6px rgba(16, 185, 129, 0.4)',
-                        zIndex: 2,
+                        zIndex: 3,
                         animation: 'fadeIn 0.3s ease-in-out',
                       }}
                     >
@@ -157,33 +194,45 @@ export default function PipelineStepper({
                   )}
                 </Box>
 
-                {/* Connector Line between stages */}
-                {!isLast && (
-                  <Box
-                    sx={{
-                      flex: 1,
-                      height: 3,
-                      mx: { xs: 0.5, sm: 1 },
-                      bgcolor: styles.connector,
-                      borderRadius: '999px',
-                      ...(state === 'skipped'
-                        ? {
-                            backgroundImage:
-                              'repeating-linear-gradient(to right, #cbd5e1 0 6px, transparent 6px 12px)',
-                            bgcolor: 'transparent',
-                          }
-                        : {}),
-                    }}
-                  />
-                )}
+                {/* Right Half Connector */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    height: 3,
+                    borderRadius: '0 999px 999px 0',
+                    visibility: index === STAGES.length - 1 ? 'hidden' : 'visible',
+                    ...(rightConnectorSkipped
+                      ? {
+                          backgroundImage:
+                            'repeating-linear-gradient(to right, #cbd5e1 0 6px, transparent 6px 12px)',
+                          bgcolor: 'transparent',
+                        }
+                      : {
+                          bgcolor: rightConnectorDone ? '#10b981' : '#e2e8f0',
+                        }),
+                  }}
+                />
               </Box>
 
-              {/* Label */}
-              <Box sx={{ textAlign: 'center', mt: 1.25, px: 0.5, maxWidth: 130 }}>
+              {/* Label — Exactly Centered Under Node */}
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  mt: 1.25,
+                  px: 0.5,
+                  width: '100%',
+                  maxWidth: 140,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                }}
+              >
                 <Typography
                   variant="caption"
                   sx={{
                     display: 'block',
+                    textAlign: 'center',
                     fontWeight: state === 'active' ? 700 : state === 'done' ? 700 : 600,
                     fontSize: { xs: 11.5, sm: 12 },
                     lineHeight: 1.3,
@@ -205,6 +254,7 @@ export default function PipelineStepper({
                     variant="caption"
                     sx={{
                       display: 'block',
+                      textAlign: 'center',
                       color: '#94a3b8',
                       fontStyle: 'italic',
                       fontSize: 10,
@@ -222,4 +272,3 @@ export default function PipelineStepper({
     </Box>
   );
 }
-
