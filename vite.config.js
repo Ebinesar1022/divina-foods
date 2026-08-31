@@ -12,7 +12,7 @@ export default defineConfig({
   build: {
     target: "es2015",
     outDir: "overview_z/app/react",
-    emptyOutDir: true,
-    chunkSizeWarningLimit: 5000,
+      emptyOutDir: true,
+      chunkSizeWarningLimit: 5000,
   },
 });
