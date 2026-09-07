@@ -12,6 +12,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
@@ -202,6 +207,8 @@ export default function ProductionOverview({
   // materials against the warehouse's current Available_Stocks.
   const [checkStockRunning, setCheckStockRunning] = useState(false);
   const [checkStockError, setCheckStockError] = useState("");
+  const [stockStillShortOpen, setStockStillShortOpen] = useState(false);
+  const [stockShortItems, setStockShortItems] = useState<NonStockItemRow[]>([]);
   const checkingStockRef = useRef(false);
 
   // Procurement: Receive a Purchase Order.
@@ -544,6 +551,17 @@ export default function ProductionOverview({
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
           setData(result);
+          // Available_Stocks still isn't enough to cover one or more raw
+          // materials — the Custom API already re-validated this and left
+          // those rows on Needs Purchase, so surface it here instead of
+          // letting the user assume the click did nothing.
+          const stillShort = (result.nonStockItems || []).filter(
+            (item) => item.status === "Needs Purchase"
+          );
+          if (stillShort.length > 0) {
+            setStockShortItems(stillShort);
+            setStockStillShortOpen(true);
+          }
         });
       })
       .catch(function (err: any) {
@@ -1394,6 +1412,26 @@ export default function ProductionOverview({
           />
         )}
       </Suspense>
+
+      <Dialog open={stockStillShortOpen} onClose={() => setStockStillShortOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Stock Still Short</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: stockShortItems.length ? 1.5 : 0 }}>
+            Available stock isn't enough yet to cover the item{stockShortItems.length === 1 ? "" : "s"} below.
+            Please complete the purchase for the pending quantity, then check stock again once it's received.
+          </DialogContentText>
+          {stockShortItems.map((item) => (
+            <Typography key={item.id} sx={{ fontSize: 13.5, fontWeight: 600 }}>
+              {item.productName} — {item.neededQuantity.toFixed(2)} {item.uomName} still needed
+            </Typography>
+          ))}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStockStillShortOpen(false)} sx={{ textTransform: "none", fontWeight: 600 }}>
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
