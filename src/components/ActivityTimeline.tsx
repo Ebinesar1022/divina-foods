@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Box, Paper, Typography } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
@@ -66,7 +67,7 @@ function subtextFor(
   }
 }
 
-export default function ActivityTimeline({
+function ActivityTimeline({
   currentIndex,
   isFullyComplete,
   procurementSkipped,
@@ -233,4 +234,6 @@ export default function ActivityTimeline({
     </Paper>
   );
 }
+
+export default memo(ActivityTimeline);
 

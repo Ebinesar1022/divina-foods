@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   Box,
   Tab,
@@ -31,7 +31,6 @@ import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import ActivityTimeline from "./ActivityTimeline";
 import StatusChip from "./StatusChip";
-import MrpReportView from "./MrpReportView";
 import FoodProductionLoader from "./FoodProductionLoader";
 import {
   checkStockForMrp,
@@ -81,6 +80,10 @@ const InitiateProductionDialog = lazy(() => import("./InitiateProductionDialog")
 const ConsumptionEntryDialog = lazy(() => import("./ConsumptionEntryDialog"));
 const CreatePoDialog = lazy(() => import("./CreatePoDialog"));
 const ReceivePoDialog = lazy(() => import("./ReceivePoDialog"));
+// Only needed on the MRP tab — same code-splitting treatment as the
+// dialogs above, keeps it out of the main bundle for everyone who never
+// opens that tab.
+const MrpReportView = lazy(() => import("./MrpReportView"));
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -235,6 +238,13 @@ export default function ProductionOverview({
       }
     });
   }, [productionTargetId]);
+
+  // Stable reference (rather than an inline arrow at the call site) so
+  // ProjectHeader's React.memo actually skips re-rendering it when nothing
+  // it cares about has changed.
+  const handleBack = useCallback(() => {
+    window.history.back();
+  }, []);
 
   function handleOpenCreateMrp() {
     if (!data || !data.record) return;
@@ -691,7 +701,7 @@ export default function ProductionOverview({
       <ProjectHeader
         record={record}
         progressPercent={progressPercent}
-        onBack={() => window.history.back()}
+        onBack={handleBack}
       />
 
       <Box
@@ -801,11 +811,19 @@ export default function ProductionOverview({
               {activeTab === "mrp" && (
                 <Box>
                   {mrpRecord ? (
-                    <MrpReportView
-                      mrpRecord={mrpRecord}
-                      mrpDetails={data.mrpDetails}
-                      productionTarget={record}
-                    />
+                    <Suspense
+                      fallback={
+                        <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                          <FoodProductionLoader size="small" text="Loading MRP details…" />
+                        </Box>
+                      }
+                    >
+                      <MrpReportView
+                        mrpRecord={mrpRecord}
+                        mrpDetails={data.mrpDetails}
+                        productionTarget={record}
+                      />
+                    </Suspense>
                   ) : (
                     <CenteredStateCard
                       icon={<AssignmentTurnedInIcon sx={{ fontSize: 28 }} />}

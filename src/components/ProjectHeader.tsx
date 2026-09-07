@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Box, Typography, IconButton, Chip, Stack, Paper } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { ProductionTargetRow } from '../types';
@@ -71,7 +72,7 @@ function ProgressDonut({ value, size = 80 }: { value: number; size?: number }) {
   );
 }
 
-export default function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) {
+function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) {
   const palette = statusPalette(record.status);
 
   return (
@@ -224,4 +225,6 @@ export default function ProjectHeader({ record, progressPercent, onBack }: Proje
     </Paper>
   );
 }
+
+export default memo(ProjectHeader);
 

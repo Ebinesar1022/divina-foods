@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Box, Typography } from "@mui/material";
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -14,7 +15,7 @@ export const STATUS_COLORS: Record<string, string> = {
   "Stock Available": "#10B981",
 };
 
-export default function StatusChip({
+function StatusChip({
   value,
   colorMap = STATUS_COLORS,
 }: {
@@ -68,4 +69,6 @@ export default function StatusChip({
     </Box>
   );
 }
+
+export default memo(StatusChip);
 
