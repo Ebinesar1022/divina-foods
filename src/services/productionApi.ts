@@ -358,30 +358,48 @@ export function fetchNonStockItemsForMrp(mrpRecordId: string): Promise<NonStockI
   });
 }
 
+let suppliersPromise: Promise<SupplierOption[]> | null = null;
+let paymentTermsPromise: Promise<PaymentTermOption[]> | null = null;
+let taxTypesPromise: Promise<TaxOption[]> | null = null;
+let employeesPromise: Promise<EmployeeOption[]> | null = null;
+
 export function fetchSuppliers(): Promise<SupplierOption[]> {
-  return getRecords(CONFIG.SUPPLIER_REPORT).then(function (rows) {
+  if (!suppliersPromise) {
+    suppliersPromise = getRecords(CONFIG.SUPPLIER_REPORT).then(function (rows) {
     return rows.map(function (r: any) {
       return {
         id: display(r.ID),
         name: formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Code) || "Unnamed",
       };
     });
-  });
+    }).catch(function (error) {
+      suppliersPromise = null;
+      throw error;
+    });
+  }
+  return suppliersPromise;
 }
 
 export function fetchPaymentTerms(): Promise<PaymentTermOption[]> {
-  return getRecords(CONFIG.PAYMENT_TERM_REPORT).then(function (rows) {
+  if (!paymentTermsPromise) {
+    paymentTermsPromise = getRecords(CONFIG.PAYMENT_TERM_REPORT).then(function (rows) {
     return rows.map(function (r: any) {
       return {
         id: display(r.ID),
         name: display(r.Payment_Terms),
       };
     });
-  });
+    }).catch(function (error) {
+      paymentTermsPromise = null;
+      throw error;
+    });
+  }
+  return paymentTermsPromise;
 }
 
 export function fetchTaxTypes(): Promise<TaxOption[]> {
-  return getRecords(CONFIG.TAX_MASTER_REPORT, `Status == "Active"`).then(function (rows) {
+  if (!taxTypesPromise) {
+    taxTypesPromise = getRecords(CONFIG.TAX_MASTER_REPORT, `Status == "Active"`).then(function (rows) {
     return rows.map(function (r: any) {
       return {
         id: display(r.ID),
@@ -389,7 +407,12 @@ export function fetchTaxTypes(): Promise<TaxOption[]> {
         rate: parseFloat(display(r.Tax_Rate)) || 0,
       };
     });
-  });
+    }).catch(function (error) {
+      taxTypesPromise = null;
+      throw error;
+    });
+  }
+  return taxTypesPromise;
 }
 
 // ───────────── Create Purchase Order: draft → commit ─────────────
@@ -1283,14 +1306,20 @@ export function fetchMrpDetails(
 // ───────────── Start Production ─────────────
 
 export function fetchEmployees(): Promise<EmployeeOption[]> {
-  return getRecords(CONFIG.EMPLOYEE_REPORT).then(function (rows) {
+  if (!employeesPromise) {
+    employeesPromise = getRecords(CONFIG.EMPLOYEE_REPORT).then(function (rows) {
     return rows.map(function (r: any) {
       return {
         id: r.ID,
         name: formatEmployeeName(r.Employee_Name) || display(r.Employee_ID) || "Unnamed",
       };
     });
-  });
+    }).catch(function (error) {
+      employeesPromise = null;
+      throw error;
+    });
+  }
+  return employeesPromise;
 }
 
 // Starts production for a Production Target by setting its status to "In Progress"

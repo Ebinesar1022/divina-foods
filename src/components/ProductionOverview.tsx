@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   Box,
   Tab,
@@ -26,11 +26,6 @@ import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import ActivityTimeline from "./ActivityTimeline";
 import StatusChip from "./StatusChip";
-import CreateMrpDialog from "./CreateMrpDialog";
-import InitiateProductionDialog from "./InitiateProductionDialog";
-import ConsumptionEntryDialog from "./ConsumptionEntryDialog";
-import CreatePoDialog from "./CreatePoDialog";
-import ReceivePoDialog from "./ReceivePoDialog";
 import MrpReportView from "./MrpReportView";
 import FoodProductionLoader from "./FoodProductionLoader";
 import {
@@ -75,6 +70,12 @@ import type {
   ReceivePoDraft,
   SupplierOption,
 } from "../types";
+
+const CreateMrpDialog = lazy(() => import("./CreateMrpDialog"));
+const InitiateProductionDialog = lazy(() => import("./InitiateProductionDialog"));
+const ConsumptionEntryDialog = lazy(() => import("./ConsumptionEntryDialog"));
+const CreatePoDialog = lazy(() => import("./CreatePoDialog"));
+const ReceivePoDialog = lazy(() => import("./ReceivePoDialog"));
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -1314,71 +1315,83 @@ export default function ProductionOverview({
         />
       </Box>
 
-      <CreateMrpDialog
-        open={mrpDialogOpen}
-        draft={mrpDraft}
-        draftError={draftError}
-        committing={committing}
-        commitError={commitError}
-        notes={notes}
-        onNotesChange={setNotes}
-        onCancel={handleCancelDraft}
-        onConfirm={handleConfirmCreate}
-      />
+      <Suspense fallback={null}>
+        {mrpDialogOpen && (
+          <CreateMrpDialog
+            open={mrpDialogOpen}
+            draft={mrpDraft}
+            draftError={draftError}
+            committing={committing}
+            commitError={commitError}
+            notes={notes}
+            onNotesChange={setNotes}
+            onCancel={handleCancelDraft}
+            onConfirm={handleConfirmCreate}
+          />
+        )}
 
-      <InitiateProductionDialog
-        open={poDialogOpen}
-        mrpId={mrpRecord?.mrpId || ""}
-        productionTargetId={record.productionTargetId}
-        employees={employees}
-        committing={poCommitting}
-        commitError={poCommitError}
-        startDate={startDate}
-        endDate={endDate}
-        assignedToId={assignedToId}
-        onStartDateChange={setStartDate}
-        onEndDateChange={setEndDate}
-        onAssignedToChange={setAssignedToId}
-        onCancel={handleCancelPoDraft}
-        onConfirm={handleConfirmInitiateProduction}
-      />
+        {poDialogOpen && (
+          <InitiateProductionDialog
+            open={poDialogOpen}
+            mrpId={mrpRecord?.mrpId || ""}
+            productionTargetId={record.productionTargetId}
+            employees={employees}
+            committing={poCommitting}
+            commitError={poCommitError}
+            startDate={startDate}
+            endDate={endDate}
+            assignedToId={assignedToId}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+            onAssignedToChange={setAssignedToId}
+            onCancel={handleCancelPoDraft}
+            onConfirm={handleConfirmInitiateProduction}
+          />
+        )}
 
-      <ConsumptionEntryDialog
-        open={consumptionDialogOpen}
-        draft={consumptionDraft}
-        draftError={consumptionDraftError}
-        committing={consumptionCommitting}
-        commitError={consumptionCommitError}
-        onDraftChange={setConsumptionDraft}
-        onCancel={handleCancelConsumptionDraft}
-        onConfirm={handleConfirmConsumptionEntry}
-      />
+        {consumptionDialogOpen && (
+          <ConsumptionEntryDialog
+            open={consumptionDialogOpen}
+            draft={consumptionDraft}
+            draftError={consumptionDraftError}
+            committing={consumptionCommitting}
+            commitError={consumptionCommitError}
+            onDraftChange={setConsumptionDraft}
+            onCancel={handleCancelConsumptionDraft}
+            onConfirm={handleConfirmConsumptionEntry}
+          />
+        )}
 
-      <CreatePoDialog
-        open={createPoDialogOpen}
-        draft={createPoDraft}
-        draftError={createPoDraftError}
-        committing={createPoCommitting}
-        commitError={createPoCommitError}
-        suppliers={suppliers}
-        paymentTerms={paymentTerms}
-        taxTypes={taxTypes}
-        onDraftChange={setCreatePoDraft}
-        onCancel={handleCancelCreatePoDraft}
-        onConfirm={handleConfirmCreatePo}
-      />
+        {createPoDialogOpen && (
+          <CreatePoDialog
+            open={createPoDialogOpen}
+            draft={createPoDraft}
+            draftError={createPoDraftError}
+            committing={createPoCommitting}
+            commitError={createPoCommitError}
+            suppliers={suppliers}
+            paymentTerms={paymentTerms}
+            taxTypes={taxTypes}
+            onDraftChange={setCreatePoDraft}
+            onCancel={handleCancelCreatePoDraft}
+            onConfirm={handleConfirmCreatePo}
+          />
+        )}
 
-      <ReceivePoDialog
-        open={receivePoDialogOpen}
-        poNumber={receivingPo?.poNumber || ""}
-        draft={receivePoDraft}
-        draftError={receivePoDraftError}
-        committing={receivePoCommitting}
-        commitError={receivePoCommitError}
-        onDraftChange={setReceivePoDraft}
-        onCancel={handleCancelReceivePoDraft}
-        onConfirm={handleConfirmReceivePo}
-      />
+        {receivePoDialogOpen && (
+          <ReceivePoDialog
+            open={receivePoDialogOpen}
+            poNumber={receivingPo?.poNumber || ""}
+            draft={receivePoDraft}
+            draftError={receivePoDraftError}
+            committing={receivePoCommitting}
+            commitError={receivePoCommitError}
+            onDraftChange={setReceivePoDraft}
+            onCancel={handleCancelReceivePoDraft}
+            onConfirm={handleConfirmReceivePo}
+          />
+        )}
+      </Suspense>
     </Box>
   );
 }

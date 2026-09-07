@@ -1,6 +1,4 @@
-import * as React from "react";
 import { Box, Paper, Typography } from "@mui/material";
-import * as Icons from "@mui/icons-material";
 import CheckIcon from "@mui/icons-material/Check";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { STAGES, stepState } from "../config/stages.config";
@@ -36,12 +34,6 @@ const STATE_NODE_STYLE: Record<string, { bg: string; border: string; fg: string;
   pending: { bg: "rgba(255,255,255,0.6)", border: "#e2e8f0", fg: "#94a3b8", shadow: "none" },
   skipped: { bg: "rgba(203,213,225,0.16)", border: "#cbd5e1", fg: "#94a3b8", shadow: "none" },
 };
-
-function StageIcon({ iconName, sx }: { iconName: string; sx?: object }) {
-  const IconComponent = (Icons as unknown as Record<string, React.ElementType>)[iconName];
-  if (!IconComponent) return null;
-  return <IconComponent sx={sx} />;
-}
 
 function subtextFor(
   stageKey: string,
@@ -122,6 +114,7 @@ export default function ActivityTimeline({
           const isLast = index === STAGES.length - 1;
           const isDone = state === "done";
           const subtext = subtextFor(stage.key, state, record, mrpRecord, procurementRecords, consumptionEntries);
+          const StageIcon = stage.icon;
 
           return (
             <Box key={stage.key} sx={{ display: "flex", gap: 1.75 }}>
@@ -142,10 +135,7 @@ export default function ActivityTimeline({
                       boxShadow: nodeStyle.shadow,
                     }}
                   >
-                    <StageIcon
-                      iconName={stage.iconName}
-                      sx={{ color: nodeStyle.fg, fontSize: 18 }}
-                    />
+                    <StageIcon sx={{ color: nodeStyle.fg, fontSize: 18 }} />
                   </Box>
 
                   {/* Top-Right Badge: Only shown if state === 'done' */}
