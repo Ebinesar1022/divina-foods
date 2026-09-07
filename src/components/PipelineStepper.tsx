@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Box, Typography, keyframes } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import { STAGES, stepState } from '../config/stages.config';
@@ -8,6 +9,10 @@ interface PipelineStepperProps {
   currentIndex: number;
   isFullyComplete: boolean;
   procurementSkipped: boolean;
+  // Lets the parent attach a small action (e.g. the Procurement stage's
+  // "Check Stock" button) underneath a specific stage's label, without
+  // this component knowing anything about what that action does.
+  renderStageExtra?: (stageKey: StageKey) => ReactNode;
 }
 
 const pulse = keyframes`
@@ -50,6 +55,7 @@ export default function PipelineStepper({
   currentIndex,
   isFullyComplete,
   procurementSkipped,
+  renderStageExtra,
 }: PipelineStepperProps) {
   return (
     <Box
@@ -255,6 +261,9 @@ export default function PipelineStepper({
                   >
                     Skipped — In Stock
                   </Typography>
+                )}
+                {renderStageExtra && (
+                  <Box sx={{ mt: 1 }}>{renderStageExtra(stage.key)}</Box>
                 )}
               </Box>
             </Box>

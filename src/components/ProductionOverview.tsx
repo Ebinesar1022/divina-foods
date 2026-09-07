@@ -699,6 +699,19 @@ export default function ProductionOverview({
               currentIndex={currentIndex}
               isFullyComplete={isFullyComplete}
               procurementSkipped={procurementSkipped}
+              renderStageExtra={(stageKeyForStage) =>
+                stageKeyForStage === "procurement" && record.status === "Waiting for Stock" ? (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleCheckStock}
+                    disabled={checkStockRunning || !mrpRecord}
+                    sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600, fontSize: 11.5, px: 1.25, py: 0.25, minWidth: 0 }}
+                  >
+                    {checkStockRunning ? "Checking…" : "Check Stock"}
+                  </Button>
+                ) : null
+              }
             />
           </Paper>
 
@@ -821,22 +834,11 @@ export default function ProductionOverview({
                         description="Select the items below to raise a Purchase Order. Once everything has been received, this target moves on to Initiate Production automatically."
                       />
 
-                      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0.5 }}>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={handleCheckStock}
-                          disabled={checkStockRunning || !data.mrpRecord}
-                          sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
-                        >
-                          {checkStockRunning ? "Checking Stock…" : "Check Stock"}
-                        </Button>
-                        {checkStockError && (
-                          <Typography color="error" sx={{ fontSize: 12.5 }}>
-                            {checkStockError}
-                          </Typography>
-                        )}
-                      </Box>
+                      {checkStockError && (
+                        <Typography color="error" sx={{ fontSize: 12.5, textAlign: "center" }}>
+                          {checkStockError}
+                        </Typography>
+                      )}
 
                       <Box>
                         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
