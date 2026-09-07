@@ -1,18 +1,24 @@
+import type { ElementType } from "react";
+import TrackChangesIcon from "@mui/icons-material/TrackChanges";
+import SchemaIcon from "@mui/icons-material/Schema";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
+import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing";
+import ChecklistRtlIcon from "@mui/icons-material/ChecklistRtl";
 import type { ProductionTargetStatus, StageKey, StageState } from "../types";
 
 export interface StageConfig {
   key: StageKey;
   label: string;
   tabKey: string;
-  iconName: string; // MUI icon name
+  icon: ElementType;
 }
 
 export const STAGES: StageConfig[] = [
-  { key: "production_target", label: "Production Target", tabKey: "overview", iconName: "TrackChanges" },
-  { key: "mrp", label: "Material Requirement & Planning", tabKey: "mrp", iconName: "Schema" },
-  { key: "procurement", label: "Procurement", tabKey: "procurement", iconName: "ShoppingCart" },
-  { key: "production_inprogress", label: "Production In progress", tabKey: "in_progress", iconName: "PrecisionManufacturing" },
-  { key: "consumption_entry", label: "Consumption Entry", tabKey: "consumption_entry", iconName: "ChecklistRtl" },
+  { key: "production_target", label: "Production Target", tabKey: "overview", icon: TrackChangesIcon },
+  { key: "mrp", label: "Material Requirement & Planning", tabKey: "mrp", icon: SchemaIcon },
+  { key: "procurement", label: "Procurement", tabKey: "procurement", icon: ShoppingCartIcon },
+  { key: "production_inprogress", label: "Production In progress", tabKey: "in_progress", icon: PrecisionManufacturingIcon },
+  { key: "consumption_entry", label: "Consumption Entry", tabKey: "consumption_entry", icon: ChecklistRtlIcon },
 ];
 
 export const TOTAL_STAGES = STAGES.length;

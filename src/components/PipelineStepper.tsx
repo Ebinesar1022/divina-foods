@@ -1,7 +1,5 @@
-import React from 'react';
 import { Box, Typography, keyframes } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import * as Icons from '@mui/icons-material';
 import { STAGES, stepState } from '../config/stages.config';
 import type { StageKey, StageState } from '../types';
 
@@ -48,12 +46,6 @@ const STATE_STYLES: Record<
   },
 };
 
-function StageIcon({ iconName, sx }: { iconName: string; sx?: object }) {
-  const IconComponent = (Icons as Record<string, React.ElementType>)[iconName];
-  if (!IconComponent) return null;
-  return <IconComponent sx={sx} />;
-}
-
 export default function PipelineStepper({
   currentIndex,
   isFullyComplete,
@@ -85,6 +77,7 @@ export default function PipelineStepper({
           const state = stepState(index, currentIndex, isFullyComplete, procurementSkipped);
           const styles = STATE_STYLES[state];
           const isDone = state === 'done';
+          const StageIcon = stage.icon;
 
           // Connector between (index - 1) and index
           const prevStageState =
@@ -161,7 +154,6 @@ export default function PipelineStepper({
                     }}
                   >
                     <StageIcon
-                      iconName={stage.iconName}
                       sx={{
                         color: styles.fg,
                         fontSize: { xs: 22, sm: 24 },
