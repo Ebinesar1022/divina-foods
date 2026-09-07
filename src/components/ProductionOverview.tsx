@@ -34,6 +34,7 @@ import ReceivePoDialog from "./ReceivePoDialog";
 import MrpReportView from "./MrpReportView";
 import FoodProductionLoader from "./FoodProductionLoader";
 import {
+  checkStockForMrp,
   commitMrpDraft,
   commitConsumptionEntry,
   commitCreatePo,
@@ -195,6 +196,12 @@ export default function ProductionOverview({
   const [taxTypes, setTaxTypes] = useState<TaxOption[]>([]);
   const preparingCreatePoRef = useRef(false);
   const committingCreatePoRef = useRef(false);
+
+  // Procurement: Check Stock — re-checks the MRP's still-short raw
+  // materials against the warehouse's current Available_Stocks.
+  const [checkStockRunning, setCheckStockRunning] = useState(false);
+  const [checkStockError, setCheckStockError] = useState("");
+  const checkingStockRef = useRef(false);
 
   // Procurement: Receive a Purchase Order.
   const [receivePoDialogOpen, setReceivePoDialogOpen] = useState(false);
@@ -526,6 +533,27 @@ export default function ProductionOverview({
       });
   }
 
+  function handleCheckStock() {
+    if (!data || !data.mrpRecord) return;
+    if (checkingStockRef.current) return;
+    checkingStockRef.current = true;
+    setCheckStockRunning(true);
+    setCheckStockError("");
+    checkStockForMrp(data.mrpRecord.id)
+      .then(function () {
+        return fetchProductionOverview(productionTargetId).then(function (result) {
+          setData(result);
+        });
+      })
+      .catch(function (err: any) {
+        setCheckStockError((err && err.message) || "Failed to check stock. Please try again.");
+      })
+      .finally(function () {
+        checkingStockRef.current = false;
+        setCheckStockRunning(false);
+      });
+  }
+
   function handleOpenReceivePo(po: PurchaseOrderDetail) {
     if (preparingReceivePoRef.current) return;
     preparingReceivePoRef.current = true;
@@ -791,6 +819,23 @@ export default function ProductionOverview({
                         title="Procurement Needed"
                         description="Select the items below to raise a Purchase Order. Once everything has been received, this target moves on to Initiate Production automatically."
                       />
+
+                      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0.5 }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={handleCheckStock}
+                          disabled={checkStockRunning || !data.mrpRecord}
+                          sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                        >
+                          {checkStockRunning ? "Checking Stock…" : "Check Stock"}
+                        </Button>
+                        {checkStockError && (
+                          <Typography color="error" sx={{ fontSize: 12.5 }}>
+                            {checkStockError}
+                          </Typography>
+                        )}
+                      </Box>
 
                       <Box>
                         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>

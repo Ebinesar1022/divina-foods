@@ -701,6 +701,36 @@ function processPurchaseReceive(receiveRecordId: string): Promise<any> {
   });
 }
 
+// Published as "Check_stock_in_MRP" in Microservices (function: MRP.CheckStock).
+// Re-checks every still-short Raw_Materials row on an MRP against the
+// warehouse's current Available_Stocks, reserves whatever now covers it,
+// and releases the linked Production Target once nothing is left short —
+// the "Check Stock" button's whole job.
+const CHECK_STOCK_API = {
+  api_name: "Check_stock_in_MRP",
+  workspace_name: "info_divinafoodco",
+  public_key: "GXgPnYWkkv6Bs7QO2APnChuUn",
+};
+
+export function checkStockForMrp(mrpRecordId: string): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: CHECK_STOCK_API.api_name,
+    workspace_name: CHECK_STOCK_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      mrp_id: mrpRecordId,
+    },
+    public_key: CHECK_STOCK_API.public_key,
+  }).then(function (resp: any) {
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
+      return Promise.reject(new Error((result && result.message) || "Failed to check stock for this MRP."));
+    }
+    return resp;
+  });
+}
+
 // ───────────── Production In-progress ─────────────
 // Confirmed against the app's .ds export — this report is just
 // Production_Targets filtered to Status == "In Progress"; there is no
