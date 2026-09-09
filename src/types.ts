@@ -320,3 +320,16 @@ export interface StartProductionDetails {
   assignedToId?: string; // Employee record ID, or "" if not set
 }
 
+// One batch a raw material's need was drawn from, per the
+// AllocateAndCommitBatch Custom API's FEFO split — a raw material can
+// span several of these when one batch alone doesn't cover it.
+export interface BatchAllocationLine {
+  batchId: string; // Batch_Details record ID
+  batchNumber?: string; // display lot code, once the Custom API returns it
+  productId: string;
+  expiryDate: string;
+  stockOnHand: number;
+  batchQty: number;
+  remainingQty: number;
+}
+

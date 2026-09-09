@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────
 
 import type {
+  BatchAllocationLine,
   BomItemRow,
   ConsumptionEntryDraft,
   ConsumptionEntryRow,
@@ -1379,6 +1380,53 @@ export function allocateStockOnProductionStart(productionTargetRecordId: string)
       );
     }
     return resp;
+  });
+}
+
+// Published as "AllocateAndCommitBatch" in Microservices
+// (function: FEFO.AllocateAndCommitBatch). Supersedes allocateStockOnProductionStart
+// above (left in place, just no longer called) — does the FEFO batch pick
+// AND the Reserved_Stock → Committed_Stocks transition in one call, and
+// hands back which specific batch(es) each raw material was drawn from so
+// the widget can show it.
+const ALLOCATE_AND_COMMIT_BATCH_API = {
+  api_name: "AllocateAndCommitBatch",
+  workspace_name: "info_divinafoodco",
+  public_key: "RWgBNeUuWqXC9BrfSavqwT3fT",
+};
+
+export function allocateAndCommitBatch(productionTargetRecordId: string): Promise<BatchAllocationLine[]> {
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: ALLOCATE_AND_COMMIT_BATCH_API.api_name,
+    workspace_name: ALLOCATE_AND_COMMIT_BATCH_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      production_target_id: productionTargetRecordId,
+    },
+    public_key: ALLOCATE_AND_COMMIT_BATCH_API.public_key,
+  }).then(function (resp: any) {
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
+      return Promise.reject(
+        new Error((result && result.message) || "Failed to allocate batches for this production run.")
+      );
+    }
+    const rawLines: any[] = (result && result.allocations) || [];
+    return rawLines.map(function (line): BatchAllocationLine {
+      return {
+        batchId: lookupId(line.Batch_NO) || display(line.Batch_NO),
+        // Not in the response yet — add `allocLine.put("Batch_Number", ...)`
+        // to the Deluge function once you're ready, and this picks it up
+        // automatically (falls back to showing the batch's record ID).
+        batchNumber: line.Batch_Number != null ? display(line.Batch_Number) : undefined,
+        productId: lookupId(line.Product) || display(line.Product),
+        expiryDate: display(line.Expiry_Date),
+        stockOnHand: parseFloat(display(line.Stock_On_Hand)) || 0,
+        batchQty: parseFloat(display(line.Batch_Qty)) || 0,
+        remainingQty: parseFloat(display(line.Remaining_Qty)) || 0,
+      };
+    });
   });
 }
 
