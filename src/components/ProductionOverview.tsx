@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Tab,
@@ -27,6 +27,7 @@ import ShoppingCartCheckoutIcon from "@mui/icons-material/ShoppingCartCheckout";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import ActivityTimeline from "./ActivityTimeline";
@@ -48,7 +49,7 @@ import {
   prepareMrpDraft,
   prepareReceivePoDraft,
   startProduction,
-  allocateStockOnProductionStart,
+  allocateAndCommitBatch,
 } from "../services/productionApi";
 import {
   computeProgress,
@@ -58,6 +59,7 @@ import {
   stageKeyFromStatus,
 } from "../config/stages.config";
 import type {
+  BatchAllocationLine,
   ConsumptionEntryDraft,
   ConsumptionEntryRow,
   CreatePoDraft,
@@ -67,6 +69,7 @@ import type {
   MrpRow,
   NonStockItemRow,
   PaymentTermOption,
+  RawMaterialNeedRow,
   TaxOption,
   ProductionInProgressRow,
   ProductionTargetRow,
@@ -181,6 +184,11 @@ export default function ProductionOverview({
   const [endDate, setEndDate] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
   const poCommittingRef = useRef(false);
+  // Which batch(es) each raw material was drawn from, per the last
+  // AllocateAndCommitBatch call — only lives in this component's state
+  // (no persistent record is created for it), so it's populated right
+  // after Start Production and shown for the rest of this session.
+  const [batchAllocations, setBatchAllocations] = useState<BatchAllocationLine[]>([]);
 
   // Complete Production: dialog prefilled from the Production Target's own
   // finished goods + the MRP's allocated raw materials (mirrors the native
@@ -364,9 +372,10 @@ export default function ProductionOverview({
     setPoCommitError("");
     Promise.all([
       startProduction(data.record.id, { startDate, endDate, assignedToId }),
-      allocateStockOnProductionStart(data.record.id),
+      allocateAndCommitBatch(data.record.id),
     ])
-      .then(function () {
+      .then(function (results) {
+        setBatchAllocations(results[1]);
         return fetchProductionOverview(productionTargetId).then(
           function (result) {
             setData(result);
@@ -1167,7 +1176,7 @@ export default function ProductionOverview({
                             boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
                           }}
                         >
-                          Start Production
+                          Allocate Batch &amp; Start Production
                         </Button>
                       }
                     />
@@ -1192,6 +1201,13 @@ export default function ProductionOverview({
                         <InfoCard label="Assigned To" value={record.assignedTo} />
                         <InfoCard label="Status" valueNode={<StatusChip value={record.status} />} />
                       </Box>
+
+                      {batchAllocations.length > 0 && (
+                        <BatchAllocationSummary
+                          allocations={batchAllocations}
+                          rawMaterials={data.mrpDetails?.rawMaterials || []}
+                        />
+                      )}
 
                       <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
                         <Button
@@ -1450,6 +1466,167 @@ export default function ProductionOverview({
           </Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+}
+
+// ───────────── Batch Allocation Summary ─────────────
+// Shown right after "Allocate Batch & Start Production" — groups the
+// AllocateAndCommitBatch response by raw material and, under each, chips out
+// the specific Batch_Details rows FEFO picked to cover it (a material can
+// draw from more than one batch when the oldest alone doesn't cover the
+// need). Cross-references rawMaterials for the display name/UOM/needed qty/
+// status, since the Custom API's response only carries record IDs.
+function BatchAllocationSummary({
+  allocations,
+  rawMaterials,
+}: {
+  allocations: BatchAllocationLine[];
+  rawMaterials: RawMaterialNeedRow[];
+}) {
+  const groups = useMemo(() => {
+    const byProduct = new Map<string, BatchAllocationLine[]>();
+    allocations.forEach((line) => {
+      const list = byProduct.get(line.productId) || [];
+      list.push(line);
+      byProduct.set(line.productId, list);
+    });
+    return Array.from(byProduct.entries()).map(([productId, lines]) => ({
+      productId,
+      lines,
+      material: rawMaterials.find((rm) => rm.productId === productId),
+    }));
+  }, [allocations, rawMaterials]);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: { xs: 2, sm: 2.5 },
+        borderRadius: "16px",
+        bgcolor: "rgba(255,255,255,0.65)",
+        boxShadow: "0 6px 22px rgba(30, 58, 138, 0.06)",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 2 }}>
+        <Box
+          sx={{
+            width: 34,
+            height: 34,
+            borderRadius: "10px",
+            bgcolor: "#EFF6FF",
+            color: "#2563eb",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.12)",
+          }}
+        >
+          <Inventory2OutlinedIcon sx={{ fontSize: 19 }} />
+        </Box>
+        <Box>
+          <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#172033" }}>
+            Batch Allocation
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: "#64748B" }}>
+            FEFO-picked batches committed for this run
+          </Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+        {groups.map((group) => (
+          <BatchAllocationGroupRow key={group.productId} material={group.material} lines={group.lines} />
+        ))}
+      </Box>
+    </Paper>
+  );
+}
+
+function BatchAllocationGroupRow({
+  material,
+  lines,
+}: {
+  material?: RawMaterialNeedRow;
+  lines: BatchAllocationLine[];
+}) {
+  const totalAllocated = lines.reduce((sum, line) => sum + (line.batchQty || 0), 0);
+
+  return (
+    <Box
+      sx={{
+        borderRadius: "12px",
+        border: "1px solid rgba(148,163,184,0.25)",
+        bgcolor: "rgba(248,250,252,0.65)",
+        p: { xs: 1.5, sm: 1.75 },
+        transition: "box-shadow 180ms ease",
+        "&:hover": {
+          boxShadow: "0 8px 22px rgba(37, 99, 235, 0.08)",
+        },
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 1,
+          mb: 1.25,
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#172033" }}>
+            {material?.productName || "—"}
+          </Typography>
+          <Typography sx={{ fontSize: 11.5, color: "#64748B", mt: 0.25 }}>
+            {material?.uom ? `${material.uom} · ` : ""}
+            Needed {material ? material.neededQuantity : totalAllocated}
+          </Typography>
+        </Box>
+        {material?.status && <StatusChip value={material.status} />}
+      </Box>
+
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+        {lines.map((line, idx) => (
+          <BatchChip key={line.batchId || idx} line={line} />
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+function BatchChip({ line }: { line: BatchAllocationLine }) {
+  const label = line.batchNumber || (line.batchId ? `Batch #${line.batchId.slice(-6)}` : "Batch");
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.85,
+        pl: 1.25,
+        pr: 1.5,
+        py: 0.55,
+        borderRadius: "10px",
+        bgcolor: "rgba(37, 99, 235, 0.06)",
+        border: "1px solid rgba(37, 99, 235, 0.18)",
+      }}
+    >
+      <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#2563eb", flexShrink: 0 }} />
+      <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8" }}>
+          {label}
+          <Box component="span" sx={{ color: "#172033", fontWeight: 600, ml: 0.5 }}>
+            ({line.batchQty})
+          </Box>
+        </Typography>
+        {line.expiryDate && (
+          <Typography sx={{ fontSize: 10, color: "#64748B" }}>Exp {line.expiryDate}</Typography>
+        )}
+      </Box>
     </Box>
   );
 }
