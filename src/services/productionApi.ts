@@ -107,6 +107,15 @@ export const CONFIG = {
   // "Update Inventory Adjustment" workflow.
   SCRAP_WAREHOUSE_STOCK_REPORT: "Scrap_Warehouse_Stock_Details_Report",
   PRODUCTION_STOCK_REPORT: "Production_Stock_Details_Report",
+
+  // Confirmed against the app's .ds export — FEFO_Batch_Allocation (header,
+  // Production_Targets lookup) + Batch_Allocation (its grid, linked back via
+  // FEFO_Batch_ID) is the native persistent record for a Start Production
+  // run's FEFO pick. AllocateAndCommitBatch now writes one of these so the
+  // widget can read it back after a reload instead of only holding it in
+  // React state.
+  FEFO_BATCH_ALLOCATION_REPORT: "FEFO_Batch_Allocation_Report",
+  BATCH_ALLOCATION_REPORT: "All_Batch_Allocations",
 };
 
 function display(value: any): string {
@@ -1395,7 +1404,21 @@ const ALLOCATE_AND_COMMIT_BATCH_API = {
   public_key: "RWgBNeUuWqXC9BrfSavqwT3fT",
 };
 
-export function allocateAndCommitBatch(productionTargetRecordId: string): Promise<BatchAllocationLine[]> {
+// Resolves once the Deluge function has done the FEFO pick, the
+// Reserved_Stock → Committed_Stocks transition, AND written a persistent
+// FEFO_Batch_Allocation record (+ its Batch_Allocation lines) for this
+// production target. The widget never parses the response's own
+// "allocations" field for display — those are Deluge's raw 17-digit record
+// IDs (batch_lineRec.ID / batch_lineRec.Product_Master) put into the
+// response Map untouched, which exceed Number.MAX_SAFE_INTEGER and silently
+// round on the JSON round-trip to the browser (classic
+// large-int-as-JSON-number precision loss) — that's why the batch card used
+// to show a garbled numeric ID instead of the item name. Reading the
+// persisted record back through getRecords (see
+// fetchBatchAllocationsForProductionTarget below) sidesteps that entirely,
+// since Zoho's own REST API always returns record IDs as precision-safe
+// strings — and it's what makes the breakdown survive a page reload too.
+export function allocateAndCommitBatch(productionTargetRecordId: string): Promise<void> {
   return window.ZOHO.CREATOR.DATA.invokeCustomApi({
     api_name: ALLOCATE_AND_COMMIT_BATCH_API.api_name,
     workspace_name: ALLOCATE_AND_COMMIT_BATCH_API.workspace_name,
@@ -1412,29 +1435,39 @@ export function allocateAndCommitBatch(productionTargetRecordId: string): Promis
         new Error((result && result.message) || "Failed to allocate batches for this production run.")
       );
     }
-    const rawLines: any[] = (result && result.allocations) || [];
-    return rawLines.map(function (line): BatchAllocationLine {
-      return {
-        // Batch_NO/Product are Deluge's raw 17-digit record IDs (batch_lineRec.ID /
-        // batch_lineRec.Product_Master), put into the response Map untouched.
-        // Those exceed Number.MAX_SAFE_INTEGER, so the JSON round-trip to the
-        // browser silently rounds them (classic large-int-as-JSON-number
-        // precision loss) — that's why they never lined up with the
-        // string-safe IDs getRecords() returns elsewhere in this file, and
-        // why the group header fell back to showing a garbled numeric ID.
-        // Batch_Number/Product_Name (added to the Deluge function) carry the
-        // human-readable text directly, sidestepping that precision loss —
-        // prefer those, and only fall back to the raw ID fields for anyone
-        // still on the older, unpatched Deluge function.
-        batchId: lookupId(line.Batch_NO) || display(line.Batch_NO),
-        batchNumber: line.Batch_Number != null ? display(line.Batch_Number) : undefined,
-        productId: lookupId(line.Product) || display(line.Product),
-        productName: line.Product_Name != null ? display(line.Product_Name) : undefined,
-        expiryDate: display(line.Expiry_Date),
-        stockOnHand: parseFloat(display(line.Stock_On_Hand)) || 0,
-        batchQty: parseFloat(display(line.Batch_Qty)) || 0,
-        remainingQty: parseFloat(display(line.Remaining_Qty)) || 0,
-      };
+  });
+}
+
+// Reads back the FEFO_Batch_Allocation record (+ its Batch_Allocation grid)
+// that AllocateAndCommitBatch persists for a production target — same
+// two-step header-then-lines pattern as fetchPurchaseOrders/PO_Line_Items.
+// Both Batch_NO and Product are configured with a displayformat
+// ([Batch_Number] / [Product_Name] respectively), so display() on them
+// already returns the human-readable text, not the raw ID.
+export function fetchBatchAllocationsForProductionTarget(
+  productionTargetRecordId: string
+): Promise<BatchAllocationLine[]> {
+  if (!productionTargetRecordId) return Promise.resolve([]);
+  const criteria = `Production_Targets == ${productionTargetRecordId}`;
+  return getRecords(CONFIG.FEFO_BATCH_ALLOCATION_REPORT, criteria).then(function (headerRows) {
+    if (!headerRows || !headerRows.length) return [];
+    // One header per Start Production click — if it's ever clicked more
+    // than once for the same target, use the most recently created one.
+    const headerId = headerRows[headerRows.length - 1].ID;
+    return getRecords(CONFIG.BATCH_ALLOCATION_REPORT, `FEFO_Batch_ID == ${headerId}`).then(function (rows) {
+      if (!rows || !rows.length) return [];
+      return rows.map(function (r: any): BatchAllocationLine {
+        return {
+          batchId: lookupId(r.Batch_NO) || display(r.Batch_NO),
+          batchNumber: display(r.Batch_NO) || undefined,
+          productId: lookupId(r.Product) || display(r.Product),
+          productName: display(r.Product) || undefined,
+          expiryDate: display(r.Expiry_Date),
+          stockOnHand: parseFloat(display(r.Stock_On_Hand)) || 0,
+          batchQty: parseFloat(display(r.Batch_Qty)) || 0,
+          remainingQty: parseFloat(display(r.Remaining_Qty)) || 0,
+        };
+      });
     });
   });
 }

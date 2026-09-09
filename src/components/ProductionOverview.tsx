@@ -50,6 +50,7 @@ import {
   prepareReceivePoDraft,
   startProduction,
   allocateAndCommitBatch,
+  fetchBatchAllocationsForProductionTarget,
 } from "../services/productionApi";
 import {
   computeProgress,
@@ -244,6 +245,18 @@ export default function ProductionOverview({
       if (result.record) {
         setActiveTab(initialTabForStatus(result.record.status));
       }
+      // Restore the batch allocation breakdown on a fresh page load/reload —
+      // it's a real FEFO_Batch_Allocation record AllocateAndCommitBatch
+      // wrote, not something that only lived in this component's state, so
+      // it's there for any run that already started.
+      if (
+        result.record &&
+        (result.record.status === "In Progress" || result.record.status === "Completed")
+      ) {
+        fetchBatchAllocationsForProductionTarget(result.record.id).then(function (allocations) {
+          setBatchAllocations(allocations);
+        });
+      }
     });
   }, [productionTargetId]);
 
@@ -370,12 +383,19 @@ export default function ProductionOverview({
     poCommittingRef.current = true;
     setPoCommitting(true);
     setPoCommitError("");
+    const productionTargetRecordId = data.record.id;
     Promise.all([
-      startProduction(data.record.id, { startDate, endDate, assignedToId }),
-      allocateAndCommitBatch(data.record.id),
+      startProduction(productionTargetRecordId, { startDate, endDate, assignedToId }),
+      allocateAndCommitBatch(productionTargetRecordId),
     ])
-      .then(function (results) {
-        setBatchAllocations(results[1]);
+      .then(function () {
+        // Read the FEFO_Batch_Allocation record AllocateAndCommitBatch just
+        // wrote, rather than trying to parse its own response — that's also
+        // what makes this breakdown survive a page reload later.
+        return fetchBatchAllocationsForProductionTarget(productionTargetRecordId);
+      })
+      .then(function (allocations) {
+        setBatchAllocations(allocations);
         return fetchProductionOverview(productionTargetId).then(
           function (result) {
             setData(result);
