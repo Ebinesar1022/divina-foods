@@ -1415,19 +1415,21 @@ export function allocateAndCommitBatch(productionTargetRecordId: string): Promis
     const rawLines: any[] = (result && result.allocations) || [];
     return rawLines.map(function (line): BatchAllocationLine {
       return {
+        // Batch_NO/Product are Deluge's raw 17-digit record IDs (batch_lineRec.ID /
+        // batch_lineRec.Product_Master), put into the response Map untouched.
+        // Those exceed Number.MAX_SAFE_INTEGER, so the JSON round-trip to the
+        // browser silently rounds them (classic large-int-as-JSON-number
+        // precision loss) — that's why they never lined up with the
+        // string-safe IDs getRecords() returns elsewhere in this file, and
+        // why the group header fell back to showing a garbled numeric ID.
+        // Batch_Number/Product_Name (added to the Deluge function) carry the
+        // human-readable text directly, sidestepping that precision loss —
+        // prefer those, and only fall back to the raw ID fields for anyone
+        // still on the older, unpatched Deluge function.
         batchId: lookupId(line.Batch_NO) || display(line.Batch_NO),
-        // Not in the response yet — add `allocLine.put("Batch_Number", ...)`
-        // to the Deluge function once you're ready, and this picks it up
-        // automatically (falls back to showing the batch's record ID).
         batchNumber: line.Batch_Number != null ? display(line.Batch_Number) : undefined,
-        // The Deluge function's "Product" value has turned out to be a plain
-        // display string rather than a lookup object (so lookupId() just
-        // echoes it back as-is) — it doesn't line up with a Raw_Materials
-        // row's Product_Name lookup ID. Keep both: productId for the normal
-        // ID match, productName so the widget can still match/label by name
-        // when the ID doesn't resolve.
         productId: lookupId(line.Product) || display(line.Product),
-        productName: display(line.Product) || undefined,
+        productName: line.Product_Name != null ? display(line.Product_Name) : undefined,
         expiryDate: display(line.Expiry_Date),
         stockOnHand: parseFloat(display(line.Stock_On_Hand)) || 0,
         batchQty: parseFloat(display(line.Batch_Qty)) || 0,

@@ -1485,21 +1485,21 @@ function BatchAllocationSummary({
   rawMaterials: RawMaterialNeedRow[];
 }) {
   const groups = useMemo(() => {
-    // The Custom API's "Product" value has been seen coming back as a plain
-    // display string rather than a lookup object, so it doesn't always line
-    // up with a Raw_Materials row's Product_Name lookup ID (productId here).
-    // Try the ID match first, then fall back to matching by name — and
-    // group by whichever key actually resolved a material, so lines for the
-    // same raw material still land in one card either way.
+    // The Custom API's Batch_NO/Product are Deluge's raw 17-digit record IDs,
+    // which silently lose precision crossing the JSON boundary to the
+    // browser (they exceed Number.MAX_SAFE_INTEGER) — so productId here can
+    // never be trusted to line up with a Raw_Materials row's ID. productName
+    // (the Deluge function's own Product_Name lookup) doesn't have that
+    // problem, so match/group by name first and only fall back to the ID
+    // for anyone still on the older, unpatched Deluge function.
     function resolveMaterial(line: BatchAllocationLine): RawMaterialNeedRow | undefined {
       return (
-        rawMaterials.find((rm) => rm.productId && rm.productId === line.productId) ||
         rawMaterials.find(
           (rm) =>
             rm.productName &&
             line.productName &&
             rm.productName.trim().toLowerCase() === line.productName.trim().toLowerCase()
-        )
+        ) || rawMaterials.find((rm) => rm.productId && rm.productId === line.productId)
       );
     }
 
@@ -1509,7 +1509,12 @@ function BatchAllocationSummary({
     >();
     allocations.forEach((line) => {
       const material = resolveMaterial(line);
-      const key = material?.productId || line.productId || line.productName || "unknown";
+      const key =
+        material?.productName?.trim().toLowerCase() ||
+        line.productName?.trim().toLowerCase() ||
+        material?.productId ||
+        line.productId ||
+        "unknown";
       const group = byGroupKey.get(key) || { lines: [], material, fallbackName: line.productName };
       group.lines.push(line);
       if (!group.material && material) group.material = material;
