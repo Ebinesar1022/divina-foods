@@ -730,7 +730,7 @@ export default function ProductionOverview({
               renderStageExtra={(stageKeyForStage) =>
                 stageKeyForStage === "procurement" && record.status === "Waiting for Stock" ? (
                   <Button
-                    variant="outlined"
+                    variant="contained"
                     size="small"
                     onClick={handleCheckStock}
                     disabled={checkStockRunning || !mrpRecord}
