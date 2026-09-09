@@ -1420,7 +1420,14 @@ export function allocateAndCommitBatch(productionTargetRecordId: string): Promis
         // to the Deluge function once you're ready, and this picks it up
         // automatically (falls back to showing the batch's record ID).
         batchNumber: line.Batch_Number != null ? display(line.Batch_Number) : undefined,
+        // The Deluge function's "Product" value has turned out to be a plain
+        // display string rather than a lookup object (so lookupId() just
+        // echoes it back as-is) — it doesn't line up with a Raw_Materials
+        // row's Product_Name lookup ID. Keep both: productId for the normal
+        // ID match, productName so the widget can still match/label by name
+        // when the ID doesn't resolve.
         productId: lookupId(line.Product) || display(line.Product),
+        productName: display(line.Product) || undefined,
         expiryDate: display(line.Expiry_Date),
         stockOnHand: parseFloat(display(line.Stock_On_Hand)) || 0,
         batchQty: parseFloat(display(line.Batch_Qty)) || 0,

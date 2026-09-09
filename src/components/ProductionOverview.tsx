@@ -1141,6 +1141,13 @@ export default function ProductionOverview({
                           </TableContainer>
                         </Box>
                       )}
+
+                      {batchAllocations.length > 0 && (
+                        <BatchAllocationSummary
+                          allocations={batchAllocations}
+                          rawMaterials={data.mrpDetails?.rawMaterials || []}
+                        />
+                      )}
                     </Box>
                   ) : !mrpRecord ? (
                     <CenteredStateCard
@@ -1201,13 +1208,6 @@ export default function ProductionOverview({
                         <InfoCard label="Assigned To" value={record.assignedTo} />
                         <InfoCard label="Status" valueNode={<StatusChip value={record.status} />} />
                       </Box>
-
-                      {batchAllocations.length > 0 && (
-                        <BatchAllocationSummary
-                          allocations={batchAllocations}
-                          rawMaterials={data.mrpDetails?.rawMaterials || []}
-                        />
-                      )}
 
                       <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
                         <Button
@@ -1485,17 +1485,37 @@ function BatchAllocationSummary({
   rawMaterials: RawMaterialNeedRow[];
 }) {
   const groups = useMemo(() => {
-    const byProduct = new Map<string, BatchAllocationLine[]>();
+    // The Custom API's "Product" value has been seen coming back as a plain
+    // display string rather than a lookup object, so it doesn't always line
+    // up with a Raw_Materials row's Product_Name lookup ID (productId here).
+    // Try the ID match first, then fall back to matching by name — and
+    // group by whichever key actually resolved a material, so lines for the
+    // same raw material still land in one card either way.
+    function resolveMaterial(line: BatchAllocationLine): RawMaterialNeedRow | undefined {
+      return (
+        rawMaterials.find((rm) => rm.productId && rm.productId === line.productId) ||
+        rawMaterials.find(
+          (rm) =>
+            rm.productName &&
+            line.productName &&
+            rm.productName.trim().toLowerCase() === line.productName.trim().toLowerCase()
+        )
+      );
+    }
+
+    const byGroupKey = new Map<
+      string,
+      { lines: BatchAllocationLine[]; material?: RawMaterialNeedRow; fallbackName?: string }
+    >();
     allocations.forEach((line) => {
-      const list = byProduct.get(line.productId) || [];
-      list.push(line);
-      byProduct.set(line.productId, list);
+      const material = resolveMaterial(line);
+      const key = material?.productId || line.productId || line.productName || "unknown";
+      const group = byGroupKey.get(key) || { lines: [], material, fallbackName: line.productName };
+      group.lines.push(line);
+      if (!group.material && material) group.material = material;
+      byGroupKey.set(key, group);
     });
-    return Array.from(byProduct.entries()).map(([productId, lines]) => ({
-      productId,
-      lines,
-      material: rawMaterials.find((rm) => rm.productId === productId),
-    }));
+    return Array.from(byGroupKey.entries()).map(([key, group]) => ({ key, ...group }));
   }, [allocations, rawMaterials]);
 
   if (groups.length === 0) return null;
@@ -1539,7 +1559,12 @@ function BatchAllocationSummary({
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
         {groups.map((group) => (
-          <BatchAllocationGroupRow key={group.productId} material={group.material} lines={group.lines} />
+          <BatchAllocationGroupRow
+            key={group.key}
+            material={group.material}
+            fallbackName={group.fallbackName}
+            lines={group.lines}
+          />
         ))}
       </Box>
     </Paper>
@@ -1548,9 +1573,11 @@ function BatchAllocationSummary({
 
 function BatchAllocationGroupRow({
   material,
+  fallbackName,
   lines,
 }: {
   material?: RawMaterialNeedRow;
+  fallbackName?: string;
   lines: BatchAllocationLine[];
 }) {
   const totalAllocated = lines.reduce((sum, line) => sum + (line.batchQty || 0), 0);
@@ -1580,7 +1607,7 @@ function BatchAllocationGroupRow({
       >
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#172033" }}>
-            {material?.productName || "—"}
+            {material?.productName || fallbackName || "—"}
           </Typography>
           <Typography sx={{ fontSize: 11.5, color: "#64748B", mt: 0.25 }}>
             {material?.uom ? `${material.uom} · ` : ""}

@@ -327,6 +327,10 @@ export interface BatchAllocationLine {
   batchId: string; // Batch_Details record ID
   batchNumber?: string; // display lot code, once the Custom API returns it
   productId: string;
+  productName?: string; // the Custom API's own display text for the product,
+  // used to match/label a line when productId doesn't line up with a
+  // Raw_Materials row's Product_Name lookup ID (e.g. the Deluge function
+  // hands back a display string rather than the lookup's record ID)
   expiryDate: string;
   stockOnHand: number;
   batchQty: number;
