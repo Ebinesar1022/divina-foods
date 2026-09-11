@@ -737,7 +737,7 @@ export default function ProductionOverview({
         sx={{
           display: "grid",
           gridTemplateColumns: { xs: "1fr", lg: "1fr 340px", xl: "1fr 360px" },
-          alignItems: "start",
+          alignItems: "stretch",
           gap: { xs: 2.5, md: 3 },
           mt: { xs: 2.5, md: 3 },
         }}
