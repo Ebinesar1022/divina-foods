@@ -1577,7 +1577,7 @@ function BatchAllocationSummary({
             Batch Allocation
           </Typography>
           <Typography sx={{ fontSize: 12, color: "#64748B" }}>
-            FEFO-picked batches committed for this run
+            FEFO-picked batches committed for this Production.
           </Typography>
         </Box>
       </Box>
