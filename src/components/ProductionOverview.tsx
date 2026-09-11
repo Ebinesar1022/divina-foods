@@ -17,6 +17,8 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
@@ -252,6 +254,7 @@ export default function ProductionOverview({
   const [checkStockError, setCheckStockError] = useState("");
   const [stockStillShortOpen, setStockStillShortOpen] = useState(false);
   const [stockShortItems, setStockShortItems] = useState<NonStockItemRow[]>([]);
+  const [checkStockSuccessOpen, setCheckStockSuccessOpen] = useState(false);
   const checkingStockRef = useRef(false);
 
   // Procurement: Receive a Purchase Order.
@@ -631,6 +634,8 @@ export default function ProductionOverview({
           if (stillShort.length > 0) {
             setStockShortItems(stillShort);
             setStockStillShortOpen(true);
+          } else {
+            setCheckStockSuccessOpen(true);
           }
         });
       })
@@ -1541,6 +1546,22 @@ export default function ProductionOverview({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={checkStockSuccessOpen}
+        autoHideDuration={4000}
+        onClose={() => setCheckStockSuccessOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setCheckStockSuccessOpen(false)}
+          severity="success"
+          variant="filled"
+          sx={{ borderRadius: "10px", fontWeight: 600 }}
+        >
+          Stock check complete — all raw materials are now available.
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
