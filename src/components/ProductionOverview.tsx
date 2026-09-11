@@ -1003,7 +1003,7 @@ export default function ProductionOverview({
                                     <StatusChip value={po.status} />
                                     {pending > 0 && (
                                       <Button
-                                        variant="outlined"
+                                        variant="contained"
                                         size="small"
                                         startIcon={<LocalShippingIcon />}
                                         onClick={() => handleOpenReceivePo(po)}
