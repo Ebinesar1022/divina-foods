@@ -139,6 +139,8 @@ export interface ReceiveLineDraftRow {
   receivedQuantitySoFar: number;
   pendingQuantity: number;
   receivableQuantity: number;
+  batchNo: string; // required on Receive_Items — the lot code this receipt belongs to
+  expiryDate: string; // "YYYY-MM-DD" from a native <input type="date">, required on Receive_Items
 }
 
 export interface ReceivePoDraft {

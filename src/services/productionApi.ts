@@ -648,6 +648,8 @@ export function prepareReceivePoDraft(po: PurchaseOrderDetail): Promise<ReceiveP
           receivedQuantitySoFar: line.receivedQuantity,
           pendingQuantity: pending,
           receivableQuantity: pending,
+          batchNo: "", // required on Receive_Items — filled in by the user in the dialog
+          expiryDate: "",
         };
       }),
       sequenceRowId: sequenceRow.ID,
@@ -689,6 +691,11 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
           Received_Qty: line.receivedQuantitySoFar,
           Receivable_Qty: line.receivableQuantity,
           Pending_Qty: roundQty(line.pendingQuantity - line.receivableQuantity),
+          // Both mandatory on Receive_Items now — ProcessPurchaseReceive
+          // (UpdatePR) reads them straight off each line to create/update
+          // the matching Batch_Details row for whatever just arrived.
+          Batch_No: line.batchNo,
+          Expiry_Date: formatDateStringForZoho(line.expiryDate),
         });
       })
         .then(function () {

@@ -60,7 +60,13 @@ export default function ReceivePoDialog({
     onDraftChange({ ...draft, lines });
   }
 
-  const canSubmit = !!draft && draft.lines.some((l) => l.receivableQuantity > 0);
+  // Batch_No and Expiry_Date are mandatory on Receive_Items now — only
+  // require them for lines actually being received (receivableQuantity > 0)
+  // so a partial receipt isn't blocked by lines nobody's touching this time.
+  const canSubmit =
+    !!draft &&
+    draft.lines.some((l) => l.receivableQuantity > 0) &&
+    draft.lines.every((l) => l.receivableQuantity <= 0 || (l.batchNo.trim() && l.expiryDate));
 
   return (
     <Dialog
@@ -138,6 +144,8 @@ export default function ReceivePoDialog({
                     <TableCell align="right" sx={{ minWidth: 110 }}>
                       Receiving Now
                     </TableCell>
+                    <TableCell sx={{ minWidth: 130 }}>Batch No</TableCell>
+                    <TableCell sx={{ minWidth: 150 }}>Expiry Date</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -163,6 +171,27 @@ export default function ReceivePoDialog({
                           onChange={(e) => updateLine(index, { receivableQuantity: parseFloat(e.target.value) })}
                           inputProps={{ min: 0, max: line.pendingQuantity, style: { textAlign: "right" } }}
                           sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <TextField
+                          size="small"
+                          placeholder="Batch No"
+                          value={line.batchNo}
+                          disabled={committing || line.receivableQuantity <= 0}
+                          onChange={(e) => updateLine(index, { batchNo: e.target.value })}
+                          sx={{ bgcolor: "#fff", borderRadius: "8px", width: 120 }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <TextField
+                          type="date"
+                          size="small"
+                          value={line.expiryDate}
+                          disabled={committing || line.receivableQuantity <= 0}
+                          onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
+                          InputLabelProps={{ shrink: true }}
+                          sx={{ bgcolor: "#fff", borderRadius: "8px", width: 145 }}
                         />
                       </TableCell>
                     </TableRow>
