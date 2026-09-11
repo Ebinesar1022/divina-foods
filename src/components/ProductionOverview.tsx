@@ -98,6 +98,37 @@ const TABS = [
   { key: "consumption_entry", label: "Consumption Entry" },
 ];
 
+// Shared table chrome — same soft-border/rounded/hover treatment as
+// MrpReportView's tables, reused here so every plain data table in this file
+// (Non-Stock Items, PO Lines, Finished Goods, Consumption Entry's two
+// tables) reads as one consistent design instead of a mix of styles.
+// Purely presentational — never touches column content or row data.
+const TABLE_CONTAINER_SX = {
+  borderRadius: "14px",
+  borderColor: "rgba(148,163,184,0.25)",
+  boxShadow: "0 4px 16px rgba(15, 23, 42, 0.04)",
+  overflow: "hidden",
+} as const;
+
+const TABLE_HEAD_ROW_SX = {
+  "& th": {
+    fontWeight: 700,
+    color: "#475569",
+    bgcolor: "rgba(241,245,249,0.65)",
+    borderBottom: "1px solid rgba(148,163,184,0.3)",
+    py: 1.1,
+  },
+} as const;
+
+function tableRowSx(clickable = false) {
+  return {
+    transition: "background-color 120ms ease",
+    "&:hover": { bgcolor: "rgba(37,99,235,0.035)" },
+    "&:last-child td, &:last-child th": { border: 0 },
+    ...(clickable ? { cursor: "pointer" } : {}),
+  };
+}
+
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -906,8 +937,11 @@ export default function ProductionOverview({
                       )}
 
                       <Box>
-                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-                          <Typography sx={{ fontWeight: 700 }}>Needed Items</Typography>
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25, flexWrap: "wrap", gap: 1 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <ShoppingCartOutlinedIcon sx={{ color: "#2563eb", fontSize: 19 }} />
+                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Needed Items</Typography>
+                          </Box>
                           <Button
                             variant="contained"
                             size="small"
@@ -919,10 +953,10 @@ export default function ProductionOverview({
                             Create Purchase Order{selectedNonStockItemIds.length ? ` (${selectedNonStockItemIds.length})` : ""}
                           </Button>
                         </Box>
-                        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+                        <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
                           <Table size="small">
                             <TableHead>
-                              <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
+                              <TableRow sx={TABLE_HEAD_ROW_SX}>
                                 <TableCell padding="checkbox" />
                                 <TableCell>Product Name</TableCell>
                                 <TableCell>UOM</TableCell>
@@ -937,7 +971,7 @@ export default function ProductionOverview({
                                     hover
                                     selected={selectedNonStockItemIds.includes(item.id)}
                                     onClick={() => handleToggleSelectNonStockItem(item.id)}
-                                    sx={{ cursor: "pointer" }}
+                                    sx={tableRowSx(true)}
                                   >
                                     <TableCell padding="checkbox">
                                       <input
@@ -966,7 +1000,10 @@ export default function ProductionOverview({
 
                       {procurementRecords.length > 0 && (
                         <Box>
-                          <Typography sx={{ fontWeight: 700, mb: 1 }}>Purchase Orders</Typography>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
+                            <LocalShippingIcon sx={{ color: "#2563eb", fontSize: 19 }} />
+                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Purchase Orders</Typography>
+                          </Box>
                           {procurementRecords.map((po) => {
                             const pending = po.lines.reduce(
                               (sum, l) => sum + Math.max(0, l.orderQuantity - l.receivedQuantity),
@@ -976,7 +1013,13 @@ export default function ProductionOverview({
                               <Paper
                                 key={po.id}
                                 variant="outlined"
-                                sx={{ p: 1.5, mb: 1.5, borderRadius: "12px" }}
+                                sx={{
+                                  p: 1.75,
+                                  mb: 1.5,
+                                  borderRadius: "14px",
+                                  borderColor: "rgba(148,163,184,0.25)",
+                                  boxShadow: "0 4px 16px rgba(15, 23, 42, 0.04)",
+                                }}
                               >
                                 <Box
                                   sx={{
@@ -1014,10 +1057,10 @@ export default function ProductionOverview({
                                     )}
                                   </Box>
                                 </Box>
-                                <TableContainer>
+                                <TableContainer sx={{ borderRadius: "10px", overflow: "hidden" }}>
                                   <Table size="small">
                                     <TableHead>
-                                      <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
+                                      <TableRow sx={TABLE_HEAD_ROW_SX}>
                                         <TableCell>Product</TableCell>
                                         <TableCell align="right">Ordered</TableCell>
                                         <TableCell align="right">Received</TableCell>
@@ -1029,7 +1072,7 @@ export default function ProductionOverview({
                                     </TableHead>
                                     <TableBody>
                                       {po.lines.map((line) => (
-                                        <TableRow key={line.id}>
+                                        <TableRow key={line.id} sx={tableRowSx()}>
                                           <TableCell>{line.productName}</TableCell>
                                           <TableCell align="right">{line.orderQuantity}</TableCell>
                                           <TableCell align="right">{line.receivedQuantity}</TableCell>
@@ -1138,11 +1181,14 @@ export default function ProductionOverview({
 
                       {(data.mrpDetails?.finishedGoods?.length ?? 0) > 0 && (
                         <Box>
-                          <Typography sx={{ fontWeight: 700, mb: 1 }}>Finished Goods</Typography>
-                          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
+                            <Inventory2OutlinedIcon sx={{ color: "#2563eb", fontSize: 19 }} />
+                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Finished Goods</Typography>
+                          </Box>
+                          <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
                             <Table size="small">
                               <TableHead>
-                                <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
+                                <TableRow sx={TABLE_HEAD_ROW_SX}>
                                   <TableCell>Item</TableCell>
                                   <TableCell>UOM</TableCell>
                                   <TableCell align="right">Target Quantity</TableCell>
@@ -1150,7 +1196,7 @@ export default function ProductionOverview({
                               </TableHead>
                               <TableBody>
                                 {data.mrpDetails!.finishedGoods.map((fg) => (
-                                  <TableRow key={fg.id}>
+                                  <TableRow key={fg.id} sx={tableRowSx()}>
                                     <TableCell>{fg.itemName}</TableCell>
                                     <TableCell>{fg.uomName}</TableCell>
                                     <TableCell align="right">{fg.targetQuantity}</TableCell>
@@ -1271,7 +1317,16 @@ export default function ProductionOverview({
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {consumptionEntries.length ? (
                     consumptionEntries.map((entry) => (
-                      <Paper key={entry.id} variant="outlined" sx={{ borderRadius: "14px", overflow: "hidden" }}>
+                      <Paper
+                        key={entry.id}
+                        variant="outlined"
+                        sx={{
+                          borderRadius: "14px",
+                          overflow: "hidden",
+                          borderColor: "rgba(148,163,184,0.25)",
+                          boxShadow: "0 6px 22px rgba(15, 23, 42, 0.05)",
+                        }}
+                      >
                         <Box
                           sx={{
                             px: 2.5,
@@ -1302,10 +1357,10 @@ export default function ProductionOverview({
                           {entry.finishedGoods.length > 0 && (
                             <Box>
                               <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>Finished Goods</Typography>
-                              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
+                              <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
                                 <Table size="small">
                                   <TableHead>
-                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
+                                    <TableRow sx={TABLE_HEAD_ROW_SX}>
                                       <TableCell>Item</TableCell>
                                       <TableCell align="right">Target</TableCell>
                                       <TableCell align="right">Produced</TableCell>
@@ -1316,7 +1371,7 @@ export default function ProductionOverview({
                                   </TableHead>
                                   <TableBody>
                                     {entry.finishedGoods.map((fg) => (
-                                      <TableRow key={fg.id}>
+                                      <TableRow key={fg.id} sx={tableRowSx()}>
                                         <TableCell>{fg.itemName}</TableCell>
                                         <TableCell align="right">{fg.targetQuantity}</TableCell>
                                         <TableCell align="right">{fg.producedQuantity}</TableCell>
@@ -1336,10 +1391,10 @@ export default function ProductionOverview({
                               <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>
                                 Raw Materials Consumed
                               </Typography>
-                              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "10px" }}>
+                              <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
                                 <Table size="small">
                                   <TableHead>
-                                    <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "rgba(241,245,249,0.55)" } }}>
+                                    <TableRow sx={TABLE_HEAD_ROW_SX}>
                                       <TableCell>Raw Material</TableCell>
                                       <TableCell>UOM</TableCell>
                                       <TableCell align="right">Allocated</TableCell>
@@ -1349,7 +1404,7 @@ export default function ProductionOverview({
                                   </TableHead>
                                   <TableBody>
                                     {entry.rawMaterials.map((rm) => (
-                                      <TableRow key={rm.id}>
+                                      <TableRow key={rm.id} sx={tableRowSx()}>
                                         <TableCell>{rm.productName}</TableCell>
                                         <TableCell>{rm.uom}</TableCell>
                                         <TableCell align="right">{rm.allocatedQuantity}</TableCell>
