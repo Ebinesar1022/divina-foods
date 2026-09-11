@@ -1574,6 +1574,10 @@ export function prepareConsumptionDraft(
           producedQuantity: fg.targetQuantity,
           scrapQuantity: 0,
           batchNo: "",
+          // Defaults to the same "today" as the header Date field — this run
+          // is being completed now, so that's the sensible default MFD; the
+          // user can pull it back if manufacturing actually finished earlier.
+          manufacturingDate: new Date().toISOString().slice(0, 10),
           expiryDate: "",
         };
       }),
@@ -1616,6 +1620,13 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
         Finished_Good: fg.itemId,
         Produced_Quantity: fg.producedQuantity,
         Scrap_Quantity: fg.scrapQuantity,
+        // Needed by the corrected UpdateWarehouse Deluge: Batch_No both keys
+        // the Batch_Details row it creates/updates and is required on the
+        // Finished_Goods_Cunsumptions insert; MFD_Date/Expiry_Date are now
+        // "must have" fields on that same form.
+        Batch_No: fg.batchNo,
+        MFD_Date: formatDateStringForZoho(fg.manufacturingDate),
+        Expiry_Date: formatDateStringForZoho(fg.expiryDate),
       };
     });
 
@@ -1637,6 +1648,10 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
     http_method: "POST",
     content_type: "application/json",
     payload: {
+      // The corrected FEFO raw-material deduction reads the FEFO_Batch_Allocation
+      // row keyed off the production target, not off anything in this payload's
+      // own line items — the function needs the record ID to find it.
+      production_target_id: draft.productionTargetRecordId,
       finished_goods: finishedGoodsPayload,
       raw_materials: rawMaterialsPayload,
     },
@@ -1672,15 +1687,20 @@ export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<Co
     // insert/lookup/update calls) fired all at once trips Zoho Creator's cap
     // on simultaneous in-flight API calls (code 2955).
     return runSequentially(draft.finishedGoods, function (fg) {
+      // Batch_No, MFD_Date and Expiry_Date are all mandatory on this form now
+      // (MFD_Date and Expiry_Date are "must have" fields) — the dialog's
+      // canSubmit already blocks the commit until every line has all three,
+      // so these are sent unconditionally rather than only-if-present.
       const payload: Record<string, any> = {
         Consumption_Entry: entryId,
         Finished_Good: fg.itemId,
         Target_Quantity: fg.targetQuantity,
         Produced_Quantity: fg.producedQuantity,
         Scrap_Quantity: fg.scrapQuantity,
+        Batch_No: fg.batchNo,
+        MFD_Date: formatDateStringForZoho(fg.manufacturingDate),
+        Expiry_Date: formatDateStringForZoho(fg.expiryDate),
       };
-      if (fg.batchNo) payload.Batch_No = fg.batchNo;
-      if (fg.expiryDate) payload.Expiry_Date = formatDateStringForZoho(fg.expiryDate);
       return addRecord(CONFIG.FINISHED_GOODS_CONSUMPTIONS_FORM, payload);
     })
       .then(function () {

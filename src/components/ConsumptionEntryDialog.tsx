@@ -49,10 +49,21 @@ export default function ConsumptionEntryDialog({
 }: ConsumptionEntryDialogProps) {
   const isPreparing = !draft && !draftError;
   const today = new Date().toISOString().slice(0, 10);
-  const isBatchNoValid =
+  // Batch_No, MFD_Date and Expiry_Date are all mandatory on
+  // Finished_Goods_Cunsumptions now (MFD_Date and Expiry_Date are "must
+  // have" fields on the form) — block submit until every finished good has
+  // all three.
+  const areFinishedGoodsValid =
     !!draft &&
     draft.finishedGoods.length > 0 &&
-    draft.finishedGoods.every((fg) => typeof fg.batchNo === "string" && fg.batchNo.trim().length > 0);
+    draft.finishedGoods.every(
+      (fg) =>
+        typeof fg.batchNo === "string" &&
+        fg.batchNo.trim().length > 0 &&
+        !!fg.manufacturingDate &&
+        !!fg.expiryDate &&
+        fg.manufacturingDate <= fg.expiryDate
+    );
 
   function updateFinishedGood(index: number, patch: Partial<ConsumptionFinishedGoodDraftRow>) {
     if (!draft) return;
@@ -178,12 +189,19 @@ export default function ConsumptionEntryDialog({
                     <TableCell sx={{ minWidth: 140 }}>
                       Batch No <Box component="span" sx={{ color: "error.main" }}>*</Box>
                     </TableCell>
-                    <TableCell sx={{ minWidth: 150 }}>Expiry Date</TableCell>
+                    <TableCell sx={{ minWidth: 150 }}>
+                      MFD Date <Box component="span" sx={{ color: "error.main" }}>*</Box>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 150 }}>
+                      Expiry Date <Box component="span" sx={{ color: "error.main" }}>*</Box>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {draft.finishedGoods.map((fg, index) => {
                     const isMissingBatch = !fg.batchNo || !fg.batchNo.trim();
+                    const mfdAfterExpiry =
+                      !!fg.manufacturingDate && !!fg.expiryDate && fg.manufacturingDate > fg.expiryDate;
                     return (
                       <TableRow key={fg.itemId + index}>
                         <TableCell>
@@ -234,10 +252,24 @@ export default function ConsumptionEntryDialog({
                             type="date"
                             size="small"
                             InputLabelProps={{ shrink: true }}
+                            value={fg.manufacturingDate}
+                            disabled={committing}
+                            error={mfdAfterExpiry}
+                            onChange={(e) => updateFinishedGood(index, { manufacturingDate: e.target.value })}
+                            inputProps={{ max: fg.expiryDate || today }}
+                            sx={{ bgcolor: "#fff", borderRadius: "8px" }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            type="date"
+                            size="small"
+                            InputLabelProps={{ shrink: true }}
                             value={fg.expiryDate}
                             disabled={committing}
+                            error={mfdAfterExpiry}
                             onChange={(e) => updateFinishedGood(index, { expiryDate: e.target.value })}
-                            inputProps={{ min: today }}
+                            inputProps={{ min: fg.manufacturingDate || today }}
                             sx={{ bgcolor: "#fff", borderRadius: "8px" }}
                           />
                         </TableCell>
@@ -248,9 +280,10 @@ export default function ConsumptionEntryDialog({
               </Table>
             </TableContainer>
 
-            {!isBatchNoValid && (
+            {!areFinishedGoodsValid && (
               <Typography sx={{ color: "#EF4444", fontSize: 12, fontWeight: 600, mb: 2.5, px: 0.5 }}>
-                * Batch No is mandatory for all finished goods.
+                * Batch No, MFD Date and Expiry Date are mandatory for all finished goods, and MFD Date
+                can&apos;t be after Expiry Date.
               </Typography>
             )}
 
@@ -328,7 +361,7 @@ export default function ConsumptionEntryDialog({
         </Button>
         <Button
           onClick={onConfirm}
-          disabled={!draft || committing || !isBatchNoValid}
+          disabled={!draft || committing || !areFinishedGoodsValid}
           variant="contained"
           color="success"
           startIcon={committing ? <CircularProgress size={16} color="inherit" /> : <TaskAltIcon />}

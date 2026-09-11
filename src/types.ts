@@ -213,6 +213,7 @@ export interface ConsumptionFinishedGoodDraftRow {
   producedQuantity: number;
   scrapQuantity: number;
   batchNo: string;
+  manufacturingDate: string; // "YYYY-MM-DD" — MFD_Date, now mandatory on Finished_Goods_Cunsumptions
   expiryDate: string; // "YYYY-MM-DD"
 }
 
