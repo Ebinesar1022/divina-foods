@@ -45,6 +45,7 @@ export default function ReceivePoDialog({
   onConfirm,
 }: ReceivePoDialogProps) {
   const isPreparing = !draft && !draftError;
+  const today = new Date().toISOString().slice(0, 10);
 
   function updateLine(index: number, patch: Partial<ReceiveLineDraftRow>) {
     if (!draft) return;
@@ -128,6 +129,7 @@ export default function ReceivePoDialog({
                 value={draft.receiveDate}
                 onChange={(e) => onDraftChange({ ...draft, receiveDate: e.target.value })}
                 disabled={committing}
+                inputProps={{ max: today }}
                 sx={{ bgcolor: "#fff", borderRadius: "10px" }}
               />
             </Box>
@@ -191,6 +193,7 @@ export default function ReceivePoDialog({
                           disabled={committing || line.receivableQuantity <= 0}
                           onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
                           InputLabelProps={{ shrink: true }}
+                          inputProps={{ min: today }}
                           sx={{ bgcolor: "#fff", borderRadius: "8px", width: 145 }}
                         />
                       </TableCell>

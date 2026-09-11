@@ -255,6 +255,11 @@ export default function ProductionOverview({
   const [stockStillShortOpen, setStockStillShortOpen] = useState(false);
   const [stockShortItems, setStockShortItems] = useState<NonStockItemRow[]>([]);
   const [checkStockSuccessOpen, setCheckStockSuccessOpen] = useState(false);
+  // Shared success snackbar for every other commit action (Create MRP,
+  // Start Production, Create PO, Receive PO, Complete Production) — each
+  // is a distinct user-initiated action so there's never more than one
+  // in flight at a time, hence one shared message is enough.
+  const [successMessage, setSuccessMessage] = useState("");
   const checkingStockRef = useRef(false);
 
   // Procurement: Receive a Purchase Order.
@@ -372,6 +377,7 @@ export default function ProductionOverview({
       .then(function () {
         setMrpDialogOpen(false);
         setMrpDraft(null);
+        setSuccessMessage(`${committedDraft.mrpId} created successfully.`);
       })
       .catch(function (err: any) {
         setCommitError(
@@ -438,6 +444,7 @@ export default function ProductionOverview({
       })
       .then(function () {
         setPoDialogOpen(false);
+        setSuccessMessage("Production started successfully.");
       })
       .catch(function (err: any) {
         setPoCommitError(
@@ -497,6 +504,7 @@ export default function ProductionOverview({
         setConsumptionDraft(null);
         setConsumptionDraftError("");
         setConsumptionCommitError("");
+        setSuccessMessage("Production completed successfully.");
 
         return fetchProductionOverview(productionTargetId)
           .then(function (result) {
@@ -604,6 +612,7 @@ export default function ProductionOverview({
         setCreatePoDialogOpen(false);
         setCreatePoDraft(null);
         setSelectedNonStockItemIds([]);
+        setSuccessMessage("Purchase Order created successfully.");
       })
       .catch(function (err: any) {
         setCreatePoCommitError((err && err.message) || "Failed to create the Purchase Order. Please try again.");
@@ -693,6 +702,7 @@ export default function ProductionOverview({
         setReceivePoDialogOpen(false);
         setReceivingPo(null);
         setReceivePoDraft(null);
+        setSuccessMessage("Purchase Order receipt recorded successfully.");
       })
       .catch(function (err: any) {
         setReceivePoCommitError((err && err.message) || "Failed to record the receipt. Please try again.");
@@ -1560,6 +1570,22 @@ export default function ProductionOverview({
           sx={{ borderRadius: "10px", fontWeight: 600 }}
         >
           Stock check complete — all raw materials are now available.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={4000}
+        onClose={() => setSuccessMessage("")}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSuccessMessage("")}
+          severity="success"
+          variant="filled"
+          sx={{ borderRadius: "10px", fontWeight: 600 }}
+        >
+          {successMessage}
         </Alert>
       </Snackbar>
     </Box>

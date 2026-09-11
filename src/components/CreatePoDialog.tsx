@@ -85,11 +85,14 @@ export default function CreatePoDialog({
   const subTotal = draft ? draft.lines.reduce((sum, l) => sum + lineTotalFor(l), 0) : 0;
   const taxTotal = draft ? draft.lines.reduce((sum, l) => sum + taxAmountFor(l), 0) : 0;
   const grandTotal = subTotal + taxTotal;
+  const deliveryBeforePo =
+    !!draft && !!draft.poDate && !!draft.expectedDeliveryDate && draft.expectedDeliveryDate < draft.poDate;
   const canSubmit =
     !!draft &&
     !!draft.supplierId &&
     !!draft.paymentTermsId &&
     !!draft.expectedDeliveryDate &&
+    !deliveryBeforePo &&
     draft.lines.every((l) => l.orderQuantity > 0 && l.unitPrice > 0);
 
   return (
@@ -195,6 +198,9 @@ export default function CreatePoDialog({
                 value={draft.expectedDeliveryDate}
                 onChange={(e) => onDraftChange({ ...draft, expectedDeliveryDate: e.target.value })}
                 disabled={committing}
+                error={deliveryBeforePo}
+                helperText={deliveryBeforePo ? "Can't be before the PO Date" : " "}
+                inputProps={{ min: draft.poDate || undefined }}
                 sx={{ bgcolor: "#fff", borderRadius: "10px" }}
               />
             </Box>

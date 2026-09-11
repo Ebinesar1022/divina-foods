@@ -49,6 +49,8 @@ export default function InitiateProductionDialog({
   onCancel,
   onConfirm,
 }: InitiateProductionDialogProps) {
+  const endBeforeStart = !!startDate && !!endDate && endDate < startDate;
+
   return (
     <Dialog
       open={open}
@@ -109,6 +111,9 @@ export default function InitiateProductionDialog({
             value={endDate}
             onChange={(e) => onEndDateChange(e.target.value)}
             disabled={committing}
+            error={endBeforeStart}
+            helperText={endBeforeStart ? "End Date can't be before Start Date" : " "}
+            inputProps={{ min: startDate || undefined }}
             sx={{ bgcolor: "#fff", borderRadius: "10px" }}
           />
         </Box>
@@ -150,7 +155,7 @@ export default function InitiateProductionDialog({
         </Button>
         <Button
           onClick={onConfirm}
-          disabled={!startDate || committing}
+          disabled={!startDate || endBeforeStart || committing}
           variant="contained"
           startIcon={committing ? <CircularProgress size={16} color="inherit" /> : undefined}
           sx={{ borderRadius: "10px", textTransform: "none" }}

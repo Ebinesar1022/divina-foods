@@ -48,6 +48,7 @@ export default function ConsumptionEntryDialog({
   onConfirm,
 }: ConsumptionEntryDialogProps) {
   const isPreparing = !draft && !draftError;
+  const today = new Date().toISOString().slice(0, 10);
   const isBatchNoValid =
     !!draft &&
     draft.finishedGoods.length > 0 &&
@@ -146,6 +147,7 @@ export default function ConsumptionEntryDialog({
                 value={draft.date}
                 onChange={(e) => onDraftChange({ ...draft, date: e.target.value })}
                 disabled={committing}
+                inputProps={{ max: today }}
                 sx={{ bgcolor: "#fff", borderRadius: "10px" }}
               />
             </Box>
@@ -235,6 +237,7 @@ export default function ConsumptionEntryDialog({
                             value={fg.expiryDate}
                             disabled={committing}
                             onChange={(e) => updateFinishedGood(index, { expiryDate: e.target.value })}
+                            inputProps={{ min: today }}
                             sx={{ bgcolor: "#fff", borderRadius: "8px" }}
                           />
                         </TableCell>
