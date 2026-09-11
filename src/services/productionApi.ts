@@ -559,6 +559,26 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
 
 // ───────────── Read Purchase Orders (+ line items) for an MRP ─────────────
 
+// Derives the PO's real status from its own lines instead of trusting
+// Purchase_Order.Status verbatim — that field is only as good as whatever
+// Deluge function last touched it, and has been seen stuck on "Partially
+// Received" for a fully-received PO (a stale/incorrectly-scoped rollup on
+// the Deluge side). Every line's orderQuantity/receivedQuantity is already
+// being fetched here anyway, so this is a free, always-correct fallback.
+function derivePoStatus(lines: PoLineRow[]): string {
+  if (!lines.length) return "Not Received";
+  const EPSILON = 0.0001;
+  const anyReceived = lines.some(function (l) {
+    return l.receivedQuantity > EPSILON;
+  });
+  const allFullyReceived = lines.every(function (l) {
+    return l.receivedQuantity >= l.orderQuantity - EPSILON;
+  });
+  if (allFullyReceived) return "Received";
+  if (anyReceived) return "Partially Received";
+  return "Not Received";
+}
+
 export function fetchPurchaseOrdersForMrp(mrpRecordId: string): Promise<PurchaseOrderDetail[]> {
   if (!mrpRecordId) return Promise.resolve([]);
   const criteria = `MRP_ID == ${mrpRecordId}`;
@@ -587,7 +607,7 @@ export function fetchPurchaseOrdersForMrp(mrpRecordId: string): Promise<Purchase
           mrpRecordId: mrpRecordId,
           supplierId: lookupId(r.Supplier_Name),
           supplierName: formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Name),
-          status: display(r.Status) || "Not Received",
+          status: derivePoStatus(lines),
           subTotal: parseFloat(display(r.Sub_Total)) || 0,
           taxAmount: parseFloat(display(r.Tax_Amount)) || 0,
           grandTotal: parseFloat(display(r.Grand_Total)) || 0,
