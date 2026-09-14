@@ -257,6 +257,11 @@ export default function ProductionOverview({
   const [stockStillShortOpen, setStockStillShortOpen] = useState(false);
   const [stockShortItems, setStockShortItems] = useState<NonStockItemRow[]>([]);
   const [checkStockSuccessOpen, setCheckStockSuccessOpen] = useState(false);
+  // Prompted right after a Purchase Receive completes and it turns out that
+  // was the last outstanding PO for this MRP (every PO's derived status is
+  // now "Received") — the natural moment to suggest re-checking stock,
+  // since procurement for this run is fully done.
+  const [postReceiveCheckPromptOpen, setPostReceiveCheckPromptOpen] = useState(false);
   // Shared success snackbar for every other commit action (Create MRP,
   // Start Production, Create PO, Receive PO, Complete Production) — each
   // is a distinct user-initiated action so there's never more than one
@@ -698,6 +703,15 @@ export default function ProductionOverview({
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
           setData(result);
+          // Every PO for this MRP is now fully received — procurement for
+          // this run is done, so this is the natural moment to prompt a
+          // fresh stock check rather than leaving the user to remember to
+          // click it themselves.
+          const records = result.procurementRecords || [];
+          const allReceived = records.length > 0 && records.every((po) => po.status === "Received");
+          if (allReceived) {
+            setPostReceiveCheckPromptOpen(true);
+          }
         });
       })
       .then(function () {
@@ -713,6 +727,15 @@ export default function ProductionOverview({
         committingReceivePoRef.current = false;
         setReceivePoCommitting(false);
       });
+  }
+
+  function handlePostReceiveCheckStock() {
+    setPostReceiveCheckPromptOpen(false);
+    handleCheckStock();
+  }
+
+  function handlePostReceiveCheckLater() {
+    setPostReceiveCheckPromptOpen(false);
   }
 
   if (loading) {
@@ -1594,6 +1617,77 @@ export default function ProductionOverview({
         <DialogActions>
           <Button onClick={() => setStockStillShortOpen(false)} sx={{ textTransform: "none", fontWeight: 600 }}>
             OK
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={postReceiveCheckPromptOpen}
+        onClose={handlePostReceiveCheckLater}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: "20px", overflow: "hidden" } }}
+      >
+        <Box
+          sx={{
+            background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #0ea5e9 100%)",
+            color: "#fff",
+            px: 3,
+            pt: 3.5,
+            pb: 3,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            gap: 1.25,
+          }}
+        >
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: "16px",
+              bgcolor: "rgba(255, 255, 255, 0.18)",
+              backdropFilter: "blur(8px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Inventory2OutlinedIcon sx={{ fontSize: 28 }} />
+          </Box>
+          <Typography sx={{ fontWeight: 800, fontSize: 19 }}>All Purchases Received</Typography>
+          <Typography sx={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.5 }}>
+            Every Purchase Order for this run has now been received.
+          </Typography>
+        </Box>
+        <DialogContent sx={{ px: 3, py: 3, bgcolor: "#F8FAFC" }}>
+          <DialogContentText sx={{ fontSize: 14, color: "#334155", textAlign: "center" }}>
+            Check Stock for reserving raw material for this production, or check back later once you're ready.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 0, bgcolor: "#F8FAFC", gap: 1.25 }}>
+          <Button
+            onClick={handlePostReceiveCheckLater}
+            fullWidth
+            variant="outlined"
+            sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 600 }}
+          >
+            Check Later
+          </Button>
+          <Button
+            onClick={handlePostReceiveCheckStock}
+            fullWidth
+            variant="contained"
+            startIcon={<Inventory2OutlinedIcon sx={{ fontSize: 18 }} />}
+            sx={{
+              borderRadius: "10px",
+              textTransform: "none",
+              fontWeight: 700,
+              boxShadow: "0 8px 20px rgba(37, 99, 235, 0.28)",
+            }}
+          >
+            Check Stock
           </Button>
         </DialogActions>
       </Dialog>
