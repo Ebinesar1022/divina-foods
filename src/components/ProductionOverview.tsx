@@ -563,6 +563,17 @@ export default function ProductionOverview({
     );
   }
 
+  // Header "select all" checkbox for the Needed Items table — lets a
+  // customer raising one combined PO for every shortfall item select them
+  // all in one click instead of ticking each row individually. Toggles:
+  // everything selected -> clear; anything else (none or some) -> select
+  // every currently-visible needsPurchaseItems row.
+  function handleToggleSelectAllNonStockItems() {
+    setSelectedNonStockItemIds((prev) =>
+      prev.length === needsPurchaseItems.length ? [] : needsPurchaseItems.map((item) => item.id),
+    );
+  }
+
   function handleOpenCreatePo() {
     if (!data || !data.mrpRecord) return;
     const selectedItems = (data.nonStockItems || []).filter((item) =>
@@ -1036,7 +1047,25 @@ export default function ProductionOverview({
                           <Table size="small">
                             <TableHead>
                               <TableRow sx={TABLE_HEAD_ROW_SX}>
-                                <TableCell padding="checkbox" />
+                                <TableCell padding="checkbox">
+                                  <input
+                                    type="checkbox"
+                                    aria-label="Select all needed items"
+                                    checked={
+                                      needsPurchaseItems.length > 0 &&
+                                      selectedNonStockItemIds.length === needsPurchaseItems.length
+                                    }
+                                    ref={(el) => {
+                                      if (el) {
+                                        el.indeterminate =
+                                          selectedNonStockItemIds.length > 0 &&
+                                          selectedNonStockItemIds.length < needsPurchaseItems.length;
+                                      }
+                                    }}
+                                    onChange={handleToggleSelectAllNonStockItems}
+                                    disabled={!needsPurchaseItems.length}
+                                  />
+                                </TableCell>
                                 <TableCell>Product Name</TableCell>
                                 <TableCell>UOM</TableCell>
                                 <TableCell align="right">Needed Quantity</TableCell>
