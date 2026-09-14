@@ -947,7 +947,7 @@ export default function ProductionOverview({
                       description="Generate the MRP to explode BOMs, evaluate available warehouse stock, and compute needed purchase quantities."
                       action={
                         <Button
-                          variant="contained"
+                          variant="outlined"
                           size="medium"
                           startIcon={<AddIcon />}
                           onClick={handleOpenCreateMrp}
@@ -999,7 +999,7 @@ export default function ProductionOverview({
                             <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Needed Items</Typography>
                           </Box>
                           <Button
-                            variant="contained"
+                            variant="outlined"
                             size="small"
                             startIcon={<ShoppingCartCheckoutIcon />}
                             disabled={!selectedNonStockItemIds.length}
