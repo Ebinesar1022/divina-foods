@@ -1786,7 +1786,7 @@ function BatchAllocationGroupRow({
           </Typography>
           <Typography sx={{ fontSize: 12, color: "#64748B", mt: 0.25, fontWeight: 500 }}>
             {material?.uom ? `${material.uom} · ` : ""}
-            Needed: {material ? material.neededQuantity : totalAllocated}
+            Stock Required: {material ? material.stockRequired : totalAllocated}
           </Typography>
         </Box>
         {material?.status && <StatusChip value={material.status} />}
