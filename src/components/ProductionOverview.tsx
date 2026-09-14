@@ -947,7 +947,7 @@ export default function ProductionOverview({
                       description="Generate the MRP to explode BOMs, evaluate available warehouse stock, and compute needed purchase quantities."
                       action={
                         <Button
-                          variant="outlined"
+                          variant="contained"
                           size="medium"
                           startIcon={<AddIcon />}
                           onClick={handleOpenCreateMrp}
