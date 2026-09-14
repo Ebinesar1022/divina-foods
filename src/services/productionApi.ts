@@ -1192,19 +1192,62 @@ export function prepareMrpDraft(
 // against Main Warehouse stock even though its Raw_Materials rows look
 // correct.
 //
-// Sequential (not Promise.all) — see runSequentially's comment: Creator's
-// cap on simultaneous in-flight API calls (code 2955).
+// The "does a row already exist for this product" check is batched into one
+// OR'd-criteria read up front (same trick as fetchStockOnHandBatch) instead
+// of one getRecords call per raw material — 6 raw materials used to mean 6
+// existence-check reads before their 6 writes even started; this cuts that
+// to 1. The writes themselves stay one-per-row and sequential (not
+// Promise.all) — see runSequentially's comment: Creator's cap on
+// simultaneous in-flight API calls (code 2955) — since each is a genuinely
+// distinct record with its own values, and this SDK has no bulk-update call
+// (see updateRecord's own comment).
 function reserveMainWarehouseStockForMrp(draft: MrpDraft): Promise<void> {
-  return runSequentially(draft.rawMaterials, function (rm) {
-    const criteria = `Product_Master == ${rm.productId}`;
-    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
-      if (rows.length > 0) {
-        const row = rows[0];
+  const productIds = Array.from(
+    new Set(
+      draft.rawMaterials
+        .map(function (rm) {
+          return rm.productId;
+        })
+        .filter(Boolean)
+    )
+  );
+  const criteria = productIds
+    .map(function (id) {
+      return `Product_Master == ${id}`;
+    })
+    .join(" || ");
+  const existingRowsPromise = productIds.length
+    ? getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria)
+    : Promise.resolve([] as any[]);
+
+  return existingRowsPromise.then(function (rows) {
+    // Same "first matching row wins" behavior the old per-item lookup had
+    // (it took rows[0] of its own single-product read) — just resolved from
+    // one batched read instead of N.
+    const rowByProduct: Record<string, any> = {};
+    rows.forEach(function (row) {
+      const productId = lookupId(row.Product_Master);
+      if (productId && !rowByProduct[productId]) {
+        rowByProduct[productId] = row;
+      }
+    });
+
+    return runSequentially(draft.rawMaterials, function (rm) {
+      const row = rowByProduct[rm.productId];
+      if (row) {
         const reservedStock = roundQty((parseFloat(display(row.Reserved_Stock)) || 0) + rm.allocateQuantity);
         const stockOnHand = parseFloat(display(row.Stock_On_Hand)) || 0;
+        const availableStocks = roundQty(stockOnHand - reservedStock);
         return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, display(row.ID), {
           Reserved_Stock: reservedStock,
-          Available_Stocks: roundQty(stockOnHand - reservedStock),
+          Available_Stocks: availableStocks,
+        }).then(function () {
+          // Keep the in-memory lookup current in case the same product ever
+          // appears twice in draft.rawMaterials (computeRawMaterialNeeds
+          // already aggregates duplicates away, so this is just a safety
+          // net, not an expected path) so a second write for it accumulates
+          // correctly instead of reusing the pre-batch snapshot.
+          rowByProduct[rm.productId] = { ...row, Reserved_Stock: reservedStock, Available_Stocks: availableStocks };
         });
       }
       return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
@@ -1212,6 +1255,8 @@ function reserveMainWarehouseStockForMrp(draft: MrpDraft): Promise<void> {
         Warehouse: draft.warehouseId,
         Product_Master: rm.productId,
         Reserved_Stock: rm.allocateQuantity,
+      }).then(function (created) {
+        rowByProduct[rm.productId] = created;
       });
     });
   }).then(function () {
