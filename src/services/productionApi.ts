@@ -27,7 +27,6 @@ import type {
   ProductionTargetStatus,
   PurchaseOrderDetail,
   RawMaterialNeedRow,
-  RawMaterialStockRow,
   ReceivePoDraft,
   StartProductionDetails,
   SupplierOption,
@@ -933,22 +932,34 @@ function fetchBomItemsForProduct(itemId: string): Promise<BomItemRow[]> {
 }
 
 // Available_Stocks is the source of truth for current stock — sum it across
-// every Main_Warehouse_Stock_Details row for this raw material (normally
-// just one, since there's a single Main Warehouse).
-function fetchStockOnHand(productId: string): Promise<number> {
-  if (!productId) return Promise.resolve(0);
+// every Main_Warehouse_Stock_Details row for a raw material (normally just
+// one, since there's a single Main Warehouse). Batched across every raw
+// material aggregated MRP needs at once: this used to be one getRecords
+// round trip per product, run through runSequentially (see its comment —
+// Creator's cap on simultaneous in-flight calls rules out just Promise.all-ing
+// them). A production target with 6 raw materials meant 6 sequential
+// ~300-500ms round trips back to back before the Create MRP draft could even
+// render. A single OR'd criteria gets every product's rows in one request
+// instead, with no change to what's fetched or how it's aggregated.
+function fetchStockOnHandBatch(productIds: string[]): Promise<Record<string, number>> {
+  const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
+  if (!uniqueIds.length) return Promise.resolve({});
 
-  const criteria = `Product_Master == ${productId}`;
+  const criteria = uniqueIds
+    .map(function (id) {
+      return `Product_Master == ${id}`;
+    })
+    .join(" || ");
+
   return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
-    const stockRows: RawMaterialStockRow[] = rows.map(function (r: any) {
-      return {
-        productId: lookupId(r.Product_Master) || productId,
-        availableStock: parseFloat(display(r.Available_Stocks)) || 0,
-      };
+    const totals: Record<string, number> = {};
+    rows.forEach(function (r: any) {
+      const productId = lookupId(r.Product_Master);
+      if (!productId) return;
+      const available = parseFloat(display(r.Available_Stocks)) || 0;
+      totals[productId] = (totals[productId] || 0) + available;
     });
-    return stockRows.reduce(function (sum, row) {
-      return sum + row.availableStock;
-    }, 0);
+    return totals;
   });
 }
 
@@ -991,11 +1002,13 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
 
     const aggregatedList = Array.from(aggregated.values());
 
-    return runSequentially(aggregatedList, function (rm) {
-      return fetchStockOnHand(rm.productId);
-    }).then(function (stockLevels) {
-      return aggregatedList.map(function (rm, index) {
-        const stockOnHand = roundQty(stockLevels[index]);
+    return fetchStockOnHandBatch(
+      aggregatedList.map(function (rm) {
+        return rm.productId;
+      })
+    ).then(function (stockByProduct) {
+      return aggregatedList.map(function (rm) {
+        const stockOnHand = roundQty(stockByProduct[rm.productId] || 0);
         const allocateQuantity = roundQty(Math.min(stockOnHand, rm.stockRequired));
         const neededQuantity = roundQty(Math.max(0, rm.stockRequired - stockOnHand));
         return {
@@ -1767,6 +1780,13 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
       });
     }
 
+    // These two only need record/productionTargetId, not mrpRecord — start
+    // them right away instead of nesting them inside fetchMrpRecord's .then
+    // below, which used to force them to wait for the MRP lookup to finish
+    // before even starting even though neither depends on its result.
+    const productionInProgressPromise = fetchProductionInProgress(productionTargetId);
+    const consumptionEntriesPromise = fetchConsumptionEntries(record.id);
+
     return fetchMrpRecord(record.id).then(function (mrpRecord) {
       const mrpDetailsPromise =
         mrpRecord ? fetchMrpDetails(mrpRecord, record.id) : Promise.resolve(null as MrpDetailData | null);
@@ -1779,8 +1799,8 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
 
       return Promise.all([
         purchaseOrdersPromise,
-        fetchProductionInProgress(productionTargetId),
-        fetchConsumptionEntries(record.id),
+        productionInProgressPromise,
+        consumptionEntriesPromise,
         mrpDetailsPromise,
         nonStockItemsPromise,
       ]).then(function (rest) {
