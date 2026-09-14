@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Box, Paper, Typography } from "@mui/material";
+import { Box, Paper, Typography, keyframes } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { STAGES, stepState } from "../config/stages.config";
@@ -15,6 +15,12 @@ interface ActivityTimelineProps {
   consumptionEntries: ConsumptionEntryRow[];
 }
 
+const pulseRing = keyframes`
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4), 0 4px 14px rgba(37, 99, 235, 0.35); }
+  60% { transform: scale(1.02); box-shadow: 0 0 0 8px rgba(37, 99, 235, 0), 0 4px 14px rgba(37, 99, 235, 0.35); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0), 0 4px 14px rgba(37, 99, 235, 0.35); }
+`;
+
 const STATE_LABEL: Record<string, string> = {
   done: "Completed",
   active: "In Progress",
@@ -23,33 +29,33 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 const STATE_PILL_STYLE: Record<string, { bg: string; color: string; border: string }> = {
-  Completed: { bg: "rgba(16,185,129,0.10)", color: "#059669", border: "rgba(16,185,129,0.25)" },
-  "In Progress": { bg: "rgba(37,99,235,0.10)", color: "#2563EB", border: "rgba(37,99,235,0.20)" },
-  Upcoming: { bg: "rgba(148,163,184,0.10)", color: "#64748B", border: "rgba(148,163,184,0.25)" },
-  Skipped: { bg: "rgba(203,213,225,0.22)", color: "#64748B", border: "rgba(148,163,184,0.25)" },
+  Completed: { bg: "rgba(16,185,129,0.12)", color: "#059669", border: "rgba(16,185,129,0.28)" },
+  "In Progress": { bg: "rgba(37,99,235,0.12)", color: "#2563EB", border: "rgba(37,99,235,0.25)" },
+  Upcoming: { bg: "rgba(148,163,184,0.12)", color: "#64748B", border: "rgba(148,163,184,0.25)" },
+  Skipped: { bg: "rgba(203,213,225,0.25)", color: "#64748B", border: "rgba(148,163,184,0.25)" },
 };
 
 const STATE_NODE_STYLE: Record<string, { bg: string; border: string; fg: string; shadow?: string }> = {
   done: {
-    bg: "linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(5,150,105,0.20) 100%)",
+    bg: "linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.22) 100%)",
     border: "#10B981",
     fg: "#059669",
-    shadow: "0 2px 10px rgba(16, 185, 129, 0.20)",
+    shadow: "0 2px 10px rgba(16, 185, 129, 0.22)",
   },
   active: {
     bg: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)",
     border: "#2563eb",
     fg: "#ffffff",
-    shadow: "0 0 0 4px rgba(37, 99, 235, 0.15), 0 4px 14px rgba(37, 99, 235, 0.35)",
+    shadow: "0 0 0 4px rgba(37, 99, 235, 0.18), 0 4px 16px rgba(37, 99, 235, 0.38)",
   },
   pending: {
-    bg: "rgba(255,255,255,0.75)",
+    bg: "rgba(255,255,255,0.85)",
     border: "#e2e8f0",
     fg: "#94a3b8",
-    shadow: "none",
+    shadow: "0 2px 6px rgba(15, 23, 42, 0.03)",
   },
   skipped: {
-    bg: "rgba(241,245,249,0.75)",
+    bg: "rgba(241,245,249,0.85)",
     border: "#cbd5e1",
     fg: "#94a3b8",
     shadow: "none",
@@ -135,18 +141,19 @@ function ActivityTimeline({
     <Paper
       elevation={0}
       sx={{
-        borderRadius: "18px",
+        borderRadius: "20px",
         p: { xs: 2, sm: 2.5, md: 3 },
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
-        border: "1px solid rgba(255,255,255,0.75)",
-        backdropFilter: "blur(18px) saturate(130%)",
-        WebkitBackdropFilter: "blur(18px) saturate(130%)",
-        backgroundColor: "rgba(255,255,255,0.62)",
+        boxShadow: "0 12px 35px rgba(37, 99, 235, 0.08), 0 2px 10px rgba(15, 23, 42, 0.04)",
+        border: "1px solid rgba(255,255,255,0.85)",
+        backdropFilter: "blur(20px) saturate(140%)",
+        WebkitBackdropFilter: "blur(20px) saturate(140%)",
+        backgroundColor: "rgba(255,255,255,0.70)",
         position: "relative",
         overflow: "hidden",
+        animation: "fadeIn 0.4s ease-out",
       }}
     >
       {/* Header */}
@@ -157,28 +164,29 @@ function ActivityTimeline({
           justifyContent: "space-between",
           pb: 2,
           mb: { xs: 2, sm: 2.5 },
-          borderBottom: "1px solid rgba(148,163,184,0.14)",
+          borderBottom: "1px solid rgba(148,163,184,0.16)",
           flexShrink: 0,
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
           <Box
             sx={{
-              width: 34,
-              height: 34,
-              borderRadius: "10px",
-              bgcolor: "rgba(37,99,235,0.10)",
+              width: 36,
+              height: 36,
+              borderRadius: "11px",
+              background: "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(37,99,235,0.08) 100%)",
               color: "#2563EB",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 2px 6px rgba(37, 99, 235, 0.12)",
+              boxShadow: "0 2px 8px rgba(37, 99, 235, 0.15)",
+              border: "1px solid rgba(37, 99, 235, 0.18)",
             }}
           >
-            <AccessTimeIcon sx={{ fontSize: 19 }} />
+            <AccessTimeIcon sx={{ fontSize: 20 }} />
           </Box>
           <Box>
-            <Typography sx={{ fontWeight: 800, fontSize: 15, color: "#172033", lineHeight: 1.2 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: "#0F172A", lineHeight: 1.2 }}>
               Activity Timeline
             </Typography>
             <Typography sx={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>
@@ -190,14 +198,15 @@ function ActivityTimeline({
         {/* Progress pill */}
         <Box
           sx={{
-            px: 1.2,
-            py: 0.35,
+            px: 1.35,
+            py: 0.4,
             borderRadius: "999px",
             fontSize: 11,
             fontWeight: 700,
-            bgcolor: isFullyComplete ? "rgba(16,185,129,0.10)" : "rgba(37,99,235,0.10)",
+            bgcolor: isFullyComplete ? "rgba(16,185,129,0.12)" : "rgba(37,99,235,0.12)",
             color: isFullyComplete ? "#059669" : "#2563EB",
-            border: `1px solid ${isFullyComplete ? "rgba(16,185,129,0.25)" : "rgba(37,99,235,0.20)"}`,
+            border: `1.5px solid ${isFullyComplete ? "rgba(16,185,129,0.30)" : "rgba(37,99,235,0.25)"}`,
+            boxShadow: `0 2px 6px ${isFullyComplete ? "rgba(16,185,129,0.15)" : "rgba(37,99,235,0.12)"}`,
             display: "flex",
             alignItems: "center",
             gap: 0.5,
@@ -237,7 +246,7 @@ function ActivityTimeline({
                 display: "flex",
                 gap: 1.75,
                 flex: isLast ? "0 0 auto" : 1,
-                minHeight: isLast ? "auto" : { xs: 58, sm: 66 },
+                minHeight: isLast ? "auto" : { xs: 60, sm: 68 },
                 position: "relative",
               }}
             >
@@ -255,8 +264,8 @@ function ActivityTimeline({
                 <Box sx={{ position: "relative", flexShrink: 0 }}>
                   <Box
                     sx={{
-                      width: 36,
-                      height: 36,
+                      width: 38,
+                      height: 38,
                       borderRadius: "50%",
                       display: "flex",
                       alignItems: "center",
@@ -264,10 +273,11 @@ function ActivityTimeline({
                       background: nodeStyle.bg,
                       border: `2px solid ${nodeStyle.border}`,
                       boxShadow: nodeStyle.shadow,
+                      animation: isActive ? `${pulseRing} 2.4s infinite ease-in-out` : "none",
                       transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     }}
                   >
-                    <StageIcon sx={{ color: nodeStyle.fg, fontSize: 18 }} />
+                    <StageIcon sx={{ color: nodeStyle.fg, fontSize: 19 }} />
                   </Box>
 
                   {/* Completed Checkmark Badge */}
@@ -277,19 +287,19 @@ function ActivityTimeline({
                         position: "absolute",
                         top: -3,
                         right: -3,
-                        width: 16,
-                        height: 16,
+                        width: 17,
+                        height: 17,
                         borderRadius: "50%",
                         bgcolor: "#10B981",
                         border: "2px solid #ffffff",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        boxShadow: "0 1px 4px rgba(16, 185, 129, 0.4)",
+                        boxShadow: "0 2px 6px rgba(16, 185, 129, 0.45)",
                         zIndex: 2,
                       }}
                     >
-                      <CheckIcon sx={{ color: "#ffffff", fontSize: 10, stroke: "#ffffff", strokeWidth: 0.5 }} />
+                      <CheckIcon sx={{ color: "#ffffff", fontSize: 11, stroke: "#ffffff", strokeWidth: 0.5 }} />
                     </Box>
                   )}
                 </Box>
@@ -300,15 +310,15 @@ function ActivityTimeline({
                     sx={{
                       flex: 1,
                       width: isSkipped ? 0 : 2.5,
-                      minHeight: 22,
+                      minHeight: 24,
                       my: 0.75,
                       borderRadius: "999px",
                       ...(isSkipped
                         ? { borderLeft: "2px dashed #cbd5e1" }
                         : isDone
-                        ? { bgcolor: "#10b981", boxShadow: "0 0 4px rgba(16, 185, 129, 0.25)" }
+                        ? { bgcolor: "#10b981", boxShadow: "0 0 6px rgba(16, 185, 129, 0.35)" }
                         : { bgcolor: "#e2e8f0" }),
-                      transition: "background-color 0.3s ease",
+                      transition: "all 0.3s ease",
                     }}
                   />
                 )}
@@ -322,35 +332,38 @@ function ActivityTimeline({
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "flex-start",
-                  pb: isLast ? 0 : 1.75,
+                  pb: isLast ? 0 : 2,
                 }}
               >
                 <Box
                   sx={{
-                    p: { xs: 1.25, sm: 1.5 },
-                    borderRadius: "12px",
+                    p: { xs: 1.35, sm: 1.6 },
+                    borderRadius: "14px",
                     border: "1px solid",
                     borderColor: isActive
-                      ? "rgba(37, 99, 235, 0.25)"
+                      ? "rgba(37, 99, 235, 0.30)"
                       : isDone
-                      ? "rgba(16, 185, 129, 0.20)"
-                      : "rgba(226, 232, 240, 0.65)",
+                      ? "rgba(16, 185, 129, 0.25)"
+                      : "rgba(226, 232, 240, 0.75)",
                     bgcolor: isActive
-                      ? "rgba(37, 99, 235, 0.04)"
+                      ? "rgba(37, 99, 235, 0.05)"
                       : isDone
-                      ? "rgba(240, 253, 244, 0.45)"
-                      : "rgba(248, 250, 252, 0.50)",
-                    backdropFilter: "blur(8px)",
-                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                      ? "rgba(240, 253, 244, 0.55)"
+                      : "rgba(248, 250, 252, 0.65)",
+                    backdropFilter: "blur(10px)",
+                    boxShadow: isActive
+                      ? "0 4px 18px rgba(37, 99, 235, 0.10)"
+                      : "0 2px 8px rgba(15, 23, 42, 0.03)",
+                    transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
                     "&:hover": {
                       bgcolor: isActive
-                        ? "rgba(37, 99, 235, 0.08)"
-                        : "rgba(255, 255, 255, 0.95)",
-                      boxShadow: "0 4px 14px rgba(15, 23, 42, 0.05)",
+                        ? "rgba(37, 99, 235, 0.09)"
+                        : "rgba(255, 255, 255, 0.98)",
+                      boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
                       borderColor: isActive
-                        ? "rgba(37, 99, 235, 0.4)"
-                        : "rgba(148, 163, 184, 0.4)",
-                      transform: "translateX(2px)",
+                        ? "rgba(37, 99, 235, 0.5)"
+                        : "rgba(148, 163, 184, 0.45)",
+                      transform: "translateX(4px)",
                     },
                   }}
                 >
@@ -359,7 +372,7 @@ function ActivityTimeline({
                       sx={{
                         fontWeight: 700,
                         fontSize: { xs: 13, sm: 13.5 },
-                        color: isDone ? "#059669" : isActive ? "#2563EB" : "#1e293b",
+                        color: isDone ? "#059669" : isActive ? "#2563EB" : "#0F172A",
                         lineHeight: 1.3,
                       }}
                     >
@@ -367,8 +380,8 @@ function ActivityTimeline({
                     </Typography>
                     <Box
                       sx={{
-                        px: 1,
-                        py: 0.2,
+                        px: 1.1,
+                        py: 0.25,
                         borderRadius: "999px",
                         fontSize: 10.5,
                         fontWeight: 700,
@@ -377,6 +390,7 @@ function ActivityTimeline({
                         color: pillStyle.color,
                         bgcolor: pillStyle.bg,
                         border: `1px solid ${pillStyle.border}`,
+                        boxShadow: `0 1px 4px ${pillStyle.color}15`,
                       }}
                     >
                       {label}
@@ -390,7 +404,7 @@ function ActivityTimeline({
                       justifyContent: "space-between",
                       flexWrap: "wrap",
                       gap: 0.5,
-                      mt: 0.6,
+                      mt: 0.65,
                     }}
                   >
                     <Typography
@@ -407,13 +421,14 @@ function ActivityTimeline({
                     {tag && (
                       <Box
                         sx={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: "#475569",
-                          bgcolor: "rgba(148, 163, 184, 0.12)",
-                          px: 0.85,
-                          py: 0.15,
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          color: "#334155",
+                          bgcolor: "rgba(148, 163, 184, 0.15)",
+                          px: 0.9,
+                          py: 0.2,
                           borderRadius: "6px",
+                          border: "1px solid rgba(148, 163, 184, 0.22)",
                         }}
                       >
                         {tag}
@@ -431,5 +446,6 @@ function ActivityTimeline({
 }
 
 export default memo(ActivityTimeline);
+
 
 

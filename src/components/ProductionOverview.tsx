@@ -792,9 +792,10 @@ export default function ProductionOverview({
           <Paper
             elevation={0}
             sx={{
-              borderRadius: "18px",
+              borderRadius: "20px",
               p: { xs: 1, sm: 1.5 },
-              boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
+              boxShadow: "0 10px 32px rgba(37, 99, 235, 0.07), 0 2px 8px rgba(15, 23, 42, 0.03)",
+              border: "1px solid rgba(255, 255, 255, 0.85)",
             }}
           >
             <PipelineStepper
@@ -809,7 +810,7 @@ export default function ProductionOverview({
                     size="small"
                     onClick={handleCheckStock}
                     disabled={checkStockRunning || !mrpRecord}
-                    sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600, fontSize: 11.5, px: 1.25, py: 0.25, minWidth: 0 }}
+                    sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 700, fontSize: 11.5, px: 1.35, py: 0.35, minWidth: 0 }}
                   >
                     {checkStockRunning ? "Checking…" : "Check Stock"}
                   </Button>
@@ -821,8 +822,9 @@ export default function ProductionOverview({
           <Paper
             elevation={0}
             sx={{
-              borderRadius: "18px",
-              boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
+              borderRadius: "20px",
+              boxShadow: "0 12px 35px rgba(37, 99, 235, 0.07), 0 2px 8px rgba(15, 23, 42, 0.03)",
+              border: "1px solid rgba(255, 255, 255, 0.85)",
               overflow: "hidden",
             }}
           >
@@ -833,26 +835,32 @@ export default function ProductionOverview({
               scrollButtons="auto"
               sx={{
                 px: { xs: 1, sm: 2 },
-                bgcolor: "rgba(241,245,249,0.45)",
+                bgcolor: "rgba(241,245,249,0.55)",
                 borderBottom: "1px solid rgba(148,163,184,0.18)",
-                minHeight: 48,
+                minHeight: 52,
                 "& .MuiTab-root": {
                   fontWeight: 600,
                   fontSize: { xs: 13, sm: 13.5 },
                   textTransform: "none",
-                  minHeight: 48,
-                  px: { xs: 1.75, sm: 2.5 },
+                  minHeight: 52,
+                  px: { xs: 2, sm: 2.75 },
+                  py: 1.5,
                   color: "#64748B",
+                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                  "&:hover": {
+                    color: "#2563EB",
+                    backgroundColor: "rgba(37,99,235,0.05)",
+                  },
                   "&.Mui-selected": {
                     color: "#2563EB",
-                    fontWeight: 700,
+                    fontWeight: 800,
                   },
                 },
                 "& .MuiTabs-indicator": {
-                  height: 3,
-                  borderRadius: "3px 3px 0 0",
-                  backgroundColor: "#2563EB",
-                  boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
+                  height: 3.5,
+                  borderRadius: "4px 4px 0 0",
+                  background: "linear-gradient(90deg, #2563EB 0%, #3B82F6 100%)",
+                  boxShadow: "0 2px 10px rgba(37, 99, 235, 0.45)",
                 },
               }}
             >
@@ -861,7 +869,7 @@ export default function ProductionOverview({
               ))}
             </Tabs>
 
-            <Box sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
+            <Box sx={{ p: { xs: 2, sm: 2.5, md: 3.5 }, animation: "fadeIn 0.35s ease-out" }} key={activeTab}>
               {activeTab === "overview" && (
                 <Box
                   sx={{
@@ -1652,34 +1660,37 @@ function BatchAllocationSummary({
       variant="outlined"
       sx={{
         p: { xs: 2, sm: 2.5 },
-        borderRadius: "16px",
-        bgcolor: "rgba(255,255,255,0.65)",
-        boxShadow: "0 6px 22px rgba(30, 58, 138, 0.06)",
+        borderRadius: "18px",
+        bgcolor: "rgba(255,255,255,0.70)",
+        backdropFilter: "blur(14px)",
+        border: "1px solid rgba(226, 232, 240, 0.8)",
+        boxShadow: "0 8px 24px rgba(30, 58, 138, 0.05)",
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mb: 2 }}>
         <Box
           sx={{
-            width: 34,
-            height: 34,
-            borderRadius: "10px",
-            bgcolor: "#EFF6FF",
+            width: 36,
+            height: 36,
+            borderRadius: "11px",
+            background: "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(37,99,235,0.06) 100%)",
             color: "#2563eb",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.12)",
+            boxShadow: "0 2px 8px rgba(37, 99, 235, 0.15)",
+            border: "1px solid rgba(37, 99, 235, 0.20)",
           }}
         >
-          <Inventory2OutlinedIcon sx={{ fontSize: 19 }} />
+          <Inventory2OutlinedIcon sx={{ fontSize: 20 }} />
         </Box>
         <Box>
-          <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#172033" }}>
+          <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: "#0F172A" }}>
             Batch Allocation
           </Typography>
-          <Typography sx={{ fontSize: 12, color: "#64748B" }}>
-            FEFO-picked batches committed for this Production.
+          <Typography sx={{ fontSize: 12, color: "#64748B", fontWeight: 500 }}>
+            FEFO-picked batches committed for this production run
           </Typography>
         </Box>
       </Box>
@@ -1712,13 +1723,17 @@ function BatchAllocationGroupRow({
   return (
     <Box
       sx={{
-        borderRadius: "12px",
-        border: "1px solid rgba(148,163,184,0.25)",
-        bgcolor: "rgba(248,250,252,0.65)",
-        p: { xs: 1.5, sm: 1.75 },
-        transition: "box-shadow 180ms ease",
+        borderRadius: "14px",
+        border: "1px solid rgba(226, 232, 240, 0.8)",
+        bgcolor: "rgba(248,250,252,0.75)",
+        backdropFilter: "blur(8px)",
+        p: { xs: 1.5, sm: 1.85 },
+        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
         "&:hover": {
-          boxShadow: "0 8px 22px rgba(37, 99, 235, 0.08)",
+          boxShadow: "0 8px 24px rgba(37, 99, 235, 0.08)",
+          borderColor: "rgba(37, 99, 235, 0.3)",
+          bgcolor: "rgba(255, 255, 255, 0.95)",
+          transform: "translateY(-1px)",
         },
       }}
     >
@@ -1733,12 +1748,12 @@ function BatchAllocationGroupRow({
         }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: 13.5, color: "#172033" }}>
+          <Typography sx={{ fontWeight: 700, fontSize: 14, color: "#0F172A" }}>
             {material?.productName || fallbackName || "—"}
           </Typography>
-          <Typography sx={{ fontSize: 11.5, color: "#64748B", mt: 0.25 }}>
+          <Typography sx={{ fontSize: 12, color: "#64748B", mt: 0.25, fontWeight: 500 }}>
             {material?.uom ? `${material.uom} · ` : ""}
-            Needed {material ? material.neededQuantity : totalAllocated}
+            Needed: {material ? material.neededQuantity : totalAllocated}
           </Typography>
         </Box>
         {material?.status && <StatusChip value={material.status} />}
@@ -1760,25 +1775,32 @@ function BatchChip({ line }: { line: BatchAllocationLine }) {
       sx={{
         display: "flex",
         alignItems: "center",
-        gap: 0.85,
-        pl: 1.25,
-        pr: 1.5,
-        py: 0.55,
+        gap: 1,
+        pl: 1.3,
+        pr: 1.6,
+        py: 0.6,
         borderRadius: "10px",
         bgcolor: "rgba(37, 99, 235, 0.06)",
-        border: "1px solid rgba(37, 99, 235, 0.18)",
+        border: "1px solid rgba(37, 99, 235, 0.20)",
+        backdropFilter: "blur(6px)",
+        transition: "all 0.2s ease",
+        "&:hover": {
+          bgcolor: "rgba(37, 99, 235, 0.10)",
+          borderColor: "rgba(37, 99, 235, 0.35)",
+          transform: "translateY(-1px)",
+        },
       }}
     >
-      <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#2563eb", flexShrink: 0 }} />
-      <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+      <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#2563eb", flexShrink: 0, boxShadow: "0 0 4px rgba(37, 99, 235, 0.5)" }} />
+      <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
         <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8" }}>
           {label}
-          <Box component="span" sx={{ color: "#172033", fontWeight: 600, ml: 0.5 }}>
+          <Box component="span" sx={{ color: "#0F172A", fontWeight: 600, ml: 0.6 }}>
             ({line.batchQty})
           </Box>
         </Typography>
         {line.expiryDate && (
-          <Typography sx={{ fontSize: 10, color: "#64748B" }}>Exp {line.expiryDate}</Typography>
+          <Typography sx={{ fontSize: 10, color: "#64748B", fontWeight: 500 }}>Exp {line.expiryDate}</Typography>
         )}
       </Box>
     </Box>
@@ -1798,22 +1820,27 @@ function InfoCard({
     <Paper
       variant="outlined"
       sx={{
-        p: { xs: 1.5, sm: 2 },
-        borderRadius: "14px",
-        bgcolor: "rgba(255,255,255,0.65)",
-        boxShadow: "0 6px 22px rgba(30, 58, 138, 0.06)",
-        transition: "transform 180ms ease, box-shadow 180ms ease",
+        p: { xs: 1.75, sm: 2.25 },
+        borderRadius: "16px",
+        bgcolor: "rgba(255,255,255,0.75)",
+        backdropFilter: "blur(12px)",
+        border: "1px solid rgba(226, 232, 240, 0.8)",
+        boxShadow: "0 4px 16px rgba(15, 23, 42, 0.03)",
+        transition: "all 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
+        position: "relative",
+        overflow: "hidden",
         "&:hover": {
-          transform: "translateY(-1px)",
-          boxShadow: "0 12px 35px rgba(37, 99, 235, 0.12)",
+          transform: "translateY(-2px)",
+          boxShadow: "0 12px 30px rgba(37, 99, 235, 0.12)",
+          borderColor: "rgba(37, 99, 235, 0.35)",
         },
       }}
     >
-      <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#64748B", mb: 0.5, letterSpacing: "0.01em" }}>
+      <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#64748B", mb: 0.75, letterSpacing: "0.02em", textTransform: "uppercase" }}>
         {label}
       </Typography>
       {valueNode || (
-        <Typography sx={{ fontWeight: 700, fontSize: { xs: 13.5, sm: 14.5 }, color: "#172033", wordBreak: "break-word" }}>
+        <Typography sx={{ fontWeight: 800, fontSize: { xs: 14, sm: 15 }, color: "#0F172A", wordBreak: "break-word" }}>
           {value || "—"}
         </Typography>
       )}
@@ -1828,7 +1855,7 @@ function CenteredStateCard({
   icon,
   title,
   description,
-  iconBg = "#EFF6FF",
+  iconBg = "rgba(37, 99, 235, 0.10)",
   iconColor = "#2563eb",
   action,
 }: {
@@ -1843,40 +1870,52 @@ function CenteredStateCard({
     <Paper
       variant="outlined"
       sx={{
-        p: { xs: 3, sm: 4 },
-        borderRadius: "18px",
+        p: { xs: 3.5, sm: 4.5 },
+        borderRadius: "20px",
         textAlign: "center",
-        bgcolor: "rgba(255,255,255,0.55)",
+        bgcolor: "rgba(255,255,255,0.60)",
         borderStyle: "dashed",
-        borderColor: "rgba(148,163,184,0.4)",
+        borderWidth: 2,
+        borderColor: "rgba(148,163,184,0.35)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         gap: 2,
-        boxShadow: "0 8px 30px rgba(37, 99, 235, 0.06)",
+        boxShadow: "0 8px 24px rgba(15, 23, 42, 0.03)",
+        transition: "all 0.25s ease",
+        "&:hover": {
+          borderColor: "rgba(37,99,235,0.45)",
+          bgcolor: "rgba(255,255,255,0.80)",
+          boxShadow: "0 12px 32px rgba(37, 99, 235, 0.08)",
+        },
       }}
     >
       <Box
         sx={{
-          width: 52,
-          height: 52,
-          borderRadius: "14px",
+          width: 58,
+          height: 58,
+          borderRadius: "16px",
           bgcolor: iconBg,
           color: iconColor,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: `0 4px 12px ${iconColor}20`,
+          boxShadow: `0 4px 16px ${iconColor}25`,
+          border: `1px solid ${iconColor}30`,
+          transition: "transform 0.25s ease",
+          "&:hover": {
+            transform: "scale(1.08)",
+          },
         }}
       >
         {icon}
       </Box>
-      <Box sx={{ maxWidth: 480 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: 16.5, color: "#0F172A", mb: 0.75 }}>
+      <Box sx={{ maxWidth: 500 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: 17, color: "#0F172A", mb: 0.75 }}>
           {title}
         </Typography>
         {description && (
-          <Typography sx={{ fontSize: 13.5, color: "#64748B", lineHeight: 1.5 }}>
+          <Typography sx={{ fontSize: 13.5, color: "#64748B", lineHeight: 1.6 }}>
             {description}
           </Typography>
         )}
@@ -1890,6 +1929,7 @@ function CenteredStateCard({
 // it (pointer-events disabled). Centered vertically and horizontally over the
 // parent container without being affected by child opacity.
 function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string }) {
+  const isCompleted = color === "#059669" || color === "#10b981";
   return (
     <Box
       aria-hidden
@@ -1897,7 +1937,6 @@ function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string
         position: "absolute",
         top: "50%",
         left: "50%",
-        transform: "translate(-50%, -50%) rotate(-10deg)",
         transformOrigin: "center center",
         pointerEvents: "none",
         zIndex: 2,
@@ -1905,31 +1944,35 @@ function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        animation: "stampPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
       }}
     >
       <Box
         sx={{
           position: "relative",
           border: `3px solid ${color}`,
-          borderRadius: "10px",
+          borderRadius: "12px",
           color: color,
-          bgcolor: "rgba(255, 255, 255, 0.82)",
-          backdropFilter: "blur(8px)",
-          boxShadow: `0 4px 16px ${color === "#059669" ? "rgba(5, 150, 105, 0.2)" : "rgba(37, 99, 235, 0.2)"}`,
-          fontWeight: 800,
+          bgcolor: "rgba(255, 255, 255, 0.88)",
+          backdropFilter: "blur(12px)",
+          boxShadow: isCompleted
+            ? "0 8px 30px rgba(16, 185, 129, 0.3), 0 0 0 2px rgba(255,255,255,0.8)"
+            : "0 8px 30px rgba(37, 99, 235, 0.3), 0 0 0 2px rgba(255,255,255,0.8)",
+          fontWeight: 900,
           fontSize: { xs: 17, sm: 22, md: 24 },
-          letterSpacing: "0.12em",
+          letterSpacing: "0.14em",
           textTransform: "uppercase",
-          px: { xs: 2.5, sm: 3.5 },
-          py: { xs: 0.75, sm: 1.2 },
-          opacity: 0.95,
+          px: { xs: 2.75, sm: 4 },
+          py: { xs: 0.85, sm: 1.3 },
+          opacity: 0.96,
           whiteSpace: "nowrap",
           "&::before": {
             content: '""',
             position: "absolute",
             inset: 4,
-            border: `1.5px solid ${color}`,
-            borderRadius: "6px",
+            border: `1.5px dashed ${color}`,
+            borderRadius: "7px",
+            opacity: 0.75,
           },
         }}
       >

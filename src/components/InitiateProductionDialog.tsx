@@ -57,11 +57,17 @@ export default function InitiateProductionDialog({
       onClose={committing ? undefined : onCancel}
       fullWidth
       maxWidth="sm"
-      PaperProps={{ sx: { borderRadius: "18px", overflow: "hidden" } }}
+      PaperProps={{
+        sx: {
+          borderRadius: "22px",
+          overflow: "hidden",
+          boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+        },
+      }}
     >
       <Box
         sx={{
-          background: "linear-gradient(120deg, #1e3a8a 0%, #2563eb 55%, #0ea5e9 100%)",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #2563eb 100%)",
           color: "#fff",
           px: 3,
           py: 2.5,
@@ -71,12 +77,25 @@ export default function InitiateProductionDialog({
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <PlayCircleIcon />
+          <Box
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "10px",
+              bgcolor: "rgba(255, 255, 255, 0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <PlayCircleIcon sx={{ fontSize: 22 }} />
+          </Box>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 17 }}>
               Start Production
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)" }}>
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)", fontSize: 12.5 }}>
               Initiates production and moves this target In Progress
             </Typography>
           </Box>
@@ -101,7 +120,7 @@ export default function InitiateProductionDialog({
             value={startDate}
             onChange={(e) => onStartDateChange(e.target.value)}
             disabled={committing}
-            sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+            sx={{ bgcolor: "#fff", "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
           />
           <TextField
             label="End Date"
@@ -114,7 +133,7 @@ export default function InitiateProductionDialog({
             error={endBeforeStart}
             helperText={endBeforeStart ? "End Date can't be before Start Date" : " "}
             inputProps={{ min: startDate || undefined }}
-            sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+            sx={{ bgcolor: "#fff", "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
           />
         </Box>
 
@@ -125,7 +144,7 @@ export default function InitiateProductionDialog({
           value={assignedToId}
           onChange={(e) => onAssignedToChange(e.target.value)}
           disabled={committing}
-          sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+          sx={{ bgcolor: "#fff", "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
         >
           <MenuItem value="">
             <em>Unassigned</em>
@@ -144,12 +163,12 @@ export default function InitiateProductionDialog({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC" }}>
+      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC", borderTop: "1px solid rgba(148,163,184,0.18)" }}>
         <Button
           onClick={onCancel}
           disabled={committing}
           variant="outlined"
-          sx={{ borderRadius: "10px", textTransform: "none" }}
+          sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 600 }}
         >
           Cancel
         </Button>
@@ -158,7 +177,7 @@ export default function InitiateProductionDialog({
           disabled={!startDate || endBeforeStart || committing}
           variant="contained"
           startIcon={committing ? <CircularProgress size={16} color="inherit" /> : undefined}
-          sx={{ borderRadius: "10px", textTransform: "none" }}
+          sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700, px: 2.5 }}
         >
           {committing ? "Starting…" : "Start Production"}
         </Button>
@@ -169,9 +188,9 @@ export default function InitiateProductionDialog({
 
 function FieldCard({ label, value }: { label: string; value: string }) {
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: "12px", bgcolor: "#fff" }}>
-      <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 0.5 }}>{label}</Typography>
-      <Typography sx={{ fontWeight: 600 }}>{value || "—"}</Typography>
+    <Paper variant="outlined" sx={{ p: 1.75, borderRadius: "14px", bgcolor: "#fff", borderColor: "rgba(226, 232, 240, 0.8)", boxShadow: "0 2px 8px rgba(15, 23, 42, 0.03)" }}>
+      <Typography sx={{ fontSize: 11.5, color: "#64748B", fontWeight: 600, mb: 0.5, textTransform: "uppercase" }}>{label}</Typography>
+      <Typography sx={{ fontWeight: 800, fontSize: 14.5, color: "#0F172A" }}>{value || "—"}</Typography>
     </Paper>
   );
 }

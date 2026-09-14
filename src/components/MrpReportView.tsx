@@ -51,8 +51,11 @@ export default function MrpReportView({
         elevation={0}
         sx={{
           p: { xs: 2, sm: 2.5 },
-          borderRadius: "16px",
-          boxShadow: "0 8px 30px rgba(37, 99, 235, 0.08)",
+          borderRadius: "18px",
+          boxShadow: "0 10px 30px rgba(37, 99, 235, 0.08)",
+          border: "1px solid rgba(255, 255, 255, 0.85)",
+          bgcolor: "rgba(255, 255, 255, 0.70)",
+          backdropFilter: "blur(16px)",
           display: "flex",
           flexDirection: { xs: "column", sm: "row" },
           justifyContent: "space-between",
@@ -71,32 +74,33 @@ export default function MrpReportView({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)",
+              boxShadow: "0 4px 14px rgba(37, 99, 235, 0.28)",
             }}
           >
             <AssignmentTurnedInIcon sx={{ fontSize: 24 }} />
           </Box>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: "#0F172A", lineHeight: 1.2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: "#0F172A", lineHeight: 1.2, fontSize: { xs: "1.05rem", sm: "1.2rem" } }}>
               Material Requirement &amp; Planning Report
             </Typography>
-            <Typography variant="caption" sx={{ color: "#64748B", fontWeight: 500 }}>
+            <Typography variant="caption" sx={{ color: "#64748B", fontWeight: 500, fontSize: 12 }}>
               Computed materials breakdown and allocation summary
             </Typography>
           </Box>
         </Box>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
           <Box
             sx={{
-              px: 1.5,
-              py: 0.5,
-              borderRadius: "8px",
-              bgcolor: "#EEF2FF",
-              color: "#3730A3",
+              px: 1.6,
+              py: 0.6,
+              borderRadius: "10px",
+              bgcolor: "rgba(37, 99, 235, 0.08)",
+              color: "#1D4ED8",
               fontSize: 13,
-              fontWeight: 700,
-              border: "1px solid #C7D2FE",
+              fontWeight: 800,
+              border: "1px solid rgba(37, 99, 235, 0.22)",
+              boxShadow: "0 2px 6px rgba(37, 99, 235, 0.08)",
             }}
           >
             {mrpRecord.mrpId || "MRP"}
@@ -444,27 +448,32 @@ function MetricCard({
     <Paper
       variant="outlined"
       sx={{
-        p: 1.75,
-        borderRadius: "14px",
-        bgcolor: "rgba(255,255,255,0.65)",
-        borderColor: highlight ? "rgba(37,99,235,0.25)" : "rgba(148,163,184,0.25)",
-        boxShadow: highlight ? "0 6px 22px rgba(37, 99, 235, 0.10)" : "0 6px 22px rgba(30, 58, 138, 0.06)",
-        transition: "transform 180ms ease, box-shadow 180ms ease",
+        p: { xs: 1.75, sm: 2.25 },
+        borderRadius: "16px",
+        bgcolor: highlight ? "rgba(239, 246, 255, 0.75)" : "rgba(255,255,255,0.70)",
+        backdropFilter: "blur(12px)",
+        borderColor: highlight ? "rgba(37,99,235,0.30)" : "rgba(226, 232, 240, 0.8)",
+        boxShadow: highlight
+          ? "0 6px 22px rgba(37, 99, 235, 0.12)"
+          : "0 4px 16px rgba(30, 58, 138, 0.04)",
+        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
         "&:hover": {
-          transform: "translateY(-1px)",
-          boxShadow: "0 12px 35px rgba(37, 99, 235, 0.12)",
+          transform: "translateY(-2px)",
+          boxShadow: "0 12px 30px rgba(37, 99, 235, 0.12)",
+          borderColor: highlight ? "rgba(37,99,235,0.5)" : "rgba(37,99,235,0.3)",
         },
       }}
     >
-      <Typography sx={{ fontSize: 11.5, color: "#64748B", fontWeight: 600, mb: 0.5 }}>
+      <Typography sx={{ fontSize: 11.5, color: "#64748B", fontWeight: 600, mb: 0.6, letterSpacing: "0.02em", textTransform: "uppercase" }}>
         {label}
       </Typography>
       {valueNode || (
         <Typography
           sx={{
-            fontWeight: 700,
-            fontSize: 15,
-            color: highlight ? "#1E3A8A" : "#0F172A",
+            fontWeight: 800,
+            fontSize: { xs: 14.5, sm: 15.5 },
+            color: highlight ? "#1D4ED8" : "#0F172A",
+            wordBreak: "break-word",
           }}
         >
           {value || "—"}
@@ -473,3 +482,4 @@ function MetricCard({
     </Paper>
   );
 }
+

@@ -10,20 +10,20 @@ interface ProjectHeaderProps {
 }
 
 const STATUS_COLOR: Record<string, { bg: string; fg: string; border: string }> = {
-  Planned: { bg: 'rgba(99, 102, 241, 0.25)', fg: '#e0e7ff', border: 'rgba(199, 210, 254, 0.4)' },
-  'Waiting for Stock': { bg: 'rgba(239, 68, 68, 0.25)', fg: '#fecaca', border: 'rgba(254, 202, 202, 0.4)' },
-  'In Progress': { bg: 'rgba(14, 165, 233, 0.25)', fg: '#bae6fd', border: 'rgba(186, 230, 253, 0.4)' },
-  Completed: { bg: 'rgba(16, 185, 129, 0.28)', fg: '#a7f3d0', border: 'rgba(167, 243, 208, 0.4)' },
+  Planned: { bg: 'rgba(99, 102, 241, 0.28)', fg: '#e0e7ff', border: 'rgba(199, 210, 254, 0.45)' },
+  'Waiting for Stock': { bg: 'rgba(239, 68, 68, 0.28)', fg: '#fecaca', border: 'rgba(254, 202, 202, 0.45)' },
+  'In Progress': { bg: 'rgba(14, 165, 233, 0.28)', fg: '#bae6fd', border: 'rgba(186, 230, 253, 0.45)' },
+  Completed: { bg: 'rgba(16, 185, 129, 0.32)', fg: '#a7f3d0', border: 'rgba(167, 243, 208, 0.45)' },
 };
 
 function statusPalette(status: string) {
-  return STATUS_COLOR[status] ?? { bg: 'rgba(255, 255, 255, 0.18)', fg: '#ffffff', border: 'rgba(255, 255, 255, 0.3)' };
+  return STATUS_COLOR[status] ?? { bg: 'rgba(255, 255, 255, 0.20)', fg: '#ffffff', border: 'rgba(255, 255, 255, 0.35)' };
 }
 
 /**
- * ProgressDonut — lightweight SVG circular progress ring.
+ * ProgressDonut — lightweight SVG circular progress ring with luminous glowing accent.
  */
-function ProgressDonut({ value, size = 80 }: { value: number; size?: number }) {
+function ProgressDonut({ value, size = 82 }: { value: number; size?: number }) {
   const strokeWidth = 7.5;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -37,7 +37,7 @@ function ProgressDonut({ value, size = 80 }: { value: number; size?: number }) {
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.2)"
+          stroke="rgba(255, 255, 255, 0.18)"
           strokeWidth={strokeWidth}
         />
         <circle
@@ -51,7 +51,10 @@ function ProgressDonut({ value, size = 80 }: { value: number; size?: number }) {
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }}
+          style={{
+            transition: 'stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1)',
+            filter: 'drop-shadow(0 0 6px rgba(255, 255, 255, 0.6))',
+          }}
         />
       </svg>
       <Box
@@ -67,6 +70,9 @@ function ProgressDonut({ value, size = 80 }: { value: number; size?: number }) {
         <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: { xs: 16, sm: 18 }, lineHeight: 1 }}>
           {value}%
         </Typography>
+        <Typography sx={{ color: 'rgba(255,255,255,0.75)', fontSize: 9.5, fontWeight: 600, mt: 0.25, letterSpacing: '0.04em' }}>
+          PROGRESS
+        </Typography>
       </Box>
     </Box>
   );
@@ -81,54 +87,57 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
       sx={{
         position: 'relative',
         overflow: 'hidden',
-        borderRadius: '20px',
+        borderRadius: '22px',
         px: { xs: 2.5, sm: 3.5, md: 4 },
         py: { xs: 2.5, sm: 3, md: 3.5 },
-        background: 'linear-gradient(135deg, #172554 0%, #1E3A8A 38%, #2563EB 72%, #0EA5E9 100%)',
-        border: 'none',
-        backdropFilter: 'none',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 40%, #2563eb 75%, #0ea5e9 100%)',
+        border: '1px solid rgba(255, 255, 255, 0.22)',
         color: '#fff',
-        boxShadow: '0 16px 40px rgba(37, 99, 235, 0.18)',
+        boxShadow: '0 20px 45px -10px rgba(37, 99, 235, 0.28), 0 8px 20px rgba(15, 23, 42, 0.12)',
+        animation: 'fadeIn 0.4s ease-out',
       }}
     >
-      {/* Decorative liquid-glass bubbles */}
+      {/* Decorative liquid-glass bubbles with floating animation */}
       <Box
         sx={{
           position: 'absolute',
           top: -60,
           right: -40,
-          width: 240,
-          height: 240,
+          width: 260,
+          height: 260,
           borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.08)',
-          filter: 'blur(2px)',
+          background: 'radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 70%)',
+          filter: 'blur(20px)',
           pointerEvents: 'none',
+          animation: 'floatSlow 16s ease-in-out infinite',
         }}
       />
       <Box
         sx={{
           position: 'absolute',
           bottom: -80,
-          left: '30%',
-          width: 280,
-          height: 280,
+          left: '25%',
+          width: 300,
+          height: 300,
           borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.06)',
-          filter: 'blur(2px)',
+          background: 'radial-gradient(circle, rgba(14, 165, 233, 0.18) 0%, rgba(14, 165, 233, 0) 70%)',
+          filter: 'blur(25px)',
           pointerEvents: 'none',
+          animation: 'floatDrift 20s ease-in-out infinite',
         }}
       />
       <Box
         sx={{
           position: 'absolute',
-          bottom: -30,
-          left: 40,
-          width: 90,
-          height: 90,
+          bottom: -20,
+          left: 35,
+          width: 110,
+          height: 110,
           borderRadius: '50%',
-          background: 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.22), rgba(255,255,255,0.02) 70%)',
-          filter: 'blur(1px)',
+          background: 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.25), rgba(255,255,255,0.02) 70%)',
+          filter: 'blur(2px)',
           pointerEvents: 'none',
+          animation: 'pulseGlow 8s ease-in-out infinite',
         }}
       />
 
@@ -145,14 +154,19 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
             aria-label="Go back"
             sx={{
               color: '#fff',
-              bgcolor: 'rgba(255, 255, 255, 0.12)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              bgcolor: 'rgba(255, 255, 255, 0.14)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.22)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
               '&:hover': {
-                bgcolor: 'rgba(255, 255, 255, 0.22)',
-                transform: 'translateX(-2px)',
+                bgcolor: 'rgba(255, 255, 255, 0.26)',
+                transform: 'translateX(-3px) scale(1.04)',
+                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
               },
-              transition: 'all 0.2s ease',
+              '&:active': {
+                transform: 'scale(0.96)',
+              },
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
             <ArrowBackIcon fontSize="small" />
@@ -165,8 +179,9 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
                 sx={{
                   fontWeight: 800,
                   color: '#fff',
-                  fontSize: { xs: '1.25rem', sm: '1.5rem', md: '1.65rem' },
-                  letterSpacing: '-0.01em',
+                  fontSize: { xs: '1.35rem', sm: '1.55rem', md: '1.75rem' },
+                  letterSpacing: '-0.02em',
+                  textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
                 }}
               >
                 {record.productionTargetId}
@@ -180,21 +195,26 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
                   fontWeight: 700,
                   fontSize: 12,
                   border: `1px solid ${palette.border}`,
-                  backdropFilter: 'blur(8px)',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
                   px: 0.5,
+                  transition: 'transform 0.2s ease',
+                  '&:hover': {
+                    transform: 'scale(1.04)',
+                  },
                 }}
               />
             </Stack>
             <Typography
               variant="body2"
-              sx={{ color: 'rgba(255, 255, 255, 0.85)', mt: 0.5, fontWeight: 500 }}
+              sx={{ color: 'rgba(255, 255, 255, 0.90)', mt: 0.5, fontWeight: 500, fontSize: { xs: 13, sm: 14 } }}
             >
-              Production Overview
+              Production Overview &amp; Tracking
             </Typography>
             {(record.date || record.assignedTo) && (
               <Typography
                 variant="caption"
-                sx={{ color: 'rgba(255, 255, 255, 0.7)', display: 'block', mt: 0.5, fontWeight: 500 }}
+                sx={{ color: 'rgba(255, 255, 255, 0.75)', display: 'block', mt: 0.5, fontWeight: 500, fontSize: 12 }}
               >
                 {[record.date, record.assignedTo].filter(Boolean).join(' · ')}
               </Typography>
@@ -206,10 +226,11 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
                   color: 'rgba(255, 255, 255, 0.65)',
                   display: 'block',
                   mt: 0.5,
-                  maxWidth: 540,
+                  maxWidth: 560,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
+                  fontSize: 11.5,
                 }}
               >
                 {record.notes}
@@ -219,7 +240,7 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
         </Stack>
 
         <Box sx={{ alignSelf: { xs: 'flex-end', sm: 'center' } }}>
-          <ProgressDonut value={progressPercent} size={78} />
+          <ProgressDonut value={progressPercent} size={82} />
         </Box>
       </Stack>
     </Paper>
@@ -227,4 +248,5 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
 }
 
 export default memo(ProjectHeader);
+
 

@@ -54,11 +54,17 @@ export default function CreateMrpDialog({
       onClose={committing ? undefined : onCancel}
       fullWidth
       maxWidth="md"
-      PaperProps={{ sx: { borderRadius: "18px", overflow: "hidden" } }}
+      PaperProps={{
+        sx: {
+          borderRadius: "22px",
+          overflow: "hidden",
+          boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+        },
+      }}
     >
       <Box
         sx={{
-          background: "linear-gradient(120deg, #1e3a8a 0%, #2563eb 55%, #0ea5e9 100%)",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #2563eb 100%)",
           color: "#fff",
           px: 3,
           py: 2.5,
@@ -68,12 +74,25 @@ export default function CreateMrpDialog({
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <AddTaskIcon />
+          <Box
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "10px",
+              bgcolor: "rgba(255, 255, 255, 0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <AddTaskIcon sx={{ fontSize: 22 }} />
+          </Box>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 17 }}>
               Create Material Requirement &amp; Planning
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)" }}>
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)", fontSize: 12.5 }}>
               Review the computed plan, then confirm to create it
             </Typography>
           </Box>

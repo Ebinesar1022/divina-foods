@@ -75,11 +75,17 @@ export default function ReceivePoDialog({
       onClose={committing ? undefined : onCancel}
       fullWidth
       maxWidth="md"
-      PaperProps={{ sx: { borderRadius: "18px", overflow: "hidden" } }}
+      PaperProps={{
+        sx: {
+          borderRadius: "22px",
+          overflow: "hidden",
+          boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+        },
+      }}
     >
       <Box
         sx={{
-          background: "linear-gradient(120deg, #065f46 0%, #059669 55%, #10b981 100%)",
+          background: "linear-gradient(135deg, #064e3b 0%, #059669 50%, #10b981 100%)",
           color: "#fff",
           px: 3,
           py: 2.5,
@@ -89,13 +95,26 @@ export default function ReceivePoDialog({
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <LocalShippingIcon />
+          <Box
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "10px",
+              bgcolor: "rgba(255, 255, 255, 0.18)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <LocalShippingIcon sx={{ fontSize: 22 }} />
+          </Box>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 17 }}>
               Receive Purchase Order
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)" }}>
-              {poNumber}
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>
+              {poNumber ? `Record receipt against ${poNumber}` : "Record receipt"}
             </Typography>
           </Box>
         </Box>

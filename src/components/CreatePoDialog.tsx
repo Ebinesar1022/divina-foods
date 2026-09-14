@@ -101,11 +101,17 @@ export default function CreatePoDialog({
       onClose={committing ? undefined : onCancel}
       fullWidth
       maxWidth="lg"
-      PaperProps={{ sx: { borderRadius: "18px", overflow: "hidden" } }}
+      PaperProps={{
+        sx: {
+          borderRadius: "22px",
+          overflow: "hidden",
+          boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+        },
+      }}
     >
       <Box
         sx={{
-          background: "linear-gradient(120deg, #4338ca 0%, #6366f1 55%, #818cf8 100%)",
+          background: "linear-gradient(135deg, #1e1b4b 0%, #4338ca 50%, #6366f1 100%)",
           color: "#fff",
           px: 3,
           py: 2.5,
@@ -115,12 +121,25 @@ export default function CreatePoDialog({
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <ShoppingCartCheckoutIcon />
+          <Box
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "10px",
+              bgcolor: "rgba(255, 255, 255, 0.18)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <ShoppingCartCheckoutIcon sx={{ fontSize: 22 }} />
+          </Box>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 17 }}>
               Create Purchase Order
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)" }}>
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>
               For the selected shortfall items
             </Typography>
           </Box>
