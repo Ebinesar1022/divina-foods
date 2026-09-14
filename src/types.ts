@@ -296,6 +296,7 @@ export interface MrpDraft {
   productionTargetRecordId: string;
   productionTargetId: string; // display id, e.g. "PT-118"
   warehouseId: string;
+  warehouseCode: string;
   finishedGoods: FinishedGoodTargetRow[];
   rawMaterials: RawMaterialNeedRow[];
   hasShortfall: boolean;
