@@ -772,7 +772,7 @@ export default function ProductionOverview({
   const progressPercent = computeProgress(currentIndex, procurementSkipped);
 
   return (
-    <Box sx={{ width: "100%", maxWidth: 1380, mx: "auto", p: { xs: 1.5, sm: 2.5, md: 3.5 } }}>
+    <Box sx={{ width: "100%", p: { xs: 1.5, sm: 2.5, md: 3.5, xl: 5 } }}>
       <ProjectHeader
         record={record}
         progressPercent={progressPercent}
