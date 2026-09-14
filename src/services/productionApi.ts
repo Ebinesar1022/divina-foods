@@ -1766,6 +1766,7 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
   procurementRecords: PurchaseOrderDetail[];
   productionInProgress: ProductionInProgressRow[];
   consumptionEntries: ConsumptionEntryRow[];
+  finishedGoodsForTarget: FinishedGoodTargetRow[];
 }> {
   return fetchProductionTarget(productionTargetId).then(function (record) {
     if (!record) {
@@ -1777,15 +1778,21 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
         procurementRecords: [] as PurchaseOrderDetail[],
         productionInProgress: [] as ProductionInProgressRow[],
         consumptionEntries: [] as ConsumptionEntryRow[],
+        finishedGoodsForTarget: [] as FinishedGoodTargetRow[],
       });
     }
 
-    // These two only need record/productionTargetId, not mrpRecord — start
+    // These three only need record/productionTargetId, not mrpRecord — start
     // them right away instead of nesting them inside fetchMrpRecord's .then
     // below, which used to force them to wait for the MRP lookup to finish
-    // before even starting even though neither depends on its result.
+    // before even starting even though none of them depends on its result.
+    // Finished_Goods rows for the target exist from the moment the
+    // Production Target itself is created (see fetchFinishedGoodsForTarget's
+    // own comment on the two-Finished_Goods-rows-per-run architecture), so
+    // the Overview tab can show them before an MRP even exists.
     const productionInProgressPromise = fetchProductionInProgress(productionTargetId);
     const consumptionEntriesPromise = fetchConsumptionEntries(record.id);
+    const finishedGoodsForTargetPromise = fetchFinishedGoodsForTarget(record.id);
 
     return fetchMrpRecord(record.id).then(function (mrpRecord) {
       const mrpDetailsPromise =
@@ -1803,6 +1810,7 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
         consumptionEntriesPromise,
         mrpDetailsPromise,
         nonStockItemsPromise,
+        finishedGoodsForTargetPromise,
       ]).then(function (rest) {
         return {
           record,
@@ -1812,6 +1820,7 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
           procurementRecords: rest[0] as PurchaseOrderDetail[],
           productionInProgress: rest[1],
           consumptionEntries: rest[2],
+          finishedGoodsForTarget: rest[5] as FinishedGoodTargetRow[],
         };
       });
     });

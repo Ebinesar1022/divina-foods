@@ -67,6 +67,7 @@ import type {
   ConsumptionEntryRow,
   CreatePoDraft,
   EmployeeOption,
+  FinishedGoodTargetRow,
   MrpDetailData,
   MrpDraft,
   MrpRow,
@@ -182,6 +183,7 @@ interface OverviewData {
   procurementRecords: PurchaseOrderDetail[];
   productionInProgress: ProductionInProgressRow[];
   consumptionEntries: ConsumptionEntryRow[];
+  finishedGoodsForTarget: FinishedGoodTargetRow[];
 }
 
 export default function ProductionOverview({
@@ -760,7 +762,7 @@ export default function ProductionOverview({
     );
   }
 
-  const { record, mrpRecord, procurementRecords, consumptionEntries } = data;
+  const { record, mrpRecord, procurementRecords, consumptionEntries, finishedGoodsForTarget } = data;
   const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
   // Non_Stock_Items is the source of truth here (not Raw_Materials) — once a
   // PO is raised for an item its Status flips to "PO Created" and it drops
@@ -871,23 +873,54 @@ export default function ProductionOverview({
 
             <Box sx={{ p: { xs: 2, sm: 2.5, md: 3.5 }, animation: "fadeIn 0.35s ease-out" }} key={activeTab}>
               {activeTab === "overview" && (
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
-                    gap: 2,
-                  }}
-                >
-                  <InfoCard
-                    label="Production Target ID"
-                    value={record.productionTargetId}
-                  />
-                  <InfoCard label="Date" value={record.date} />
-                  <InfoCard label="Assigned To" value={record.assignedTo} />
-                  <InfoCard
-                    label="Current Status"
-                    valueNode={<StatusChip value={record.status} />}
-                  />
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
+                      gap: 2,
+                    }}
+                  >
+                    <InfoCard
+                      label="Production Target ID"
+                      value={record.productionTargetId}
+                    />
+                    <InfoCard label="Date" value={record.date} />
+                    <InfoCard label="Assigned To" value={record.assignedTo} />
+                    <InfoCard
+                      label="Current Status"
+                      valueNode={<StatusChip value={record.status} />}
+                    />
+                  </Box>
+
+                  {finishedGoodsForTarget.length > 0 && (
+                    <Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
+                        <Inventory2OutlinedIcon sx={{ color: "#2563eb", fontSize: 19 }} />
+                        <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Finished Good</Typography>
+                      </Box>
+                      <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={TABLE_HEAD_ROW_SX}>
+                              <TableCell>Item</TableCell>
+                              <TableCell>UOM</TableCell>
+                              <TableCell align="right">Target Quantity</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {finishedGoodsForTarget.map((fg) => (
+                              <TableRow key={fg.id} sx={tableRowSx()}>
+                                <TableCell>{fg.itemName}</TableCell>
+                                <TableCell>{fg.uomName}</TableCell>
+                                <TableCell align="right">{fg.targetQuantity}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )}
                 </Box>
               )}
 
