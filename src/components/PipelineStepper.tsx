@@ -9,16 +9,13 @@ interface PipelineStepperProps {
   currentIndex: number;
   isFullyComplete: boolean;
   procurementSkipped: boolean;
-  // Lets the parent attach a small action (e.g. the Procurement stage's
-  // "Check Stock" button) underneath a specific stage's label, without
-  // this component knowing anything about what that action does.
   renderStageExtra?: (stageKey: StageKey) => ReactNode;
 }
 
-const pulse = keyframes`
-  0%   { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); }
-  70%  { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+const pulseAura = keyframes`
+  0%   { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45), 0 4px 16px rgba(37, 99, 235, 0.35); }
+  60%  { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0), 0 4px 16px rgba(37, 99, 235, 0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0), 0 4px 16px rgba(37, 99, 235, 0.35); }
 `;
 
 const STATE_STYLES: Record<
@@ -26,25 +23,25 @@ const STATE_STYLES: Record<
   { bg: string; border: string; fg: string; shadow?: string }
 > = {
   done: {
-    bg: '#ecfdf5',
+    bg: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
     border: '#10b981',
     fg: '#059669',
-    shadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
+    shadow: '0 4px 14px rgba(16, 185, 129, 0.20)',
   },
   active: {
     bg: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
     border: '#2563eb',
     fg: '#ffffff',
-    shadow: '0 6px 16px rgba(37, 99, 235, 0.3)',
+    shadow: '0 6px 20px rgba(37, 99, 235, 0.38)',
   },
   pending: {
-    bg: '#ffffff',
+    bg: 'rgba(255, 255, 255, 0.85)',
     border: '#e2e8f0',
     fg: '#94a3b8',
-    shadow: '0 2px 4px rgba(15, 23, 42, 0.02)',
+    shadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
   },
   skipped: {
-    bg: '#f8fafc',
+    bg: 'rgba(248, 250, 252, 0.85)',
     border: '#cbd5e1',
     fg: '#94a3b8',
     shadow: 'none',
@@ -62,7 +59,7 @@ export default function PipelineStepper({
       sx={{
         width: '100%',
         overflowX: 'auto',
-        py: { xs: 1.5, sm: 2 },
+        py: { xs: 1.5, sm: 2.25 },
         px: { xs: 1, sm: 2 },
         '&::-webkit-scrollbar': { height: 4 },
         '&::-webkit-scrollbar-thumb': {
@@ -83,6 +80,7 @@ export default function PipelineStepper({
           const state = stepState(index, currentIndex, isFullyComplete, procurementSkipped);
           const styles = STATE_STYLES[state];
           const isDone = state === 'done';
+          const isActive = state === 'active';
           const StageIcon = stage.icon;
 
           // Connector between (index - 1) and index
@@ -125,7 +123,7 @@ export default function PipelineStepper({
                 <Box
                   sx={{
                     flex: 1,
-                    height: 3,
+                    height: 3.5,
                     borderRadius: '999px 0 0 999px',
                     visibility: index === 0 ? 'hidden' : 'visible',
                     ...(leftConnectorSkipped
@@ -136,7 +134,9 @@ export default function PipelineStepper({
                         }
                       : {
                           bgcolor: leftConnectorDone ? '#10b981' : '#e2e8f0',
+                          boxShadow: leftConnectorDone ? '0 0 6px rgba(16, 185, 129, 0.3)' : 'none',
                         }),
+                    transition: 'all 0.3s ease',
                   }}
                 />
 
@@ -144,8 +144,8 @@ export default function PipelineStepper({
                 <Box sx={{ position: 'relative', flexShrink: 0, zIndex: 2 }}>
                   <Box
                     sx={{
-                      width: { xs: 46, sm: 50 },
-                      height: { xs: 46, sm: 50 },
+                      width: { xs: 48, sm: 52 },
+                      height: { xs: 48, sm: 52 },
                       borderRadius: '50%',
                       display: 'flex',
                       alignItems: 'center',
@@ -153,36 +153,43 @@ export default function PipelineStepper({
                       background: styles.bg,
                       border: `2.5px solid ${styles.border}`,
                       boxShadow: styles.shadow,
-                      transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
-                      transform: state === 'active' ? 'scale(1.1)' : 'scale(1)',
-                      animation: state === 'active' ? `${pulse} 2s infinite` : 'none',
+                      transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease',
+                      transform: isActive ? 'scale(1.12)' : 'scale(1)',
+                      animation: isActive ? `${pulseAura} 2.2s infinite` : 'none',
                       opacity: state === 'skipped' ? 0.65 : 1,
+                      cursor: 'default',
+                      '&:hover': {
+                        transform: isActive ? 'scale(1.16)' : 'scale(1.08) translateY(-2px)',
+                        boxShadow: isActive
+                          ? '0 8px 24px rgba(37, 99, 235, 0.45)'
+                          : '0 6px 18px rgba(15, 23, 42, 0.12)',
+                      },
                     }}
                   >
                     <StageIcon
                       sx={{
                         color: styles.fg,
-                        fontSize: { xs: 22, sm: 24 },
+                        fontSize: { xs: 22, sm: 25 },
                       }}
                     />
                   </Box>
 
-                  {/* Top-Right Badge: Only shown if state === 'done' */}
+                  {/* Top-Right Completed Badge */}
                   {isDone && (
                     <Box
                       sx={{
                         position: 'absolute',
                         top: -3,
                         right: -3,
-                        width: 19,
-                        height: 19,
+                        width: 20,
+                        height: 20,
                         borderRadius: '50%',
                         bgcolor: '#10b981',
                         border: '2px solid #ffffff',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        boxShadow: '0 2px 6px rgba(16, 185, 129, 0.4)',
+                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.45)',
                         zIndex: 3,
                         animation: 'fadeIn 0.3s ease-in-out',
                       }}
@@ -196,7 +203,7 @@ export default function PipelineStepper({
                 <Box
                   sx={{
                     flex: 1,
-                    height: 3,
+                    height: 3.5,
                     borderRadius: '0 999px 999px 0',
                     visibility: index === STAGES.length - 1 ? 'hidden' : 'visible',
                     ...(rightConnectorSkipped
@@ -207,19 +214,21 @@ export default function PipelineStepper({
                         }
                       : {
                           bgcolor: rightConnectorDone ? '#10b981' : '#e2e8f0',
+                          boxShadow: rightConnectorDone ? '0 0 6px rgba(16, 185, 129, 0.3)' : 'none',
                         }),
+                    transition: 'all 0.3s ease',
                   }}
                 />
               </Box>
 
-              {/* Label — Exactly Centered Under Node */}
+              {/* Label — Centered Under Node */}
               <Box
                 sx={{
                   textAlign: 'center',
-                  mt: 1.25,
+                  mt: 1.5,
                   px: 0.5,
                   width: '100%',
-                  maxWidth: 140,
+                  maxWidth: 145,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -231,17 +240,16 @@ export default function PipelineStepper({
                   sx={{
                     display: 'block',
                     textAlign: 'center',
-                    fontWeight: state === 'active' ? 700 : state === 'done' ? 700 : 600,
-                    fontSize: { xs: 11.5, sm: 12 },
+                    fontWeight: isActive ? 800 : isDone ? 700 : 600,
+                    fontSize: { xs: 11.5, sm: 12.5 },
                     lineHeight: 1.3,
-                    color:
-                      state === 'active'
-                        ? '#2563eb'
-                        : state === 'done'
-                        ? '#059669'
-                        : state === 'skipped'
-                        ? '#94a3b8'
-                        : '#64748b',
+                    color: isActive
+                      ? '#2563eb'
+                      : isDone
+                      ? '#059669'
+                      : state === 'skipped'
+                      ? '#94a3b8'
+                      : '#64748b',
                     fontStyle: state === 'skipped' ? 'italic' : 'normal',
                   }}
                 >
@@ -273,3 +281,4 @@ export default function PipelineStepper({
     </Box>
   );
 }
+

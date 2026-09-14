@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, keyframes } from "@mui/material";
 
 export const STATUS_COLORS: Record<string, string> = {
   Planned: "#6366F1",
@@ -15,6 +15,12 @@ export const STATUS_COLORS: Record<string, string> = {
   "Stock Available": "#10B981",
 };
 
+const beaconPulse = keyframes`
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55); }
+  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(37, 99, 235, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+`;
+
 function StatusChip({
   value,
   colorMap = STATUS_COLORS,
@@ -24,21 +30,29 @@ function StatusChip({
 }) {
   if (!value) return null;
   const color = colorMap[value] || "#6366F1";
-  const isActive = value === "In Progress" || value === "Pending";
+  const isActive = value === "In Progress" || value === "Pending" || value === "Waiting for Stock";
 
   return (
     <Box
       sx={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 0.75,
-        px: 1.25,
-        py: 0.4,
+        gap: 0.85,
+        px: 1.35,
+        py: 0.45,
         borderRadius: "999px",
         backgroundColor: `${color}14`,
-        border: `1px solid ${color}35`,
+        border: `1.5px solid ${color}35`,
         flexShrink: 0,
-        boxShadow: `0 1px 4px ${color}10`,
+        boxShadow: `0 2px 8px ${color}15`,
+        backdropFilter: "blur(6px)",
+        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+        "&:hover": {
+          backgroundColor: `${color}20`,
+          borderColor: `${color}55`,
+          transform: "translateY(-1px)",
+          boxShadow: `0 4px 12px ${color}25`,
+        },
       }}
     >
       <Box
@@ -49,7 +63,7 @@ function StatusChip({
           backgroundColor: color,
           ...(isActive
             ? {
-                boxShadow: `0 0 0 2px ${color}30`,
+                animation: `${beaconPulse} 2s infinite ease-in-out`,
               }
             : {}),
         }}
@@ -71,4 +85,5 @@ function StatusChip({
 }
 
 export default memo(StatusChip);
+
 
