@@ -49,6 +49,17 @@ export default function ConsumptionEntryDialog({
 }: ConsumptionEntryDialogProps) {
   const isPreparing = !draft && !draftError;
   const today = new Date().toISOString().slice(0, 10);
+
+  // Subtracting two decimals in JS routinely lands on IEEE754 noise (e.g.
+  // 2 - 1.8 === 0.19999999999999996), which has far more digits once sent
+  // to Zoho than a decimal field allows — Creator rejects it outright with
+  // "<Field> has exceeded its maximum digits" (code 3001). Same fix as
+  // productionApi.ts's roundQty, just local here since this is a
+  // presentation-only dialog that doesn't import the service layer.
+  function roundQty(value: number): number {
+    if (!isFinite(value)) return 0;
+    return Math.round((value + Number.EPSILON) * 10000) / 10000;
+  }
   // Batch_No, MFD_Date and Expiry_Date are all mandatory on
   // Finished_Goods_Cunsumptions now (MFD_Date and Expiry_Date are "must
   // have" fields on the form) — block submit until every finished good has
@@ -74,7 +85,7 @@ export default function ConsumptionEntryDialog({
       if (isNaN(produced) || produced < 0) produced = 0;
       if (produced > row.targetQuantity) produced = row.targetQuantity;
       row.producedQuantity = produced;
-      row.scrapQuantity = Math.max(0, row.targetQuantity - produced);
+      row.scrapQuantity = roundQty(Math.max(0, row.targetQuantity - produced));
     }
     rows[index] = row;
     onDraftChange({ ...draft, finishedGoods: rows });
@@ -89,7 +100,7 @@ export default function ConsumptionEntryDialog({
       if (isNaN(consumed) || consumed < 0) consumed = 0;
       if (consumed > row.allocatedQuantity) consumed = row.allocatedQuantity;
       row.consumedQuantity = consumed;
-      row.scrapQuantity = Math.max(0, row.allocatedQuantity - consumed);
+      row.scrapQuantity = roundQty(Math.max(0, row.allocatedQuantity - consumed));
     }
     rows[index] = row;
     onDraftChange({ ...draft, rawMaterials: rows });
