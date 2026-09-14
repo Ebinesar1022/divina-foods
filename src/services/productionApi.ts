@@ -57,6 +57,10 @@ export const CONFIG = {
   BOM_MASTER_REPORT: "BOM_Master_Report",
   BOM_ITEMS_REPORT: "BOM_Items_Report",
   MAIN_WAREHOUSE_STOCK_REPORT: "Main_Warehouse_Stock_Details_Report",
+  // ⚠️ Following this file's report-name-minus-"_Report" convention (holds
+  // for every other form/report pair above) — confirm against Creator if a
+  // new-row insert ever comes back "Failed to create a record".
+  MAIN_WAREHOUSE_STOCK_FORM: "Main_Warehouse_Stock_Details",
   SEQUENCE_MASTER_REPORT: "Sequence_Master_Report",
   // Confirmed against live DevTools traffic: this is a report directly on
   // Warehouse_Master (not a separate "Warehouse" wrapper form), listing
@@ -1074,6 +1078,20 @@ function fetchDefaultWarehouseId(): Promise<string> {
   });
 }
 
+// Same "Main Warehouse" row as fetchDefaultWarehouseId, but its plain-text
+// code (Warehouse_ID, e.g. "WH-001") instead of its record ID — needed
+// alongside the record ID when creating a fresh Main_Warehouse_Stock_Details
+// row (see reserveMainWarehouseStockForMrp), which stores both a lookup
+// (Warehouse) and a denormalized code (Warehouse_Code), matching the native
+// MRP "on add success" workflow's own insert shape.
+function fetchDefaultWarehouseCode(): Promise<string> {
+  const criteria = `Warehouse_Name == "Main Warehouse"`;
+  return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
+    if (!rows.length) return "";
+    return display(rows[0].Warehouse_ID);
+  });
+}
+
 function formatDateForZoho(date: Date): string {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const day = String(date.getDate()).padStart(2, "0");
@@ -1125,10 +1143,12 @@ export function prepareMrpDraft(
       fetchFinishedGoodsForTarget(productionTargetRecordId),
       fetchSequenceMasterRow(),
       fetchDefaultWarehouseId(),
+      fetchDefaultWarehouseCode(),
     ]).then(function (results) {
       const finishedGoods = results[0];
       const sequenceRow = results[1];
       const warehouseId = results[2];
+      const warehouseCode = results[3];
 
       if (!finishedGoods.length) {
         return Promise.reject(
@@ -1147,6 +1167,7 @@ export function prepareMrpDraft(
           productionTargetRecordId: productionTargetRecordId,
           productionTargetId: productionTargetId,
           warehouseId: warehouseId,
+          warehouseCode: warehouseCode,
           finishedGoods: finishedGoods,
           rawMaterials: rawMaterials,
           hasShortfall: hasShortfall,
@@ -1155,6 +1176,46 @@ export function prepareMrpDraft(
         };
       });
     });
+  });
+}
+
+// Mirrors the Reserved_Stock loop in Material_Requirement_Planning's own
+// "on add, on success" workflow: for every raw material line, bump the
+// matching Main_Warehouse_Stock_Details row's Reserved_Stock by
+// Allocate_Quantity and recompute Available_Stocks = Stock_On_Hand -
+// Reserved_Stock, or create a fresh row (Reserved_Stock only, matching the
+// native insert's own field list — it doesn't set Stock_On_Hand/
+// Available_Stocks either) when this product has never had a warehouse
+// stock row before. Like every other "on add" workflow in this file, this
+// never fires for an MRP created via the JS SDK's addRecords, so without
+// this replica an MRP created through the widget never reserves anything
+// against Main Warehouse stock even though its Raw_Materials rows look
+// correct.
+//
+// Sequential (not Promise.all) — see runSequentially's comment: Creator's
+// cap on simultaneous in-flight API calls (code 2955).
+function reserveMainWarehouseStockForMrp(draft: MrpDraft): Promise<void> {
+  return runSequentially(draft.rawMaterials, function (rm) {
+    const criteria = `Product_Master == ${rm.productId}`;
+    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
+      if (rows.length > 0) {
+        const row = rows[0];
+        const reservedStock = roundQty((parseFloat(display(row.Reserved_Stock)) || 0) + rm.allocateQuantity);
+        const stockOnHand = parseFloat(display(row.Stock_On_Hand)) || 0;
+        return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, display(row.ID), {
+          Reserved_Stock: reservedStock,
+          Available_Stocks: roundQty(stockOnHand - reservedStock),
+        });
+      }
+      return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
+        Warehouse_Code: draft.warehouseCode,
+        Warehouse: draft.warehouseId,
+        Product_Master: rm.productId,
+        Reserved_Stock: rm.allocateQuantity,
+      });
+    });
+  }).then(function () {
+    return undefined;
   });
 }
 
@@ -1210,6 +1271,9 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
             Status: rm.status,
           });
         });
+      })
+      .then(function () {
+        return reserveMainWarehouseStockForMrp(draft);
       })
       .then(function () {
         // Mirrors the native "Generate MRP ID" form's own "on add, on
