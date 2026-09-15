@@ -839,6 +839,7 @@ export default function ProductionOverview({
               currentIndex={currentIndex}
               isFullyComplete={isFullyComplete}
               procurementSkipped={procurementSkipped}
+              onStageClick={setActiveTab}
               renderStageExtra={(stageKeyForStage) =>
                 stageKeyForStage === "procurement" && record.status === "Waiting for Stock" ? (
                   <Button

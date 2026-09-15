@@ -10,6 +10,10 @@ interface PipelineStepperProps {
   isFullyComplete: boolean;
   procurementSkipped: boolean;
   renderStageExtra?: (stageKey: StageKey) => ReactNode;
+  // Lets clicking a stage's icon jump straight to that stage's tab (e.g.
+  // Production Target -> Overview, MRP -> MRP, ...) instead of only being
+  // able to switch tabs via the tab bar below the stepper.
+  onStageClick?: (tabKey: string) => void;
 }
 
 const pulseAura = keyframes`
@@ -53,6 +57,7 @@ export default function PipelineStepper({
   isFullyComplete,
   procurementSkipped,
   renderStageExtra,
+  onStageClick,
 }: PipelineStepperProps) {
   return (
     <Box
@@ -143,6 +148,20 @@ export default function PipelineStepper({
                 {/* Main Node with Top-Right Completed Badge */}
                 <Box sx={{ position: 'relative', flexShrink: 0, zIndex: 2 }}>
                   <Box
+                    onClick={onStageClick ? () => onStageClick(stage.tabKey) : undefined}
+                    role={onStageClick ? 'button' : undefined}
+                    tabIndex={onStageClick ? 0 : undefined}
+                    onKeyDown={
+                      onStageClick
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onStageClick(stage.tabKey);
+                            }
+                          }
+                        : undefined
+                    }
+                    aria-label={onStageClick ? `Go to ${stage.label}` : undefined}
                     sx={{
                       width: { xs: 48, sm: 52 },
                       height: { xs: 48, sm: 52 },
@@ -157,13 +176,17 @@ export default function PipelineStepper({
                       transform: isActive ? 'scale(1.12)' : 'scale(1)',
                       animation: isActive ? `${pulseAura} 2.2s infinite` : 'none',
                       opacity: state === 'skipped' ? 0.65 : 1,
-                      cursor: 'default',
+                      cursor: onStageClick ? 'pointer' : 'default',
+                      outline: 'none',
                       '&:hover': {
                         transform: isActive ? 'scale(1.16)' : 'scale(1.08) translateY(-2px)',
                         boxShadow: isActive
                           ? '0 8px 24px rgba(37, 99, 235, 0.45)'
                           : '0 6px 18px rgba(15, 23, 42, 0.12)',
                       },
+                      '&:focus-visible': onStageClick
+                        ? { boxShadow: `0 0 0 3px rgba(37, 99, 235, 0.35), ${styles.shadow || 'none'}` }
+                        : undefined,
                     }}
                   >
                     <StageIcon
