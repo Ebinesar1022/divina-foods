@@ -114,6 +114,10 @@ export const CONFIG = {
   // create a record".
   SCRAP_WAREHOUSE_STOCK_FORM: "Scrap_Warehouse_Stock_Details",
   PRODUCTION_STOCK_REPORT: "Production_Stock_Details_Report",
+  // Per-batch stock ledger on Product_Master — same report-name-minus-
+  // "_Report" form-name convention as the other pairs above.
+  BATCH_DETAILS_REPORT: "Batch_Details_Report",
+  BATCH_DETAILS_FORM: "Batch_Details",
 
   // Confirmed against the app's .ds export — FEFO_Batch_Allocation (header,
   // Production_Targets lookup) + Batch_Allocation (its grid, linked back via
@@ -263,6 +267,24 @@ function updateRecord(reportName: string, recordId: string, data: Record<string,
       return Promise.reject(new Error("Failed to update record " + recordId + " in " + reportName + "."));
     }
     return resp.data;
+  });
+}
+
+// Generic delete — same report_name convention as updateRecord (the SDK's
+// deleteRecordById call, like updateRecordById, addresses by report, not
+// form). Used to remove a Batch_Details row once FEFO consumption has
+// emptied it out, mirroring the native workflow's own
+// "delete from Batch_Details[...]" step.
+function deleteRecord(reportName: string, recordId: string): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.deleteRecordById({
+    app_name: CONFIG.APP_NAME,
+    report_name: reportName,
+    id: recordId,
+  }).then(function (resp: any) {
+    if (!resp || resp.code !== 3000) {
+      return Promise.reject(new Error("Failed to delete record " + recordId + " in " + reportName + "."));
+    }
+    return resp;
   });
 }
 
@@ -1780,17 +1802,88 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
     });
   }
 
+  // Per-batch tracking, per the native workflow: a finished good's own
+  // Batch_Details row is looked up by Batch_Number (not scoped to a
+  // product — batch numbers are treated as unique on their own), updated if
+  // found, or created fresh if this is the first time that batch number has
+  // ever been logged.
+  function updateOrCreateBatchDetailsForFinishedGood(fg: (typeof draft.finishedGoods)[number]): Promise<any> {
+    if (!fg.batchNo) return Promise.resolve(null);
+    const criteria = `Batch_Number == "${fg.batchNo}"`;
+    return getRecords(CONFIG.BATCH_DETAILS_REPORT, criteria).then(function (rows) {
+      if (rows.length > 0) {
+        const row = rows[0];
+        return updateRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID), {
+          Stock_On_Hand: roundQty((parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity),
+        });
+      }
+      return addRecord(CONFIG.BATCH_DETAILS_FORM, {
+        Product_Master: fg.itemId,
+        Batch_Number: fg.batchNo,
+        Manufacturing_Date: formatDateStringForZoho(fg.manufacturingDate),
+        Expiry_Date: formatDateStringForZoho(fg.expiryDate),
+        Stock_On_Hand: fg.producedQuantity,
+        Available_Stocks: fg.producedQuantity,
+      });
+    });
+  }
+
+  // Per-batch release for raw materials, per the native workflow: finds
+  // whichever specific batch(es) FEFO_Batch_Allocation picked for this raw
+  // material back at Start Production, releases that batch's own
+  // Committed_Stocks/Stock_On_Hand by the allocated amount, and deletes the
+  // batch once it's fully used up (Stock_On_Hand - Committed_Stocks <= 0) --
+  // same as the native workflow's own "if Available_Stocks == 0, delete"
+  // check, just computed here since a plain getRecords/updateRecord round
+  // trip doesn't have Deluge's in-session recalculated field to read back.
+  // Runs alongside (not instead of) the warehouse-total release above, per
+  // an explicit choice to keep both in sync rather than only one of them.
+  function releaseBatchDetailsForRawMaterial(
+    batchAllocationLines: BatchAllocationLine[],
+    rm: (typeof draft.rawMaterials)[number]
+  ): Promise<any> {
+    const matchingLines = batchAllocationLines.filter(function (line) {
+      return line.productId === rm.productId && !!line.batchId;
+    });
+    return runSequentially(matchingLines, function (line) {
+      return getRecords(CONFIG.BATCH_DETAILS_REPORT, `ID == ${line.batchId}`).then(function (rows) {
+        if (!rows.length) return null;
+        const row = rows[0];
+        const committedStocks = roundQty((parseFloat(display(row.Committed_Stocks)) || 0) - line.batchQty);
+        const stockOnHand = roundQty((parseFloat(display(row.Stock_On_Hand)) || 0) - line.batchQty);
+        const availableStocks = roundQty(stockOnHand - committedStocks);
+        if (availableStocks <= 0) {
+          return deleteRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID));
+        }
+        return updateRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID), {
+          Committed_Stocks: committedStocks,
+          Stock_On_Hand: stockOnHand,
+        });
+      });
+    });
+  }
+
   return runSequentially(
     draft.finishedGoods.filter(function (fg) {
       return !!fg.itemId;
     }),
     function (fg) {
-      return updateOrCreateMainWarehouseForFinishedGood(fg).then(function () {
-        return updateOrCreateScrapWarehouse(fg.itemId, fg.scrapQuantity);
-      });
+      return updateOrCreateMainWarehouseForFinishedGood(fg)
+        .then(function () {
+          return updateOrCreateBatchDetailsForFinishedGood(fg);
+        })
+        .then(function () {
+          return updateOrCreateScrapWarehouse(fg.itemId, fg.scrapQuantity);
+        });
     }
   )
     .then(function () {
+      // Fetched once up front (not per raw material) — the same FEFO pick
+      // covers every raw material on this production target, so this is a
+      // single read reused across the whole loop below.
+      return fetchBatchAllocationsForProductionTarget(draft.productionTargetRecordId);
+    })
+    .then(function (batchAllocationLines) {
       return runSequentially(
         draft.rawMaterials.filter(function (rm) {
           return !!rm.productId;
@@ -1799,6 +1892,9 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
           return releaseMainWarehouseForRawMaterial(rm)
             .then(function () {
               return releaseProductionWarehouseForRawMaterial(rm);
+            })
+            .then(function () {
+              return releaseBatchDetailsForRawMaterial(batchAllocationLines, rm);
             })
             .then(function () {
               return updateOrCreateScrapWarehouse(rm.productId, rm.scrapQuantity);
