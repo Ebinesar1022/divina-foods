@@ -1,5 +1,6 @@
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   CircularProgress,
@@ -166,36 +167,34 @@ export default function CreatePoDialog({
           <>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, gap: 2, mb: 2.5 }}>
               <FieldCard label="PO Number" value={draft.poNumber} />
-              <TextField
-                select
-                label="Supplier"
+              <Autocomplete
                 fullWidth
-                value={draft.supplierId}
-                onChange={(e) => onDraftChange({ ...draft, supplierId: e.target.value })}
+                options={suppliers}
+                getOptionLabel={(option) => option.name}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                value={suppliers.find((s) => s.id === draft.supplierId) || null}
+                onChange={(_e, newValue) =>
+                  onDraftChange({ ...draft, supplierId: newValue ? newValue.id : "" })
+                }
                 disabled={committing}
-                sx={{ bgcolor: "#fff", borderRadius: "10px" }}
-              >
-                {suppliers.map((s) => (
-                  <MenuItem key={s.id} value={s.id}>
-                    {s.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                select
-                label="Payment Terms"
+                renderInput={(params) => (
+                  <TextField {...params} label="Supplier" sx={{ bgcolor: "#fff", borderRadius: "10px" }} />
+                )}
+              />
+              <Autocomplete
                 fullWidth
-                value={draft.paymentTermsId}
-                onChange={(e) => onDraftChange({ ...draft, paymentTermsId: e.target.value })}
+                options={paymentTerms}
+                getOptionLabel={(option) => option.name}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                value={paymentTerms.find((p) => p.id === draft.paymentTermsId) || null}
+                onChange={(_e, newValue) =>
+                  onDraftChange({ ...draft, paymentTermsId: newValue ? newValue.id : "" })
+                }
                 disabled={committing}
-                sx={{ bgcolor: "#fff", borderRadius: "10px" }}
-              >
-                {paymentTerms.map((p) => (
-                  <MenuItem key={p.id} value={p.id}>
-                    {p.name}
-                  </MenuItem>
-                ))}
-              </TextField>
+                renderInput={(params) => (
+                  <TextField {...params} label="Payment Terms" sx={{ bgcolor: "#fff", borderRadius: "10px" }} />
+                )}
+              />
             </Box>
 
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)" }, gap: 2, mb: 2.5 }}>
