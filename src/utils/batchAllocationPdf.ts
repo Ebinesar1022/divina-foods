@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { DIVINA_LOGO_BASE64 } from "../assets/logoBase64";
 import type { BatchAllocationLine, MrpRow, ProductionTargetRow, RawMaterialNeedRow } from "../types";
 
 // Mirrors the grouping BatchAllocationSummary already computes on screen —
@@ -14,37 +15,36 @@ export interface BatchAllocationPdfGroup {
 
 type RGB = [number, number, number];
 
-// ───────────── Color Palette ─────────────
-const COLOR_PRIMARY: RGB = [37, 99, 235]; // #2563eb
-const COLOR_ACCENT: RGB = [14, 165, 233]; // #0ea5e9
-const COLOR_DARK: RGB = [15, 23, 42]; // #0f172a
-const COLOR_SLATE: RGB = [30, 41, 59]; // #1e293b
-const COLOR_TEXT_MAIN: RGB = [15, 23, 42]; // #0f172a
-const COLOR_TEXT_MUTED: RGB = [100, 116, 139]; // #64748b
-const COLOR_TEXT_LIGHT: RGB = [148, 163, 184]; // #94a3b8
-const COLOR_BORDER: RGB = [226, 232, 240]; // #e2e8f0
-const COLOR_PANEL_BG: RGB = [248, 250, 252]; // #f8fafc
-const COLOR_ROW_ALT: RGB = [250, 252, 255]; // #fafcff
+// ───────────── Divina Artisan Beige & Forest Green Palette ─────────────
+// Forest & Olive Greens (inspired by the Divina logo)
+const COLOR_BRAND_GREEN: RGB = [20, 83, 45]; // #14532d (primary forest green)
+const COLOR_BRAND_OLIVE: RGB = [64, 145, 108]; // #40916c (olive sub-accent)
+const COLOR_SLATE_GREEN: RGB = [26, 46, 35]; // #1a2e23 (deep dark header)
 
-// Status Colors
-const STATUS_GREEN_BG: RGB = [236, 253, 245];
-const STATUS_GREEN_BORDER: RGB = [167, 243, 208];
-const STATUS_GREEN_TEXT: RGB = [5, 150, 105];
+// Warm Artisan Beige & Cream
+const COLOR_BEIGE_HEADER: RGB = [250, 247, 242]; // #faf7f2 (warm ivory linen)
+const COLOR_PANEL_BG: RGB = [252, 250, 246]; // #fcfaf6 (soft cream panel)
+const COLOR_ROW_ALT: RGB = [251, 249, 245]; // #fbf9f5 (subtle warm row)
+const COLOR_BORDER: RGB = [228, 222, 210]; // #e4ded2 (warm stone border)
+const COLOR_DIVIDER_INNER: RGB = [240, 236, 227]; // #f0ece3 (inner grid line)
+
+// Typography Colors
+const COLOR_TEXT_MAIN: RGB = [28, 25, 23]; // #1c1917 (warm charcoal espresso)
+const COLOR_TEXT_MUTED: RGB = [120, 113, 108]; // #78716c (warm stone gray)
+const COLOR_TEXT_LIGHT: RGB = [168, 162, 158]; // #a8a29e (light stone)
+
+// Status & Pill Colors
+const SAGE_PILL_BG: RGB = [240, 253, 244]; // #f0fdf4
+const SAGE_PILL_BORDER: RGB = [187, 247, 208]; // #bbf7d0
+const SAGE_PILL_TEXT: RGB = [20, 83, 45]; // #14532d
+
+const BEIGE_PILL_BG: RGB = [245, 240, 230]; // #f5f0e6
+const BEIGE_PILL_BORDER: RGB = [230, 223, 211]; // #e6dfd3
+const BEIGE_PILL_TEXT: RGB = [87, 83, 78]; // #57534e
 
 const STATUS_AMBER_BG: RGB = [254, 243, 199];
 const STATUS_AMBER_BORDER: RGB = [253, 230, 138];
 const STATUS_AMBER_TEXT: RGB = [180, 83, 9];
-
-const STATUS_BLUE_BG: RGB = [239, 246, 255];
-const STATUS_BLUE_BORDER: RGB = [191, 219, 254];
-const STATUS_BLUE_TEXT: RGB = [29, 78, 216];
-
-// Pill Colors
-const PILL_DEFAULT_BG: RGB = [241, 245, 249];
-const PILL_DEFAULT_BORDER: RGB = [226, 232, 240];
-const PILL_ACCENT_BG: RGB = [239, 246, 255];
-const PILL_ACCENT_BORDER: RGB = [191, 219, 254];
-const PILL_ACCENT_TEXT: RGB = [29, 78, 216];
 
 function formatDateForPdf(value: string | undefined): string {
   if (!value) return "—";
@@ -72,37 +72,60 @@ export function downloadBatchAllocationPdf(params: {
   const contentWidth = pageWidth - marginX * 2;
   let cursorY = 0;
 
-  // ── 1. Modern Top Header Band ──
+  // ── 1. Elegant Header Band in Warm Beige with Forest Green Accents ──
   const headerHeight = 76;
 
-  // Dual-tone top accent line (4pt)
-  doc.setFillColor(...COLOR_PRIMARY);
-  doc.rect(0, 0, pageWidth * 0.65, 4, "F");
-  doc.setFillColor(...COLOR_ACCENT);
-  doc.rect(pageWidth * 0.65, 0, pageWidth * 0.35, 4, "F");
+  // Top Forest Green + Olive Dual Accent Bar (4pt)
+  doc.setFillColor(...COLOR_BRAND_GREEN);
+  doc.rect(0, 0, pageWidth * 0.7, 4, "F");
+  doc.setFillColor(...COLOR_BRAND_OLIVE);
+  doc.rect(pageWidth * 0.7, 0, pageWidth * 0.3, 4, "F");
 
-  // Main dark navy header background
-  doc.setFillColor(...COLOR_DARK);
+  // Header Background: Warm Ivory Linen
+  doc.setFillColor(...COLOR_BEIGE_HEADER);
   doc.rect(0, 4, pageWidth, headerHeight, "F");
 
-  // Brand Name
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(17);
-  doc.text("DIVINA FOODS", marginX, 32);
+  // Header Bottom Hairline Border
+  doc.setDrawColor(...COLOR_BORDER);
+  doc.setLineWidth(0.75);
+  doc.line(0, headerHeight + 4, pageWidth, headerHeight + 4);
 
-  // Subtitle Tag Badge
-  const badgeY = 42;
-  const badgeWidth = 168;
-  const badgeHeight = 18;
-  doc.setFillColor(...COLOR_SLATE);
-  doc.roundedRect(marginX, badgeY, badgeWidth, badgeHeight, 4, 4, "F");
-  doc.setTextColor(147, 197, 253); // soft blue
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("BATCH ALLOCATION REPORT", marginX + 8, badgeY + 12);
+  // Divina Logo (Square Image)
+  const logoSize = 52;
+  try {
+    doc.addImage(DIVINA_LOGO_BASE64, "JPEG", marginX, 14, logoSize, logoSize);
+  } catch {
+    // Graceful fallback if image rendering fails
+    doc.setFillColor(...COLOR_BRAND_GREEN);
+    doc.roundedRect(marginX, 14, logoSize, logoSize, 6, 6, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("D", marginX + logoSize / 2, 45, { align: "center" });
+  }
 
-  // Right Side: Target ID Badge & Timestamp
+  // Brand Name & Subtitle
+  const brandX = marginX + logoSize + 12;
+
+  doc.setTextColor(...COLOR_BRAND_GREEN);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("DIVINA FOODS", brandX, 33);
+
+  // Subtitle Tag Badge in Soft Sage
+  const badgeY = 43;
+  const badgeWidth = 175;
+  const badgeHeight = 17;
+  doc.setFillColor(...SAGE_PILL_BG);
+  doc.setDrawColor(...SAGE_PILL_BORDER);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(brandX, badgeY, badgeWidth, badgeHeight, 3.5, 3.5, "FD");
+  doc.setTextColor(...SAGE_PILL_TEXT);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("BATCH ALLOCATION REPORT", brandX + 8, badgeY + 11.5);
+
+  // Right Side: Target ID Pill & Generated Timestamp
   const generatedOn = new Date().toLocaleString("en-AU", {
     day: "2-digit",
     month: "short",
@@ -112,38 +135,38 @@ export function downloadBatchAllocationPdf(params: {
   });
 
   const targetIdStr = productionTarget.productionTargetId || "REPORT";
-  const idBadgeWidth = Math.max(90, doc.getTextWidth(targetIdStr) + 24);
+  const idBadgeWidth = Math.max(88, doc.getTextWidth(targetIdStr) + 24);
   const idBadgeX = pageWidth - marginX - idBadgeWidth;
 
-  // Target ID Pill
-  doc.setFillColor(...COLOR_PRIMARY);
-  doc.roundedRect(idBadgeX, 20, idBadgeWidth, 24, 6, 6, "F");
+  // Target ID Pill (Forest Green)
+  doc.setFillColor(...COLOR_BRAND_GREEN);
+  doc.roundedRect(idBadgeX, 20, idBadgeWidth, 23, 5, 5, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.5);
-  doc.text(targetIdStr, idBadgeX + idBadgeWidth / 2, 36, { align: "center" });
+  doc.setFontSize(11);
+  doc.text(targetIdStr, idBadgeX + idBadgeWidth / 2, 35, { align: "center" });
 
   // Timestamp
-  doc.setTextColor(...COLOR_TEXT_LIGHT);
+  doc.setTextColor(...COLOR_TEXT_MUTED);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.text(`Generated: ${generatedOn}`, pageWidth - marginX, 58, { align: "right" });
 
   cursorY = headerHeight + 20;
 
-  // ── 2. Executive Metadata / KPI Panel ──
+  // ── 2. Summary / Metadata Dashboard Panel (Warm Cream & Forest Green) ──
   const cardHeight = 84;
   doc.setFillColor(...COLOR_PANEL_BG);
   doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.75);
   doc.roundedRect(marginX, cursorY, contentWidth, cardHeight, 8, 8, "FD");
 
-  // Subtle horizontal row divider inside panel
-  doc.setDrawColor(238, 242, 246);
+  // Subtle horizontal row divider
+  doc.setDrawColor(...COLOR_DIVIDER_INNER);
   doc.line(marginX + 8, cursorY + 42, marginX + contentWidth - 8, cursorY + 42);
 
+  // Subtle vertical column dividers
   const colWidth = contentWidth / 4;
-  // Subtle vertical column dividers inside panel
   for (let c = 1; c < 4; c++) {
     const vx = marginX + c * colWidth;
     doc.line(vx, cursorY + 8, vx, cursorY + cardHeight - 8);
@@ -167,7 +190,7 @@ export function downloadBatchAllocationPdf(params: {
     const x = marginX + 14 + col * colWidth;
     const y = cursorY + 16 + row * 40;
 
-    // Label
+    // Category Label
     doc.setTextColor(...COLOR_TEXT_MUTED);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
@@ -175,25 +198,12 @@ export function downloadBatchAllocationPdf(params: {
 
     // Value
     if (item.isStatus) {
-      // Draw status pill badge
+      // Dynamic Status Badge in Sage Green or Amber
       const statusText = item.value;
-      const isCompleted = statusText.toLowerCase().includes("completed");
       const isWaiting = statusText.toLowerCase().includes("waiting");
-      const pillBg: RGB = isCompleted
-        ? STATUS_GREEN_BG
-        : isWaiting
-        ? STATUS_AMBER_BG
-        : STATUS_BLUE_BG;
-      const pillBorder: RGB = isCompleted
-        ? STATUS_GREEN_BORDER
-        : isWaiting
-        ? STATUS_AMBER_BORDER
-        : STATUS_BLUE_BORDER;
-      const pillText: RGB = isCompleted
-        ? STATUS_GREEN_TEXT
-        : isWaiting
-        ? STATUS_AMBER_TEXT
-        : STATUS_BLUE_TEXT;
+      const pillBg: RGB = isWaiting ? STATUS_AMBER_BG : SAGE_PILL_BG;
+      const pillBorder: RGB = isWaiting ? STATUS_AMBER_BORDER : SAGE_PILL_BORDER;
+      const pillText: RGB = isWaiting ? STATUS_AMBER_TEXT : SAGE_PILL_TEXT;
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
@@ -205,12 +215,12 @@ export function downloadBatchAllocationPdf(params: {
       doc.setFillColor(...pillBg);
       doc.setDrawColor(...pillBorder);
       doc.setLineWidth(0.6);
-      doc.roundedRect(x, pillY, pillW, pillH, 4, 4, "FD");
+      doc.roundedRect(x, pillY, pillW, pillH, 3.5, 3.5, "FD");
 
       doc.setTextColor(...pillText);
       doc.text(statusText, x + 7, pillY + 11.5);
     } else {
-      doc.setTextColor(...(item.isHighlight ? COLOR_PRIMARY : COLOR_TEXT_MAIN));
+      doc.setTextColor(...(item.isHighlight ? COLOR_BRAND_GREEN : COLOR_TEXT_MAIN));
       doc.setFont("helvetica", "bold");
       doc.setFontSize(item.isHighlight ? 11 : 10);
       doc.text(item.value, x, y + 17);
@@ -226,41 +236,40 @@ export function downloadBatchAllocationPdf(params: {
     const stockRequired = group.material ? group.material.stockRequired : undefined;
     const totalAllocated = group.lines.reduce((sum, l) => sum + (l.batchQty || 0), 0);
 
-    // Check if section header + table will fit, else add clean page break
+    // Page Break Check
     if (cursorY > pageHeight - 160) {
       doc.addPage();
       cursorY = 46;
     }
 
-    // Number Badge
+    // Number Badge in Forest Green
     const badgeSize = 18;
-    doc.setFillColor(...COLOR_PRIMARY);
+    doc.setFillColor(...COLOR_BRAND_GREEN);
     doc.roundedRect(marginX, cursorY, badgeSize, badgeSize, 4, 4, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.text(String(groupIndex + 1), marginX + badgeSize / 2, cursorY + 12.5, { align: "center" });
 
-    // Material Name
+    // Material Title
     doc.setTextColor(...COLOR_TEXT_MAIN);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.text(materialName, marginX + badgeSize + 8, cursorY + 13);
 
-    // Metadata Sub-Pills
+    // Metadata Sub-Pills in Beige / Sage
     const metaY = cursorY + 23;
     let metaX = marginX;
 
-    // Pill helper
     function drawMetaPill(label: string, value: string, isAccent = false) {
       const fullText = `${label}: ${value}`;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       const strW = doc.getTextWidth(fullText) + 12;
 
-      const bg: RGB = isAccent ? PILL_ACCENT_BG : PILL_DEFAULT_BG;
-      const border: RGB = isAccent ? PILL_ACCENT_BORDER : PILL_DEFAULT_BORDER;
-      const textCol: RGB = isAccent ? PILL_ACCENT_TEXT : COLOR_TEXT_MUTED;
+      const bg: RGB = isAccent ? SAGE_PILL_BG : BEIGE_PILL_BG;
+      const border: RGB = isAccent ? SAGE_PILL_BORDER : BEIGE_PILL_BORDER;
+      const textCol: RGB = isAccent ? SAGE_PILL_TEXT : BEIGE_PILL_TEXT;
 
       doc.setFillColor(...bg);
       doc.setDrawColor(...border);
@@ -303,20 +312,20 @@ export function downloadBatchAllocationPdf(params: {
         lineWidth: 0.5,
       },
       headStyles: {
-        fillColor: COLOR_SLATE,
+        fillColor: COLOR_SLATE_GREEN,
         textColor: [255, 255, 255],
         fontStyle: "bold",
         fontSize: 8.5,
-        lineColor: COLOR_SLATE,
+        lineColor: COLOR_SLATE_GREEN,
         lineWidth: 0.5,
       },
       alternateRowStyles: {
         fillColor: COLOR_ROW_ALT,
       },
       columnStyles: {
-        0: { fontStyle: "bold", textColor: COLOR_SLATE },
+        0: { fontStyle: "bold", textColor: COLOR_SLATE_GREEN },
         1: { textColor: COLOR_TEXT_MUTED },
-        2: { halign: "right", fontStyle: "bold", textColor: COLOR_PRIMARY },
+        2: { halign: "right", fontStyle: "bold", textColor: COLOR_BRAND_GREEN },
         3: { halign: "right", textColor: COLOR_TEXT_MUTED },
       },
     });
@@ -324,12 +333,12 @@ export function downloadBatchAllocationPdf(params: {
     cursorY = (doc as any).lastAutoTable.finalY + 24;
   });
 
-  // ── 4. Elegant Footer on Every Page ──
+  // ── 4. Warm Artisan Footer on Every Page ──
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
 
-    // Divider Line
+    // Divider Line in Warm Stone
     doc.setDrawColor(...COLOR_BORDER);
     doc.setLineWidth(0.5);
     doc.line(marginX, pageHeight - 32, pageWidth - marginX, pageHeight - 32);
@@ -338,12 +347,12 @@ export function downloadBatchAllocationPdf(params: {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(...COLOR_TEXT_LIGHT);
-    doc.text("DIVINA FOODS  •  PRODUCTION OVERVIEW & BATCH ALLOCATION", marginX, pageHeight - 18);
+    doc.text("DIVINA FOODS  •  ARTISAN PIZZA BASES  •  BATCH ALLOCATION REPORT", marginX, pageHeight - 18);
 
     // Right Footer Pagination
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.setTextColor(...COLOR_TEXT_MUTED);
+    doc.setTextColor(...COLOR_BRAND_GREEN);
     doc.text(`Page ${i} of ${pageCount}`, pageWidth - marginX, pageHeight - 18, { align: "right" });
   }
 
