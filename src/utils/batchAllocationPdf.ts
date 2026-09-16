@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { DIVINA_LOGO_BASE64 } from "../assets/logoBase64";
+import { DIVINA_LOGO_PNG_BASE64 } from "../assets/logoBase64";
 import type { BatchAllocationLine, FinishedGoodTargetRow, MrpRow, ProductionTargetRow, RawMaterialNeedRow } from "../types";
 
 // Mirrors the grouping BatchAllocationSummary already computes on screen —
@@ -59,6 +59,25 @@ function formatQty(value: number | undefined): string {
   return value.toFixed(2).replace(/\.00$/, "");
 }
 
+function drawWatermark(doc: jsPDF, pageWidth: number, pageHeight: number) {
+  try {
+    const wmWidth = 330;
+    const wmHeight = 330;
+    const wmX = (pageWidth - wmWidth) / 2;
+    const wmY = (pageHeight - wmHeight) / 2 + 25;
+
+    // Set subtle low opacity (0.045) so the watermark is soft and elegant
+    if (typeof (doc as any).GState === "function") {
+      const gState = new (doc as any).GState({ opacity: 0.045 });
+      (doc as any).setGState(gState);
+      doc.addImage(DIVINA_LOGO_PNG_BASE64, "PNG", wmX, wmY, wmWidth, wmHeight, undefined, "FAST");
+      (doc as any).setGState(new (doc as any).GState({ opacity: 1.0 }));
+    }
+  } catch (err) {
+    console.warn("Watermark rendering error:", err);
+  }
+}
+
 export function downloadBatchAllocationPdf(params: {
   productionTarget: ProductionTargetRow;
   mrpRecord: MrpRow | null;
@@ -91,10 +110,10 @@ export function downloadBatchAllocationPdf(params: {
   doc.setLineWidth(0.75);
   doc.line(0, headerHeight + 4, pageWidth, headerHeight + 4);
 
-  // Divina Logo (Square Image)
+  // Divina Transparent PNG Logo (Header)
   const logoSize = 52;
   try {
-    doc.addImage(DIVINA_LOGO_BASE64, "JPEG", marginX, 14, logoSize, logoSize);
+    doc.addImage(DIVINA_LOGO_PNG_BASE64, "PNG", marginX, 14, logoSize, logoSize);
   } catch {
     // Graceful fallback if image rendering fails
     doc.setFillColor(...COLOR_BRAND_GREEN);
@@ -381,10 +400,13 @@ export function downloadBatchAllocationPdf(params: {
     cursorY = (doc as any).lastAutoTable.finalY + 24;
   });
 
-  // ── 5. Warm Artisan Footer on Every Page ──
+  // ── 5. Watermark & Warm Artisan Footer on Every Page ──
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
+
+    // Subtle Watermark on background
+    drawWatermark(doc, pageWidth, pageHeight);
 
     // Divider Line in Warm Stone
     doc.setDrawColor(...COLOR_BORDER);
