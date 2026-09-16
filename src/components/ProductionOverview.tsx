@@ -1329,6 +1329,7 @@ export default function ProductionOverview({
                           rawMaterials={data.mrpDetails?.rawMaterials || []}
                           productionTarget={data.record}
                           mrpRecord={data.mrpRecord}
+                          finishedGoods={data.mrpDetails?.finishedGoods || []}
                         />
                       )}
                     </Box>
@@ -2020,11 +2021,13 @@ function BatchAllocationSummary({
   rawMaterials,
   productionTarget,
   mrpRecord,
+  finishedGoods,
 }: {
   allocations: BatchAllocationLine[];
   rawMaterials: RawMaterialNeedRow[];
   productionTarget: ProductionTargetRow | null;
   mrpRecord: MrpRow | null;
+  finishedGoods: FinishedGoodTargetRow[];
 }) {
   const groups = useMemo(() => {
     // The Custom API's Batch_NO/Product are Deluge's raw 17-digit record IDs,
@@ -2073,7 +2076,7 @@ function BatchAllocationSummary({
     // of users who actually click this, so keep them out of everyone
     // else's initial bundle (same reasoning as the lazy dialogs above).
     import("../utils/batchAllocationPdf").then(function (mod) {
-      mod.downloadBatchAllocationPdf({ productionTarget, mrpRecord, groups });
+      mod.downloadBatchAllocationPdf({ productionTarget, mrpRecord, groups, finishedGoods });
     });
   }
 

@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { DIVINA_LOGO_BASE64 } from "../assets/logoBase64";
-import type { BatchAllocationLine, MrpRow, ProductionTargetRow, RawMaterialNeedRow } from "../types";
+import type { BatchAllocationLine, FinishedGoodTargetRow, MrpRow, ProductionTargetRow, RawMaterialNeedRow } from "../types";
 
 // Mirrors the grouping BatchAllocationSummary already computes on screen —
 // passed straight in from there so the PDF always matches what's displayed,
@@ -63,8 +63,9 @@ export function downloadBatchAllocationPdf(params: {
   productionTarget: ProductionTargetRow;
   mrpRecord: MrpRow | null;
   groups: BatchAllocationPdfGroup[];
+  finishedGoods: FinishedGoodTargetRow[];
 }): void {
-  const { productionTarget, mrpRecord, groups } = params;
+  const { productionTarget, mrpRecord, groups, finishedGoods } = params;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -229,7 +230,54 @@ export function downloadBatchAllocationPdf(params: {
 
   cursorY += cardHeight + 24;
 
-  // ── 3. Per-Material Batch Allocation Tables ──
+  // ── 3. Finished Goods Table ──
+  if (finishedGoods.length > 0) {
+    if (cursorY > pageHeight - 160) {
+      doc.addPage();
+      cursorY = 46;
+    }
+
+    doc.setTextColor(...COLOR_TEXT_MAIN);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Finished Goods", marginX, cursorY + 6);
+    cursorY += 16;
+
+    autoTable(doc, {
+      startY: cursorY,
+      margin: { left: marginX, right: marginX },
+      head: [["Item", "UOM", "Target Quantity"]],
+      body: finishedGoods.map((fg) => [fg.itemName, fg.uomName, formatQty(fg.targetQuantity)]),
+      theme: "grid",
+      styles: {
+        fontSize: 8.5,
+        cellPadding: { top: 6, bottom: 6, left: 8, right: 8 },
+        textColor: COLOR_TEXT_MAIN,
+        lineColor: COLOR_BORDER,
+        lineWidth: 0.5,
+      },
+      headStyles: {
+        fillColor: COLOR_SLATE_GREEN,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 8.5,
+        lineColor: COLOR_SLATE_GREEN,
+        lineWidth: 0.5,
+      },
+      alternateRowStyles: {
+        fillColor: COLOR_ROW_ALT,
+      },
+      columnStyles: {
+        0: { fontStyle: "bold", textColor: COLOR_SLATE_GREEN },
+        1: { textColor: COLOR_TEXT_MUTED },
+        2: { halign: "right", fontStyle: "bold", textColor: COLOR_BRAND_GREEN },
+      },
+    });
+
+    cursorY = (doc as any).lastAutoTable.finalY + 24;
+  }
+
+  // ── 4. Per-Material Batch Allocation Tables ──
   groups.forEach((group, groupIndex) => {
     const materialName = group.material?.productName || group.fallbackName || "Unknown Material";
     const uom = group.material?.uom || "";
@@ -333,7 +381,7 @@ export function downloadBatchAllocationPdf(params: {
     cursorY = (doc as any).lastAutoTable.finalY + 24;
   });
 
-  // ── 4. Warm Artisan Footer on Every Page ──
+  // ── 5. Warm Artisan Footer on Every Page ──
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
