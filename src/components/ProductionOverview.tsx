@@ -1688,7 +1688,7 @@ export default function ProductionOverview({
           </Box>
           <Typography sx={{ fontWeight: 800, fontSize: 19 }}>All Purchases Received</Typography>
           <Typography sx={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.5 }}>
-            Every Purchase Order for this run has now been received.
+            Every Purchase Order for this Production has now been received.
           </Typography>
         </Box>
         <DialogContent sx={{ px: 3, py: 3, bgcolor: "#F8FAFC" }}>
