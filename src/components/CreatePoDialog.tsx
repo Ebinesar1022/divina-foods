@@ -94,7 +94,7 @@ export default function CreatePoDialog({
     !!draft.paymentTermsId &&
     !!draft.expectedDeliveryDate &&
     !deliveryBeforePo &&
-    draft.lines.every((l) => l.orderQuantity > 0 && l.unitPrice > 0);
+    draft.lines.every((l) => l.orderQuantity > 0 && l.orderQuantity >= l.neededQuantity && l.unitPrice > 0);
 
   return (
     <Dialog
@@ -267,7 +267,19 @@ export default function CreatePoDialog({
                             value={line.orderQuantity}
                             disabled={committing}
                             onChange={(e) => updateLine(index, { orderQuantity: parseFloat(e.target.value) })}
-                            inputProps={{ min: 0, style: { textAlign: "right" } }}
+                            onBlur={(e) => {
+                              const value = parseFloat(e.target.value);
+                              if (isNaN(value) || value < line.neededQuantity) {
+                                updateLine(index, { orderQuantity: line.neededQuantity });
+                              }
+                            }}
+                            error={isNaN(line.orderQuantity) || line.orderQuantity < line.neededQuantity}
+                            helperText={
+                              isNaN(line.orderQuantity) || line.orderQuantity < line.neededQuantity
+                                ? `Min ${line.neededQuantity}`
+                                : " "
+                            }
+                            inputProps={{ min: line.neededQuantity, style: { textAlign: "right" } }}
                             sx={{ bgcolor: "#fff", borderRadius: "8px", width: 90 }}
                           />
                         </TableCell>
