@@ -13,7 +13,6 @@ import {
   TableHead,
   TableRow,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogContentText,
   DialogActions,
@@ -21,6 +20,7 @@ import {
   Alert,
   IconButton,
   Tooltip,
+  Chip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -33,6 +33,9 @@ import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import CloseIcon from "@mui/icons-material/Close";
 import ProjectHeader from "./ProjectHeader";
 import PipelineStepper from "./PipelineStepper";
 import ActivityTimeline from "./ActivityTimeline";
@@ -1636,22 +1639,265 @@ export default function ProductionOverview({
         )}
       </Suspense>
 
-      <Dialog open={stockStillShortOpen} onClose={() => setStockStillShortOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Stock Still Short</DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: stockShortItems.length ? 1.5 : 0 }}>
-            Available stock isn't enough yet to cover the item{stockShortItems.length === 1 ? "" : "s"} below.
-            Please complete the purchase for the pending quantity, then check stock again once it's received.
-          </DialogContentText>
-          {stockShortItems.map((item) => (
-            <Typography key={item.id} sx={{ fontSize: 13.5, fontWeight: 600 }}>
-              {item.productName} — {item.neededQuantity.toFixed(2)} {item.uomName} still needed
+      <Dialog
+        open={stockStillShortOpen}
+        onClose={() => setStockStillShortOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "22px",
+            overflow: "hidden",
+            boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+            border: "1px solid rgba(255, 255, 255, 0.9)",
+            bgcolor: "#fff",
+          },
+        }}
+      >
+        <Box
+          sx={{
+            background: "linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%)",
+            color: "#fff",
+            px: { xs: 2.5, sm: 3 },
+            py: 2.25,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: "12px",
+                bgcolor: "rgba(255, 255, 255, 0.18)",
+                backdropFilter: "blur(8px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid rgba(255, 255, 255, 0.28)",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.12)",
+                flexShrink: 0,
+              }}
+            >
+              <WarningAmberRoundedIcon sx={{ fontSize: 26, color: "#fff" }} />
+            </Box>
+            <Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 18, color: "#fff" }}>
+                  Stock Still Short
+                </Typography>
+                <Chip
+                  size="small"
+                  label={`${stockShortItems.length} item${stockShortItems.length === 1 ? "" : "s"}`}
+                  sx={{
+                    bgcolor: "rgba(255, 255, 255, 0.22)",
+                    color: "#fff",
+                    fontWeight: 700,
+                    fontSize: 11,
+                    height: 20,
+                    border: "1px solid rgba(255, 255, 255, 0.3)",
+                  }}
+                />
+              </Box>
+              <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.88)", fontSize: 12.5, mt: 0.25 }}>
+                Insufficient raw material inventory in warehouse
+              </Typography>
+            </Box>
+          </Box>
+          <IconButton
+            onClick={() => setStockStillShortOpen(false)}
+            sx={{
+              color: "rgba(255,255,255,0.85)",
+              "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.15)" },
+            }}
+            aria-label="Close"
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+
+        <DialogContent sx={{ p: { xs: 2.5, sm: 3 }, bgcolor: "#F8FAFC" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 1.5,
+              p: 1.75,
+              mb: 2.5,
+              borderRadius: "14px",
+              bgcolor: "#FFFBEB",
+              border: "1px solid #FDE68A",
+            }}
+          >
+            <InfoOutlinedIcon sx={{ color: "#D97706", fontSize: 20, mt: 0.2, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: 13, color: "#92400E", lineHeight: 1.55, fontWeight: 500 }}>
+              Available stock is not sufficient yet to cover the raw materials below. Please complete the purchase for the pending quantity, then check stock again once received.
             </Typography>
-          ))}
+          </Box>
+
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25, px: 0.5 }}>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748B" }}>
+              Shortfall Raw Materials ({stockShortItems.length})
+            </Typography>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#DC2626" }}>
+              Still Needed
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              maxHeight: 280,
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              pr: 0.5,
+              "&::-webkit-scrollbar": { width: "5px" },
+              "&::-webkit-scrollbar-thumb": {
+                backgroundColor: "rgba(148, 163, 184, 0.35)",
+                borderRadius: "999px",
+              },
+            }}
+          >
+            {stockShortItems.map((item) => (
+              <Paper
+                key={item.id}
+                elevation={0}
+                sx={{
+                  p: 1.5,
+                  borderRadius: "12px",
+                  bgcolor: "#ffffff",
+                  border: "1px solid rgba(226, 232, 240, 0.9)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 1.5,
+                  transition: "all 150ms ease",
+                  "&:hover": {
+                    borderColor: "rgba(245, 158, 11, 0.45)",
+                    boxShadow: "0 4px 14px rgba(245, 158, 11, 0.08)",
+                    transform: "translateY(-1px)",
+                  },
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
+                  <Box
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "10px",
+                      bgcolor: "rgba(239, 68, 68, 0.08)",
+                      color: "#EF4444",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Inventory2OutlinedIcon sx={{ fontSize: 19 }} />
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: 13.5,
+                        color: "#0F172A",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                      title={item.productName}
+                    >
+                      {item.productName}
+                    </Typography>
+                    <Typography sx={{ fontSize: 11.5, color: "#64748B", mt: 0.2 }}>
+                      Required: {item.stockRequired > 0 ? item.stockRequired.toFixed(2) : item.neededQuantity.toFixed(2)} {item.uomName}
+                      {item.stockOnHand > 0 ? ` • On Hand: ${item.stockOnHand.toFixed(2)}` : ""}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Box
+                  sx={{
+                    flexShrink: 0,
+                    px: 1.5,
+                    py: 0.6,
+                    borderRadius: "10px",
+                    bgcolor: "#FEF2F2",
+                    border: "1px solid #FECACA",
+                    color: "#DC2626",
+                    textAlign: "right",
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 800, fontSize: 13.5, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
+                    {item.neededQuantity.toFixed(2)}
+                  </Typography>
+                  <Typography sx={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#DC2626", opacity: 0.85 }}>
+                    {item.uomName}
+                  </Typography>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setStockStillShortOpen(false)} sx={{ textTransform: "none", fontWeight: 600 }}>
-            OK
+
+        <DialogActions
+          sx={{
+            px: 3,
+            py: 2.25,
+            bgcolor: "#F8FAFC",
+            borderTop: "1px solid rgba(226, 232, 240, 0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1.5,
+          }}
+        >
+          <Button
+            onClick={() => setStockStillShortOpen(false)}
+            variant="outlined"
+            sx={{
+              borderRadius: "10px",
+              textTransform: "none",
+              fontWeight: 600,
+              px: 2.5,
+              color: "#475569",
+              borderColor: "rgba(148, 163, 184, 0.35)",
+              "&:hover": {
+                bgcolor: "rgba(241, 245, 249, 0.8)",
+                borderColor: "#94A3B8",
+              },
+            }}
+          >
+            Dismiss
+          </Button>
+
+          <Button
+            onClick={() => {
+              setStockStillShortOpen(false);
+              setSelectedNonStockItemIds(stockShortItems.map((item) => item.id));
+              if (activeTab !== "procurement") {
+                setActiveTab("procurement");
+              }
+            }}
+            variant="contained"
+            startIcon={activeTab !== "procurement" ? <ShoppingCartCheckoutIcon sx={{ fontSize: 18 }} /> : <TaskAltIcon sx={{ fontSize: 18 }} />}
+            sx={{
+              borderRadius: "10px",
+              textTransform: "none",
+              fontWeight: 700,
+              px: 2.5,
+              background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+              boxShadow: "0 4px 14px rgba(37, 99, 235, 0.28)",
+              "&:hover": {
+                background: "linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)",
+                boxShadow: "0 6px 20px rgba(37, 99, 235, 0.38)",
+              },
+            }}
+          >
+            {activeTab !== "procurement" ? "Go to Procurement" : "Select Shortfall Items"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1693,7 +1939,7 @@ export default function ProductionOverview({
           </Box>
           <Typography sx={{ fontWeight: 800, fontSize: 19 }}>All Purchases Received</Typography>
           <Typography sx={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.5 }}>
-            Every Purchase Order for this run has now been received.
+            Every Purchase Order for this Production has now been received.
           </Typography>
         </Box>
         <DialogContent sx={{ px: 3, py: 3, bgcolor: "#F8FAFC" }}>
