@@ -19,8 +19,11 @@ import {
   DialogActions,
   Snackbar,
   Alert,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import DownloadIcon from "@mui/icons-material/Download";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
@@ -1321,6 +1324,8 @@ export default function ProductionOverview({
                         <BatchAllocationSummary
                           allocations={batchAllocations}
                           rawMaterials={data.mrpDetails?.rawMaterials || []}
+                          productionTarget={data.record}
+                          mrpRecord={data.mrpRecord}
                         />
                       )}
                     </Box>
@@ -1767,9 +1772,13 @@ export default function ProductionOverview({
 function BatchAllocationSummary({
   allocations,
   rawMaterials,
+  productionTarget,
+  mrpRecord,
 }: {
   allocations: BatchAllocationLine[];
   rawMaterials: RawMaterialNeedRow[];
+  productionTarget: ProductionTargetRow | null;
+  mrpRecord: MrpRow | null;
 }) {
   const groups = useMemo(() => {
     // The Custom API's Batch_NO/Product are Deluge's raw 17-digit record IDs,
@@ -1812,6 +1821,16 @@ function BatchAllocationSummary({
 
   if (groups.length === 0) return null;
 
+  function handleDownloadPdf() {
+    if (!productionTarget) return;
+    // Loaded on demand — jsPDF + autoTable are only needed by the handful
+    // of users who actually click this, so keep them out of everyone
+    // else's initial bundle (same reasoning as the lazy dialogs above).
+    import("../utils/batchAllocationPdf").then(function (mod) {
+      mod.downloadBatchAllocationPdf({ productionTarget, mrpRecord, groups });
+    });
+  }
+
   return (
     <Paper
       variant="outlined"
@@ -1842,7 +1861,7 @@ function BatchAllocationSummary({
         >
           <Inventory2OutlinedIcon sx={{ fontSize: 20 }} />
         </Box>
-        <Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: "#0F172A" }}>
             Batch Allocation
           </Typography>
@@ -1850,6 +1869,25 @@ function BatchAllocationSummary({
             FEFO-picked batches committed for this production run
           </Typography>
         </Box>
+        <Tooltip title="Download batch allocation report (PDF)">
+          <span>
+            <IconButton
+              onClick={handleDownloadPdf}
+              disabled={!productionTarget}
+              size="small"
+              aria-label="Download batch allocation PDF"
+              sx={{
+                borderRadius: "10px",
+                color: "#2563eb",
+                bgcolor: "rgba(37, 99, 235, 0.08)",
+                border: "1px solid rgba(37, 99, 235, 0.20)",
+                "&:hover": { bgcolor: "rgba(37, 99, 235, 0.16)" },
+              }}
+            >
+              <DownloadIcon sx={{ fontSize: 19 }} />
+            </IconButton>
+          </span>
+        </Tooltip>
       </Box>
 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
