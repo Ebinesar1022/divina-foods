@@ -61,16 +61,22 @@ function formatQty(value: number | undefined): string {
 
 function drawWatermark(doc: jsPDF, pageWidth: number, pageHeight: number) {
   try {
-    const wmWidth = 330;
-    const wmHeight = 330;
-    const wmX = (pageWidth - wmWidth) / 2;
-    const wmY = (pageHeight - wmHeight) / 2 + 25;
+    const wmWidth = 440;
+    const wmHeight = 440;
+    const angle = -38; // Diagonal slant from bottom-left to top-right
+    const rad = (angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
 
-    // Set subtle low opacity (0.045) so the watermark is soft and elegant
+    // Position so that the center of the rotated image coincides with the center of the page
+    const x = pageWidth / 2 - ((wmWidth / 2) * cos + (wmHeight / 2) * sin);
+    const y = pageHeight / 2 - wmHeight - ((wmWidth / 2) * sin - (wmHeight / 2) * cos);
+
+    // Set opacity to 0.13 for a distinct, stylish watermark that doesn't obscure content
     if (typeof (doc as any).GState === "function") {
-      const gState = new (doc as any).GState({ opacity: 0.045 });
+      const gState = new (doc as any).GState({ opacity: 0.13 });
       (doc as any).setGState(gState);
-      doc.addImage(DIVINA_LOGO_PNG_BASE64, "PNG", wmX, wmY, wmWidth, wmHeight, undefined, "FAST");
+      doc.addImage(DIVINA_LOGO_PNG_BASE64, "PNG", x, y, wmWidth, wmHeight, undefined, "FAST", angle);
       (doc as any).setGState(new (doc as any).GState({ opacity: 1.0 }));
     }
   } catch (err) {
