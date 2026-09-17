@@ -61,12 +61,38 @@ export default function ReceivePoDialog({
     onDraftChange({ ...draft, lines });
   }
 
+  // Selection reuses receivableQuantity itself (0 = not selected) rather
+  // than a parallel "selected" field, so commitReceivePo only has to filter
+  // on the one value it already needs — same reasoning as the Needed Items
+  // checklist upstream, just without a separate ID list to keep in sync.
+  function toggleLine(index: number) {
+    if (!draft) return;
+    const line = draft.lines[index];
+    if (line.receivableQuantity > 0) {
+      updateLine(index, { receivableQuantity: 0, batchNo: "", expiryDate: "" });
+    } else {
+      updateLine(index, { receivableQuantity: line.pendingQuantity });
+    }
+  }
+
+  function toggleSelectAll() {
+    if (!draft) return;
+    const allSelected = draft.lines.every((l) => l.receivableQuantity > 0);
+    const lines = draft.lines.map((line) =>
+      allSelected
+        ? { ...line, receivableQuantity: 0, batchNo: "", expiryDate: "" }
+        : { ...line, receivableQuantity: line.pendingQuantity }
+    );
+    onDraftChange({ ...draft, lines });
+  }
+
   // Batch_No and Expiry_Date are mandatory on Receive_Items now — only
   // require them for lines actually being received (receivableQuantity > 0)
   // so a partial receipt isn't blocked by lines nobody's touching this time.
+  const selectedCount = draft ? draft.lines.filter((l) => l.receivableQuantity > 0).length : 0;
   const canSubmit =
     !!draft &&
-    draft.lines.some((l) => l.receivableQuantity > 0) &&
+    selectedCount > 0 &&
     draft.lines.every((l) => l.receivableQuantity <= 0 || (l.batchNo.trim() && l.expiryDate));
 
   return (
@@ -158,6 +184,21 @@ export default function ReceivePoDialog({
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
+                    <TableCell padding="checkbox">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all items"
+                        checked={draft.lines.every((l) => l.receivableQuantity > 0)}
+                        ref={(el) => {
+                          if (el) {
+                            const selectedCount = draft.lines.filter((l) => l.receivableQuantity > 0).length;
+                            el.indeterminate = selectedCount > 0 && selectedCount < draft.lines.length;
+                          }
+                        }}
+                        onChange={toggleSelectAll}
+                        disabled={committing}
+                      />
+                    </TableCell>
                     <TableCell>Product</TableCell>
                     <TableCell align="right">Ordered</TableCell>
                     <TableCell align="right">Received</TableCell>
@@ -171,7 +212,15 @@ export default function ReceivePoDialog({
                 </TableHead>
                 <TableBody>
                   {draft.lines.map((line, index) => (
-                    <TableRow key={line.poLineId}>
+                    <TableRow key={line.poLineId} hover selected={line.receivableQuantity > 0}>
+                      <TableCell padding="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={line.receivableQuantity > 0}
+                          onChange={() => toggleLine(index)}
+                          disabled={committing}
+                        />
+                      </TableCell>
                       <TableCell>
                         {line.productName}
                         {line.uomName && (
@@ -188,7 +237,7 @@ export default function ReceivePoDialog({
                           type="number"
                           size="small"
                           value={line.receivableQuantity}
-                          disabled={committing}
+                          disabled={committing || line.receivableQuantity <= 0}
                           onChange={(e) => updateLine(index, { receivableQuantity: parseFloat(e.target.value) })}
                           inputProps={{ min: 0, max: line.pendingQuantity, style: { textAlign: "right" } }}
                           sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
@@ -248,7 +297,7 @@ export default function ReceivePoDialog({
           startIcon={committing ? <CircularProgress size={16} color="inherit" /> : <LocalShippingIcon />}
           sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700 }}
         >
-          {committing ? "Receiving…" : "Confirm Receipt"}
+          {committing ? "Receiving…" : `Confirm Receipt${selectedCount ? ` (${selectedCount})` : ""}`}
         </Button>
       </DialogActions>
     </Dialog>

@@ -717,7 +717,12 @@ export function prepareReceivePoDraft(po: PurchaseOrderDetail): Promise<ReceiveP
 // rather than being replicated client-side (same reasoning as
 // allocate_Stock_On_Production_Start and UpdateWarehouse).
 export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
-  return runSequentially(draft.lines, function (line) {
+  // Only the lines the user actually selected/left quantity on go to the
+  // server — a line left at 0 wasn't received this round, so it shouldn't
+  // get a Receive_Items row (or the phantom Batch_Details entry
+  // ProcessPurchaseReceive would otherwise create for it).
+  const selectedLines = draft.lines.filter((line) => line.receivableQuantity > 0);
+  return runSequentially(selectedLines, function (line) {
     return resolveUomMasterId(line.uomName).then(function (uomMasterId) {
       return { ...line, uomId: uomMasterId };
     });
