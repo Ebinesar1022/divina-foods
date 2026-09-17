@@ -657,12 +657,20 @@ export default function ProductionOverview({
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
           setData(result);
-          // Available_Stocks still isn't enough to cover one or more raw
-          // materials — the Custom API already re-validated this and left
-          // those rows on Needs Purchase, so surface it here instead of
-          // letting the user assume the click did nothing.
+          // Non_Stock_Items.Status only ever moves Needs Purchase -> PO
+          // Created and never reverts once a PO exists — even if the goods
+          // behind that PO were never actually received — so it can't tell
+          // us whether stock is genuinely still short. Raw_Materials.Status
+          // is what Check Stock just re-validated against live
+          // Available_Stocks, so cross-reference by product to catch items
+          // stuck on "PO Created" whose stock hasn't actually arrived yet.
+          const stillShortProductIds = new Set(
+            (result.mrpDetails?.rawMaterials || [])
+              .filter((rm) => rm.status === "Needs Purchase")
+              .map((rm) => rm.productId)
+          );
           const stillShort = (result.nonStockItems || []).filter(
-            (item) => item.status === "Needs Purchase"
+            (item) => item.status === "Needs Purchase" || stillShortProductIds.has(item.productId)
           );
           if (stillShort.length > 0) {
             setStockShortItems(stillShort);
