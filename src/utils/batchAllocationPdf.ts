@@ -64,13 +64,13 @@ function drawWatermark(doc: jsPDF, pageWidth: number, pageHeight: number) {
     const wmWidth = 440;
     const wmHeight = 440;
     const angle = -38; // Diagonal slant from bottom-left to top-right
-    const rad = (angle * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
 
-    // Position so that the center of the rotated image coincides with the center of the page
-    const x = pageWidth / 2 - ((wmWidth / 2) * cos - (wmHeight / 2) * sin);
-    const y = pageHeight / 2 - ((wmWidth / 2) * sin + (wmHeight / 2) * cos);
+    // jsPDF rotates addImage around the image's own center, so placing
+    // the top-left at (pageCenterX - w/2, pageCenterY - h/2) keeps the
+    // watermark visually centred on the page regardless of rotation.
+    // Fine-tune offsets to nudge the watermark left and up visually.
+    const x = pageWidth / 2 - wmWidth / 2 - 50;
+    const y = pageHeight / 2 - wmHeight / 2 - 130;
 
     // Set opacity to 0.13 for a distinct, stylish watermark that doesn't obscure content
     if (typeof (doc as any).GState === "function") {

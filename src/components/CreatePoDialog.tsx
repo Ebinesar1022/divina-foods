@@ -291,6 +291,7 @@ export default function CreatePoDialog({
                             disabled={committing}
                             onChange={(e) => updateLine(index, { unitPrice: parseFloat(e.target.value) })}
                             inputProps={{ min: 0, step: "0.01", style: { textAlign: "right" } }}
+                            helperText=" "
                             sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
                           />
                         </TableCell>
