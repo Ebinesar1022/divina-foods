@@ -69,8 +69,8 @@ function drawWatermark(doc: jsPDF, pageWidth: number, pageHeight: number) {
     const sin = Math.sin(rad);
 
     // Position so that the center of the rotated image coincides with the center of the page
-    const x = pageWidth / 2 - ((wmWidth / 2) * cos + (wmHeight / 2) * sin);
-    const y = pageHeight / 2 - wmHeight - ((wmWidth / 2) * sin - (wmHeight / 2) * cos);
+    const x = pageWidth / 2 - ((wmWidth / 2) * cos - (wmHeight / 2) * sin);
+    const y = pageHeight / 2 - ((wmWidth / 2) * sin + (wmHeight / 2) * cos);
 
     // Set opacity to 0.13 for a distinct, stylish watermark that doesn't obscure content
     if (typeof (doc as any).GState === "function") {
