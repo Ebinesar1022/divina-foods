@@ -263,6 +263,7 @@ export default function ProductionOverview({
   const [stockStillShortOpen, setStockStillShortOpen] = useState(false);
   const [stockShortItems, setStockShortItems] = useState<NonStockItemRow[]>([]);
   const [checkStockSuccessOpen, setCheckStockSuccessOpen] = useState(false);
+  const [checkStockWarningOpen, setCheckStockWarningOpen] = useState(false);
   // Prompted right after a Purchase Receive completes and it turns out that
   // was the last outstanding PO for this MRP (every PO's derived status is
   // now "Received") — the natural moment to suggest re-checking stock,
@@ -657,24 +658,25 @@ export default function ProductionOverview({
       .then(function () {
         return fetchProductionOverview(productionTargetId).then(function (result) {
           setData(result);
-          // Non_Stock_Items.Status only ever moves Needs Purchase -> PO
-          // Created and never reverts once a PO exists — even if the goods
-          // behind that PO were never actually received — so it can't tell
-          // us whether stock is genuinely still short. Raw_Materials.Status
-          // is what Check Stock just re-validated against live
-          // Available_Stocks, so cross-reference by product to catch items
-          // stuck on "PO Created" whose stock hasn't actually arrived yet.
-          const stillShortProductIds = new Set(
-            (result.mrpDetails?.rawMaterials || [])
-              .filter((rm) => rm.status === "Needs Purchase")
-              .map((rm) => rm.productId)
+          // Items with no PO raised yet — let the user pick them and raise
+          // one, same as before.
+          const needsPurchase = (result.nonStockItems || []).filter(
+            (item) => item.status === "Needs Purchase"
           );
-          const stillShort = (result.nonStockItems || []).filter(
-            (item) => item.status === "Needs Purchase" || stillShortProductIds.has(item.productId)
-          );
-          if (stillShort.length > 0) {
-            setStockShortItems(stillShort);
+          if (needsPurchase.length > 0) {
+            setStockShortItems(needsPurchase);
             setStockStillShortOpen(true);
+            return;
+          }
+          // Everything already has a PO raised, so there's nothing left to
+          // select — but Non_Stock_Items.Status stays "PO Created" forever
+          // and never reflects whether the goods actually arrived.
+          // Production_Target.Status is what MRP.CheckStock just
+          // re-validated and (now that its Production_Targets[ID==...]
+          // lookup correctly uses .ID) actually updates, so it's the
+          // authoritative "is this genuinely resolved" signal here.
+          if (result.record && result.record.status === "Waiting for Stock") {
+            setCheckStockWarningOpen(true);
           } else {
             setCheckStockSuccessOpen(true);
           }
@@ -1995,6 +1997,22 @@ export default function ProductionOverview({
           sx={{ borderRadius: "10px", fontWeight: 600 }}
         >
           Stock check complete — all raw materials are now available.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={checkStockWarningOpen}
+        autoHideDuration={4000}
+        onClose={() => setCheckStockWarningOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setCheckStockWarningOpen(false)}
+          severity="warning"
+          variant="filled"
+          sx={{ borderRadius: "10px", fontWeight: 600 }}
+        >
+          Need to Receive Raw Materials
         </Alert>
       </Snackbar>
 
