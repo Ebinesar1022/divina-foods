@@ -237,7 +237,7 @@ export default function ConsumptionEntryDialog({
                       Produced Qty
                     </TableCell>
                     <TableCell align="right">Scrap Qty</TableCell>
-                    <TableCell sx={{ minWidth: 140 }}>
+                    <TableCell sx={{ minWidth: 190 }}>
                       Batch No <Box component="span" sx={{ color: "error.main" }}>*</Box>
                     </TableCell>
                     <TableCell sx={{ minWidth: 150 }}>
@@ -292,13 +292,13 @@ export default function ConsumptionEntryDialog({
                             InputProps={{
                               endAdornment: (
                                 <InputAdornment position="end">
-                                  <Tooltip title="Generate batch number">
+                                  <Tooltip title={fg.batchNo.trim() ? "Batch number already set" : "Generate batch number"}>
                                     <span>
                                       <IconButton
                                         size="small"
                                         edge="end"
                                         aria-label="Generate batch number"
-                                        disabled={committing || generatingBatchIndex !== null}
+                                        disabled={committing || generatingBatchIndex !== null || !!fg.batchNo.trim()}
                                         onClick={() => handleGenerateBatchNo(index)}
                                       >
                                         {generatingBatchIndex === index ? (
@@ -315,6 +315,7 @@ export default function ConsumptionEntryDialog({
                             sx={{
                               bgcolor: "#fff",
                               borderRadius: "8px",
+                              width: 175,
                               "& .MuiOutlinedInput-root": {
                                 borderRadius: "8px",
                               },
