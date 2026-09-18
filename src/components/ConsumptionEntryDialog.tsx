@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Alert,
   Box,
@@ -7,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   IconButton,
+  InputAdornment,
   Paper,
   Table,
   TableBody,
@@ -15,11 +17,14 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import FoodProductionLoader from "./FoodProductionLoader";
+import { generateNextBatchNumber } from "../services/productionApi";
 import type {
   ConsumptionEntryDraft,
   ConsumptionFinishedGoodDraftRow,
@@ -49,6 +54,7 @@ export default function ConsumptionEntryDialog({
 }: ConsumptionEntryDialogProps) {
   const isPreparing = !draft && !draftError;
   const today = new Date().toISOString().slice(0, 10);
+  const [generatingBatchIndex, setGeneratingBatchIndex] = useState<number | null>(null);
 
   // Subtracting two decimals in JS routinely lands on IEEE754 noise (e.g.
   // 2 - 1.8 === 0.19999999999999996), which has far more digits once sent
@@ -89,6 +95,21 @@ export default function ConsumptionEntryDialog({
     }
     rows[index] = row;
     onDraftChange({ ...draft, finishedGoods: rows });
+  }
+
+  function handleGenerateBatchNo(index: number) {
+    if (generatingBatchIndex !== null) return;
+    setGeneratingBatchIndex(index);
+    generateNextBatchNumber()
+      .then(function (batchNo) {
+        updateFinishedGood(index, { batchNo });
+      })
+      .catch(function () {
+        // Best-effort — leave the field as-is so the user can still type one manually.
+      })
+      .finally(function () {
+        setGeneratingBatchIndex(null);
+      });
   }
 
   function updateRawMaterial(index: number, patch: Partial<ConsumptionRawMaterialDraftRow>) {
@@ -268,6 +289,29 @@ export default function ConsumptionEntryDialog({
                             value={fg.batchNo}
                             disabled={committing}
                             onChange={(e) => updateFinishedGood(index, { batchNo: e.target.value })}
+                            InputProps={{
+                              endAdornment: (
+                                <InputAdornment position="end">
+                                  <Tooltip title="Generate batch number">
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        edge="end"
+                                        aria-label="Generate batch number"
+                                        disabled={committing || generatingBatchIndex !== null}
+                                        onClick={() => handleGenerateBatchNo(index)}
+                                      >
+                                        {generatingBatchIndex === index ? (
+                                          <CircularProgress size={16} />
+                                        ) : (
+                                          <AutoAwesomeIcon sx={{ fontSize: 18, color: "#059669" }} />
+                                        )}
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
+                                </InputAdornment>
+                              ),
+                            }}
                             sx={{
                               bgcolor: "#fff",
                               borderRadius: "8px",

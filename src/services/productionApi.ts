@@ -1817,6 +1817,37 @@ export function prepareConsumptionDraft(
 // calls (code 2955). This costs more round trips than the single Custom API
 // call did, but each one is a plain, ordinary Data API call with nothing
 // hidden in Deluge to go wrong.
+const BATCH_NUMBER_PREFIX = "BFG-";
+const BATCH_NUMBER_DIGITS = 6;
+
+function findUnusedBatchNumber(candidateNo: number, attempt: number): Promise<string> {
+  const candidate = BATCH_NUMBER_PREFIX + String(candidateNo).padStart(BATCH_NUMBER_DIGITS, "0");
+  if (attempt > 5) return Promise.resolve(candidate);
+  return getRecords(CONFIG.BATCH_DETAILS_REPORT, `Batch_Number == "${candidate}"`).then(function (existing) {
+    if (!existing.length) return candidate;
+    return findUnusedBatchNumber(candidateNo + 1, attempt + 1);
+  });
+}
+
+// Generates the next "BFG-000001"-style batch number for the Complete
+// Production dialog's Batch No field. Derives the next number from the
+// highest existing BFG- batch already in Batch_Details (no dedicated
+// counter field needed on Sequence_Master), then double-checks the
+// candidate itself so a hand-typed batch number out of sequence (e.g.
+// someone typed "BFG-000050" manually) can never collide with it.
+export function generateNextBatchNumber(): Promise<string> {
+  const criteria = `Batch_Number.startsWith("${BATCH_NUMBER_PREFIX}")`;
+  return getRecords(CONFIG.BATCH_DETAILS_REPORT, criteria, 1000).then(function (rows) {
+    let maxNo = 0;
+    rows.forEach(function (r: any) {
+      const suffix = display(r.Batch_Number).slice(BATCH_NUMBER_PREFIX.length);
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num) && num > maxNo) maxNo = num;
+    });
+    return findUnusedBatchNumber(maxNo + 1, 0);
+  });
+}
+
 function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promise<void> {
   function updateOrCreateMainWarehouseForFinishedGood(fg: (typeof draft.finishedGoods)[number]): Promise<any> {
     const criteria = `Product_Master == ${fg.itemId}`;
