@@ -116,7 +116,7 @@ export const CONFIG = {
   PRODUCTION_STOCK_REPORT: "Production_Stock_Details_Report",
   // Per-batch stock ledger on Product_Master — same report-name-minus-
   // "_Report" form-name convention as the other pairs above.
-  BATCH_DETAILS_REPORT: "Batch_Details_Report",
+  BATCH_DETAILS_REPORT: "All_Batch_Details",
   BATCH_DETAILS_FORM: "Batch_Details",
 
   // Confirmed against the app's .ds export — FEFO_Batch_Allocation (header,
@@ -131,7 +131,8 @@ export const CONFIG = {
 
 function display(value: any): string {
   if (value == null) return "";
-  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
   if (typeof value === "object") {
     return value.zc_display_value || value.display_value || value.Name || "";
   }
@@ -143,7 +144,8 @@ function display(value: any): string {
 // when the field already comes back as a bare ID string.
 function lookupId(value: any): string {
   if (value == null) return "";
-  if (typeof value === "object") return value.ID != null ? String(value.ID) : "";
+  if (typeof value === "object")
+    return value.ID != null ? String(value.ID) : "";
   return String(value);
 }
 
@@ -176,14 +178,23 @@ function roundMoney(value: number): number {
 // Production_Order): "prefix first_name last_name suffix".
 function formatEmployeeName(nameField: any): string {
   if (!nameField || typeof nameField !== "object") return "";
-  return [nameField.prefix, nameField.first_name, nameField.last_name, nameField.suffix]
+  return [
+    nameField.prefix,
+    nameField.first_name,
+    nameField.last_name,
+    nameField.suffix,
+  ]
     .filter(Boolean)
     .join(" ")
     .trim();
 }
 
 // Generic fetch — every read on this page goes through this one function.
-function getRecords(reportName: string, criteria?: string, maxRecords = 200): Promise<any[]> {
+function getRecords(
+  reportName: string,
+  criteria?: string,
+  maxRecords = 200,
+): Promise<any[]> {
   return window.ZOHO.CREATOR.DATA.getRecords({
     app_name: CONFIG.APP_NAME,
     report_name: reportName,
@@ -197,7 +208,10 @@ function getRecords(reportName: string, criteria?: string, maxRecords = 200): Pr
     })
     .catch(function (err: any) {
       // Creator throws a rejected promise (not code 3000) when a report has 0 rows.
-      if (err && (err.code === 9280 || /no records? found/i.test(err.message || ""))) {
+      if (
+        err &&
+        (err.code === 9280 || /no records? found/i.test(err.message || ""))
+      ) {
         return [];
       }
       console.error("getRecords failed for " + reportName, err);
@@ -212,7 +226,10 @@ function getRecords(reportName: string, criteria?: string, maxRecords = 200): Pr
 // comes back `{ code: 2955, description: "You have reached the maximum
 // number of API calls that can be simultaneously initiated at a time." }`.
 // Chains each item's work with .then() instead, one request at a time.
-function runSequentially<T, R>(items: T[], task: (item: T) => Promise<R>): Promise<R[]> {
+function runSequentially<T, R>(
+  items: T[],
+  task: (item: T) => Promise<R>,
+): Promise<R[]> {
   const results: R[] = [];
   return items
     .reduce(function (chain: Promise<void>, item) {
@@ -238,7 +255,9 @@ function addRecord(formName: string, data: Record<string, any>): Promise<any> {
     },
   }).then(function (resp: any) {
     if (!resp || resp.code !== 3000 || !resp.data) {
-      return Promise.reject(new Error("Failed to create a record in " + formName + "."));
+      return Promise.reject(
+        new Error("Failed to create a record in " + formName + "."),
+      );
     }
     return resp.data;
   });
@@ -254,7 +273,11 @@ function addRecord(formName: string, data: Record<string, any>): Promise<any> {
 // Getting this wrong made every update reject before any network request
 // was even sent, silently dropping the Finished_Goods MRP_ID link-back and
 // the sequence bump while the rest of the create had already succeeded.
-function updateRecord(reportName: string, recordId: string, data: Record<string, any>): Promise<any> {
+function updateRecord(
+  reportName: string,
+  recordId: string,
+  data: Record<string, any>,
+): Promise<any> {
   return window.ZOHO.CREATOR.DATA.updateRecordById({
     app_name: CONFIG.APP_NAME,
     report_name: reportName,
@@ -264,7 +287,11 @@ function updateRecord(reportName: string, recordId: string, data: Record<string,
     },
   }).then(function (resp: any) {
     if (!resp || resp.code !== 3000) {
-      return Promise.reject(new Error("Failed to update record " + recordId + " in " + reportName + "."));
+      return Promise.reject(
+        new Error(
+          "Failed to update record " + recordId + " in " + reportName + ".",
+        ),
+      );
     }
     return resp.data;
   });
@@ -282,7 +309,11 @@ function deleteRecord(reportName: string, recordId: string): Promise<any> {
     id: recordId,
   }).then(function (resp: any) {
     if (!resp || resp.code !== 3000) {
-      return Promise.reject(new Error("Failed to delete record " + recordId + " in " + reportName + "."));
+      return Promise.reject(
+        new Error(
+          "Failed to delete record " + recordId + " in " + reportName + ".",
+        ),
+      );
     }
     return resp;
   });
@@ -313,29 +344,42 @@ function mapProductionTargetRow(r: any): ProductionTargetRow {
 // all-digits means it's the raw record ID (matched unquoted, per Creator's
 // numeric-ID criteria rule), anything else is the display ID (a text
 // field, so quoted).
-export function fetchProductionTarget(productionTargetId: string): Promise<ProductionTargetRow | null> {
+export function fetchProductionTarget(
+  productionTargetId: string,
+): Promise<ProductionTargetRow | null> {
   const trimmedId = productionTargetId.trim();
   const isRecordId = /^\d+$/.test(trimmedId);
-  const criteria = isRecordId ? `ID == ${trimmedId}` : `Production_Target_ID == "${trimmedId}"`;
-  return getRecords(CONFIG.PRODUCTION_TARGET_REPORT, criteria).then(function (rows) {
-    if (rows.length) return mapProductionTargetRow(rows[0]);
-    if (!isRecordId) return null;
+  const criteria = isRecordId
+    ? `ID == ${trimmedId}`
+    : `Production_Target_ID == "${trimmedId}"`;
+  return getRecords(CONFIG.PRODUCTION_TARGET_REPORT, criteria).then(
+    function (rows) {
+      if (rows.length) return mapProductionTargetRow(rows[0]);
+      if (!isRecordId) return null;
 
-    // The "Waiting for Stock" report page is built on
-    // Material_Requirement_Planning (filtered to Production_Target.Status
-    // == "Waiting for Stock"), not on Production_Targets — its click
-    // action passes that MRP row's own ID, which will never match a
-    // Production_Targets row. Retry treating the ID as an MRP record and
-    // follow its Production_Target lookup to the real target.
-    return getRecords(CONFIG.MRP_REPORT, `ID == ${trimmedId}`).then(function (mrpRows) {
-      if (!mrpRows.length) return null;
-      const targetRecordId = lookupId(mrpRows[0].Production_Target);
-      if (!targetRecordId) return null;
-      return getRecords(CONFIG.PRODUCTION_TARGET_REPORT, `ID == ${targetRecordId}`).then(function (targetRows) {
-        return targetRows.length ? mapProductionTargetRow(targetRows[0]) : null;
-      });
-    });
-  });
+      // The "Waiting for Stock" report page is built on
+      // Material_Requirement_Planning (filtered to Production_Target.Status
+      // == "Waiting for Stock"), not on Production_Targets — its click
+      // action passes that MRP row's own ID, which will never match a
+      // Production_Targets row. Retry treating the ID as an MRP record and
+      // follow its Production_Target lookup to the real target.
+      return getRecords(CONFIG.MRP_REPORT, `ID == ${trimmedId}`).then(
+        function (mrpRows) {
+          if (!mrpRows.length) return null;
+          const targetRecordId = lookupId(mrpRows[0].Production_Target);
+          if (!targetRecordId) return null;
+          return getRecords(
+            CONFIG.PRODUCTION_TARGET_REPORT,
+            `ID == ${targetRecordId}`,
+          ).then(function (targetRows) {
+            return targetRows.length
+              ? mapProductionTargetRow(targetRows[0])
+              : null;
+          });
+        },
+      );
+    },
+  );
 }
 
 // ───────────── Material Requirement & Planning ─────────────
@@ -344,7 +388,9 @@ export function fetchProductionTarget(productionTargetId: string): Promise<Produ
 // NOT by display text — `Production_Target == "PT-118"` always returns 0 rows.
 // Pass productionTargetRecordId (the numeric record ID from Production_Target)
 // and match without quotes, same as fetchFinishedGoodsForTarget.
-export function fetchMrpRecord(productionTargetRecordId: string): Promise<MrpRow | null> {
+export function fetchMrpRecord(
+  productionTargetRecordId: string,
+): Promise<MrpRow | null> {
   const criteria = `Production_Target == ${productionTargetRecordId}`;
   return getRecords(CONFIG.MRP_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
@@ -376,25 +422,30 @@ export function fetchMrpRecord(productionTargetRecordId: string): Promise<MrpRow
 
 // Shortfall raw materials still needing a PO (or already covered by one) —
 // backs the "Needed Items" selection list in the Procurement tab.
-export function fetchNonStockItemsForMrp(mrpRecordId: string): Promise<NonStockItemRow[]> {
+export function fetchNonStockItemsForMrp(
+  mrpRecordId: string,
+): Promise<NonStockItemRow[]> {
   if (!mrpRecordId) return Promise.resolve([]);
   const criteria = `MRP_ID == ${mrpRecordId}`;
-  return getRecords(CONFIG.NON_STOCK_ITEMS_REPORT, criteria).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: display(r.ID),
-        productId: lookupId(r.Product),
-        productName: display(r.Product),
-        uomId: lookupId(r.UOM),
-        uomName: display(r.UOM),
-        stockOnHand: parseFloat(display(r.Stock_On_Hand)) || 0,
-        stockRequired: parseFloat(display(r.Stock_Required)) || 0,
-        allocateQuantity: parseFloat(display(r.Allocate_Quantity)) || 0,
-        neededQuantity: parseFloat(display(r.Needed_Quantity)) || 0,
-        status: (display(r.Status) || "Needs Purchase") as NonStockItemRow["status"],
-      };
-    });
-  });
+  return getRecords(CONFIG.NON_STOCK_ITEMS_REPORT, criteria).then(
+    function (rows) {
+      return rows.map(function (r: any) {
+        return {
+          id: display(r.ID),
+          productId: lookupId(r.Product),
+          productName: display(r.Product),
+          uomId: lookupId(r.UOM),
+          uomName: display(r.UOM),
+          stockOnHand: parseFloat(display(r.Stock_On_Hand)) || 0,
+          stockRequired: parseFloat(display(r.Stock_Required)) || 0,
+          allocateQuantity: parseFloat(display(r.Allocate_Quantity)) || 0,
+          neededQuantity: parseFloat(display(r.Needed_Quantity)) || 0,
+          status: (display(r.Status) ||
+            "Needs Purchase") as NonStockItemRow["status"],
+        };
+      });
+    },
+  );
 }
 
 let suppliersPromise: Promise<SupplierOption[]> | null = null;
@@ -404,52 +455,61 @@ let employeesPromise: Promise<EmployeeOption[]> | null = null;
 
 export function fetchSuppliers(): Promise<SupplierOption[]> {
   if (!suppliersPromise) {
-    suppliersPromise = getRecords(CONFIG.SUPPLIER_REPORT).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: display(r.ID),
-        name: formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Code) || "Unnamed",
-      };
-    });
-    }).catch(function (error) {
-      suppliersPromise = null;
-      throw error;
-    });
+    suppliersPromise = getRecords(CONFIG.SUPPLIER_REPORT)
+      .then(function (rows) {
+        return rows.map(function (r: any) {
+          return {
+            id: display(r.ID),
+            name:
+              formatEmployeeName(r.Supplier_Name) ||
+              display(r.Supplier_Code) ||
+              "Unnamed",
+          };
+        });
+      })
+      .catch(function (error) {
+        suppliersPromise = null;
+        throw error;
+      });
   }
   return suppliersPromise;
 }
 
 export function fetchPaymentTerms(): Promise<PaymentTermOption[]> {
   if (!paymentTermsPromise) {
-    paymentTermsPromise = getRecords(CONFIG.PAYMENT_TERM_REPORT).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: display(r.ID),
-        name: display(r.Payment_Terms),
-      };
-    });
-    }).catch(function (error) {
-      paymentTermsPromise = null;
-      throw error;
-    });
+    paymentTermsPromise = getRecords(CONFIG.PAYMENT_TERM_REPORT)
+      .then(function (rows) {
+        return rows.map(function (r: any) {
+          return {
+            id: display(r.ID),
+            name: display(r.Payment_Terms),
+          };
+        });
+      })
+      .catch(function (error) {
+        paymentTermsPromise = null;
+        throw error;
+      });
   }
   return paymentTermsPromise;
 }
 
 export function fetchTaxTypes(): Promise<TaxOption[]> {
   if (!taxTypesPromise) {
-    taxTypesPromise = getRecords(CONFIG.TAX_MASTER_REPORT, `Status == "Active"`).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: display(r.ID),
-        name: display(r.Tax_Name),
-        rate: parseFloat(display(r.Tax_Rate)) || 0,
-      };
-    });
-    }).catch(function (error) {
-      taxTypesPromise = null;
-      throw error;
-    });
+    taxTypesPromise = getRecords(CONFIG.TAX_MASTER_REPORT, `Status == "Active"`)
+      .then(function (rows) {
+        return rows.map(function (r: any) {
+          return {
+            id: display(r.ID),
+            name: display(r.Tax_Name),
+            rate: parseFloat(display(r.Tax_Rate)) || 0,
+          };
+        });
+      })
+      .catch(function (error) {
+        taxTypesPromise = null;
+        throw error;
+      });
   }
   return taxTypesPromise;
 }
@@ -462,7 +522,10 @@ function generatePoNumber(sequenceRow: any): string {
   return prefix + String(currentNo).padStart(3, "0");
 }
 
-function bumpPoSequence(sequenceRowId: string, currentPurchaseNo: number): Promise<any> {
+function bumpPoSequence(
+  sequenceRowId: string,
+  currentPurchaseNo: number,
+): Promise<any> {
   return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
     Purchase_No: currentPurchaseNo + 1,
   });
@@ -475,10 +538,12 @@ function bumpPoSequence(sequenceRowId: string, currentPurchaseNo: number): Promi
 // "must have Unit_Price" rule).
 export function prepareCreatePoDraft(
   mrpRecordId: string,
-  selectedItems: NonStockItemRow[]
+  selectedItems: NonStockItemRow[],
 ): Promise<CreatePoDraft> {
   if (!selectedItems.length) {
-    return Promise.reject(new Error("Select at least one item to create a Purchase Order."));
+    return Promise.reject(
+      new Error("Select at least one item to create a Purchase Order."),
+    );
   }
   return fetchSequenceMasterRow().then(function (sequenceRow) {
     return {
@@ -514,7 +579,9 @@ export function prepareCreatePoDraft(
 // "Po update in Inventory" workflows (minus the Zoho Inventory sync call,
 // which is out of scope — same boundary as every other zoho.inventory.*
 // call in this app).
-export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: string; poNumber: string }> {
+export function commitCreatePo(
+  draft: CreatePoDraft,
+): Promise<{ poRecordId: string; poNumber: string }> {
   // Mirrors the native line-item workflows (Calculate Unit Price / Get Tax
   // Amount): Line_Total is pre-tax (Order Qty × Unit Price), Tax_Amount is
   // Line_Total × Tax_Percentage / 100, and the header's Sub_Total/Tax_Amount/
@@ -527,12 +594,12 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
   const subTotal = roundMoney(
     computedLines.reduce(function (sum, l) {
       return sum + l.lineTotal;
-    }, 0)
+    }, 0),
   );
   const taxTotal = roundMoney(
     computedLines.reduce(function (sum, l) {
       return sum + l.taxAmount;
-    }, 0)
+    }, 0),
   );
   const grandTotal = roundMoney(subTotal + taxTotal);
 
@@ -565,9 +632,13 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
     })
       .then(function () {
         return runSequentially(draft.lines, function (line) {
-          return updateRecord(CONFIG.NON_STOCK_ITEMS_REPORT, line.nonStockItemId, {
-            Status: "PO Created",
-          });
+          return updateRecord(
+            CONFIG.NON_STOCK_ITEMS_REPORT,
+            line.nonStockItemId,
+            {
+              Status: "PO Created",
+            },
+          );
         });
       })
       .then(function () {
@@ -584,7 +655,10 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
         const result = { poRecordId: poRecordId, poNumber: draft.poNumber };
         return syncPurchaseOrderToBooks(poRecordId, draft.supplierId)
           .catch(function (err: any) {
-            console.warn("Books PO sync failed (Purchase Order still created in Creator):", err);
+            console.warn(
+              "Books PO sync failed (Purchase Order still created in Creator):",
+              err,
+            );
           })
           .then(function () {
             return result;
@@ -615,47 +689,55 @@ function derivePoStatus(lines: PoLineRow[]): string {
   return "Not Received";
 }
 
-export function fetchPurchaseOrdersForMrp(mrpRecordId: string): Promise<PurchaseOrderDetail[]> {
+export function fetchPurchaseOrdersForMrp(
+  mrpRecordId: string,
+): Promise<PurchaseOrderDetail[]> {
   if (!mrpRecordId) return Promise.resolve([]);
   const criteria = `MRP_ID == ${mrpRecordId}`;
-  return getRecords(CONFIG.PURCHASE_ORDER_REPORT, criteria).then(function (rows) {
-    return runSequentially(rows, function (r: any) {
-      const poId = display(r.ID);
-      return getRecords(CONFIG.PO_LINE_ITEMS_REPORT, `PO_Number == ${poId}`).then(function (lineRows) {
-        const lines: PoLineRow[] = lineRows.map(function (line: any) {
+  return getRecords(CONFIG.PURCHASE_ORDER_REPORT, criteria).then(
+    function (rows) {
+      return runSequentially(rows, function (r: any) {
+        const poId = display(r.ID);
+        return getRecords(
+          CONFIG.PO_LINE_ITEMS_REPORT,
+          `PO_Number == ${poId}`,
+        ).then(function (lineRows) {
+          const lines: PoLineRow[] = lineRows.map(function (line: any) {
+            return {
+              id: display(line.ID),
+              productId: lookupId(line.Product),
+              productName: display(line.Product),
+              uomName: display(line.UOM),
+              orderQuantity: parseFloat(display(line.Order_Qty)) || 0,
+              receivedQuantity: parseFloat(display(line.Received_Qty)) || 0,
+              unitPrice: parseFloat(display(line.Unit_Price)) || 0,
+              taxPercentage: parseFloat(display(line.Tax_Percentage)) || 0,
+              taxAmount: parseFloat(display(line.Tax_Amount)) || 0,
+              lineTotal: parseFloat(display(line.Line_Total)) || 0,
+            };
+          });
           return {
-            id: display(line.ID),
-            productId: lookupId(line.Product),
-            productName: display(line.Product),
-            uomName: display(line.UOM),
-            orderQuantity: parseFloat(display(line.Order_Qty)) || 0,
-            receivedQuantity: parseFloat(display(line.Received_Qty)) || 0,
-            unitPrice: parseFloat(display(line.Unit_Price)) || 0,
-            taxPercentage: parseFloat(display(line.Tax_Percentage)) || 0,
-            taxAmount: parseFloat(display(line.Tax_Amount)) || 0,
-            lineTotal: parseFloat(display(line.Line_Total)) || 0,
+            id: poId,
+            poNumber: display(r.PO_Number),
+            poDate: display(r.PO_Date),
+            mrpRecordId: mrpRecordId,
+            supplierId: lookupId(r.Supplier_Name),
+            supplierName:
+              formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Name),
+            status: derivePoStatus(lines),
+            subTotal: parseFloat(display(r.Sub_Total)) || 0,
+            taxAmount: parseFloat(display(r.Tax_Amount)) || 0,
+            grandTotal: parseFloat(display(r.Grand_Total)) || 0,
+            lines: lines,
           };
         });
-        return {
-          id: poId,
-          poNumber: display(r.PO_Number),
-          poDate: display(r.PO_Date),
-          mrpRecordId: mrpRecordId,
-          supplierId: lookupId(r.Supplier_Name),
-          supplierName: formatEmployeeName(r.Supplier_Name) || display(r.Supplier_Name),
-          status: derivePoStatus(lines),
-          subTotal: parseFloat(display(r.Sub_Total)) || 0,
-          taxAmount: parseFloat(display(r.Tax_Amount)) || 0,
-          grandTotal: parseFloat(display(r.Grand_Total)) || 0,
-          lines: lines,
-        };
+      }).then(function (details) {
+        return details.sort(function (a, b) {
+          return a.poDate < b.poDate ? 1 : -1;
+        });
       });
-    }).then(function (details) {
-      return details.sort(function (a, b) {
-        return a.poDate < b.poDate ? 1 : -1;
-      });
-    });
-  });
+    },
+  );
 }
 
 // ───────────── Receive Purchase Order: draft → commit ─────────────
@@ -666,7 +748,10 @@ function generateReceiveNo(sequenceRow: any): string {
   return prefix + String(currentNo).padStart(3, "0");
 }
 
-function bumpReceiveSequence(sequenceRowId: string, currentReceiveNo: number): Promise<any> {
+function bumpReceiveSequence(
+  sequenceRowId: string,
+  currentReceiveNo: number,
+): Promise<any> {
   return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
     Receive_No: currentReceiveNo + 1,
   });
@@ -674,15 +759,22 @@ function bumpReceiveSequence(sequenceRowId: string, currentReceiveNo: number): P
 
 // Only lines with Pending Qty > 0 are included — Receivable Qty defaults
 // to the full pending amount (editable down for a partial receipt).
-export function prepareReceivePoDraft(po: PurchaseOrderDetail): Promise<ReceivePoDraft> {
+export function prepareReceivePoDraft(
+  po: PurchaseOrderDetail,
+): Promise<ReceivePoDraft> {
   const pendingLines = po.lines.filter(function (line) {
     return line.orderQuantity - line.receivedQuantity > 0;
   });
   if (!pendingLines.length) {
-    return Promise.reject(new Error("Every line on this Purchase Order has already been received."));
+    return Promise.reject(
+      new Error("Every line on this Purchase Order has already been received."),
+    );
   }
 
-  return Promise.all([fetchSequenceMasterRow(), fetchDefaultWarehouseId()]).then(function (results) {
+  return Promise.all([
+    fetchSequenceMasterRow(),
+    fetchDefaultWarehouseId(),
+  ]).then(function (results) {
     const sequenceRow = results[0];
     const warehouseId = results[1];
 
@@ -728,7 +820,9 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
   // server — a line left at 0 wasn't received this round, so it shouldn't
   // get a Receive_Items row (or the phantom Batch_Details entry
   // ProcessPurchaseReceive would otherwise create for it).
-  const selectedLines = draft.lines.filter((line) => line.receivableQuantity > 0);
+  const selectedLines = draft.lines.filter(
+    (line) => line.receivableQuantity > 0,
+  );
   return runSequentially(selectedLines, function (line) {
     return resolveUomMasterId(line.uomName).then(function (uomMasterId) {
       return { ...line, uomId: uomMasterId };
@@ -760,7 +854,10 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
         });
       })
         .then(function () {
-          return bumpReceiveSequence(draft.sequenceRowId, draft.sequenceReceiveNo);
+          return bumpReceiveSequence(
+            draft.sequenceRowId,
+            draft.sequenceReceiveNo,
+          );
         })
         .then(function () {
           return processPurchaseReceive(receiveRecordId);
@@ -768,7 +865,10 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
         .then(function (result) {
           return syncPurchaseReceiveToBooks(receiveRecordId, draft.supplierId)
             .catch(function (err: any) {
-              console.warn("Books PR sync failed (Purchase Receive still recorded in Creator):", err);
+              console.warn(
+                "Books PR sync failed (Purchase Receive still recorded in Creator):",
+                err,
+              );
             })
             .then(function () {
               return result;
@@ -789,8 +889,8 @@ function processPurchaseReceive(receiveRecordId: string): Promise<any> {
   if (!PROCESS_PURCHASE_RECEIVE_API.public_key) {
     return Promise.reject(
       new Error(
-        "ProcessPurchaseReceive Custom API isn't wired up yet — the receipt was recorded, but stock/MRP status won't update until this is configured."
-      )
+        "ProcessPurchaseReceive Custom API isn't wired up yet — the receipt was recorded, but stock/MRP status won't update until this is configured.",
+      ),
     );
   }
   return window.ZOHO.CREATOR.DATA.invokeCustomApi({
@@ -804,8 +904,17 @@ function processPurchaseReceive(receiveRecordId: string): Promise<any> {
     public_key: PROCESS_PURCHASE_RECEIVE_API.public_key,
   }).then(function (resp: any) {
     const result = resp && resp.result;
-    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
-      return Promise.reject(new Error((result && result.message) || "Failed to process the purchase receive."));
+    if (
+      !resp ||
+      resp.code !== 3000 ||
+      (result && result.status && result.status !== "success")
+    ) {
+      return Promise.reject(
+        new Error(
+          (result && result.message) ||
+            "Failed to process the purchase receive.",
+        ),
+      );
     }
     return resp;
   });
@@ -825,7 +934,10 @@ const SYNC_PO_TO_BOOKS_API = {
   public_key: "rWapybq1J9GCpXkDeXHQ8NBwz",
 };
 
-export function syncPurchaseOrderToBooks(purchaseOrderRecordId: string, supplierRecordId: string): Promise<any> {
+export function syncPurchaseOrderToBooks(
+  purchaseOrderRecordId: string,
+  supplierRecordId: string,
+): Promise<any> {
   return window.ZOHO.CREATOR.DATA.invokeCustomApi({
     api_name: SYNC_PO_TO_BOOKS_API.api_name,
     workspace_name: SYNC_PO_TO_BOOKS_API.workspace_name,
@@ -842,7 +954,12 @@ export function syncPurchaseOrderToBooks(purchaseOrderRecordId: string, supplier
     // success or failure) rather than result.status, which is only ever set
     // on the success branch and would silently miss every error response.
     if (!resp || resp.code !== 3000 || !result || result.code !== 3000) {
-      return Promise.reject(new Error((result && result.message) || "Failed to sync Purchase Order to Books."));
+      return Promise.reject(
+        new Error(
+          (result && result.message) ||
+            "Failed to sync Purchase Order to Books.",
+        ),
+      );
     }
     return result;
   });
@@ -855,7 +972,10 @@ const SYNC_PR_TO_BOOKS_API = {
   public_key: "U7eygp4uRCBx6jWMB0Aa2KN9C",
 };
 
-export function syncPurchaseReceiveToBooks(receiveRecordId: string, supplierRecordId: string): Promise<any> {
+export function syncPurchaseReceiveToBooks(
+  receiveRecordId: string,
+  supplierRecordId: string,
+): Promise<any> {
   return window.ZOHO.CREATOR.DATA.invokeCustomApi({
     api_name: SYNC_PR_TO_BOOKS_API.api_name,
     workspace_name: SYNC_PR_TO_BOOKS_API.workspace_name,
@@ -869,7 +989,12 @@ export function syncPurchaseReceiveToBooks(receiveRecordId: string, supplierReco
   }).then(function (resp: any) {
     const result = resp && resp.result;
     if (!resp || resp.code !== 3000 || !result || result.code !== 3000) {
-      return Promise.reject(new Error((result && result.message) || "Failed to sync Purchase Receive to Books."));
+      return Promise.reject(
+        new Error(
+          (result && result.message) ||
+            "Failed to sync Purchase Receive to Books.",
+        ),
+      );
     }
     return result;
   });
@@ -898,8 +1023,16 @@ export function checkStockForMrp(mrpRecordId: string): Promise<any> {
     public_key: CHECK_STOCK_API.public_key,
   }).then(function (resp: any) {
     const result = resp && resp.result;
-    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
-      return Promise.reject(new Error((result && result.message) || "Failed to check stock for this MRP."));
+    if (
+      !resp ||
+      resp.code !== 3000 ||
+      (result && result.status && result.status !== "success")
+    ) {
+      return Promise.reject(
+        new Error(
+          (result && result.message) || "Failed to check stock for this MRP.",
+        ),
+      );
     }
     return resp;
   });
@@ -911,19 +1044,23 @@ export function checkStockForMrp(mrpRecordId: string): Promise<any> {
 // separate Assigned_By/Production_Status field, only the target's own
 // Assigned_To/Status (the fields the "Complete Production" custom action
 // column sits alongside natively).
-export function fetchProductionInProgress(productionTargetId: string): Promise<ProductionInProgressRow[]> {
+export function fetchProductionInProgress(
+  productionTargetId: string,
+): Promise<ProductionInProgressRow[]> {
   const criteria = `Production_Target_ID == "${productionTargetId}"`;
-  return getRecords(CONFIG.PRODUCTION_INPROGRESS_REPORT, criteria).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: r.ID,
-        productionTargetId: display(r.Production_Target_ID),
-        date: display(r.Date_field),
-        assignedBy: display(r.Assigned_To),
-        productionStatus: display(r.Status),
-      };
-    });
-  });
+  return getRecords(CONFIG.PRODUCTION_INPROGRESS_REPORT, criteria).then(
+    function (rows) {
+      return rows.map(function (r: any) {
+        return {
+          id: r.ID,
+          productionTargetId: display(r.Production_Target_ID),
+          date: display(r.Date_field),
+          assignedBy: display(r.Assigned_To),
+          productionStatus: display(r.Status),
+        };
+      });
+    },
+  );
 }
 
 // ───────────── Consumption Entry ─────────────
@@ -934,7 +1071,9 @@ export function fetchProductionInProgress(productionTargetId: string): Promise<P
 // (Finished_Goods_Cunsumptions, Consumption_Items), so they're fetched by
 // criteria on their own back-reference lookup, same pattern used for the
 // MRP's Finished_Goods/Raw_Materials.
-export function fetchConsumptionEntries(productionTargetRecordId: string): Promise<ConsumptionEntryRow[]> {
+export function fetchConsumptionEntries(
+  productionTargetRecordId: string,
+): Promise<ConsumptionEntryRow[]> {
   if (!productionTargetRecordId) return Promise.resolve([]);
   const criteria = `Production_Target == ${productionTargetRecordId}`;
   return getRecords(CONFIG.CONSUMPTION_ENTRY_REPORT, criteria)
@@ -945,8 +1084,14 @@ export function fetchConsumptionEntries(productionTargetRecordId: string): Promi
       return runSequentially(rows, function (r: any) {
         const entryId = display(r.ID);
         return Promise.all([
-          getRecords(CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT, `Consumption_Entry == ${entryId}`),
-          getRecords(CONFIG.CONSUMPTION_ITEMS_REPORT, `Consumption_ID == ${entryId}`),
+          getRecords(
+            CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT,
+            `Consumption_Entry == ${entryId}`,
+          ),
+          getRecords(
+            CONFIG.CONSUMPTION_ITEMS_REPORT,
+            `Consumption_ID == ${entryId}`,
+          ),
         ]).then(function (sub) {
           const finishedGoods = sub[0].map(function (fg: any) {
             return {
@@ -967,7 +1112,8 @@ export function fetchConsumptionEntries(productionTargetRecordId: string): Promi
               productId: lookupId(rm.Raw_Material),
               productName: display(rm.Raw_Material),
               uom: display(rm.UOM),
-              allocatedQuantity: parseFloat(display(rm.Allocated_Quantity)) || 0,
+              allocatedQuantity:
+                parseFloat(display(rm.Allocated_Quantity)) || 0,
               consumedQuantity: parseFloat(display(rm.Consumed_Quantity)) || 0,
               scrapQuantity: parseFloat(display(rm.Scrap_Quantity)) || 0,
             };
@@ -1003,21 +1149,25 @@ export function fetchConsumptionEntries(productionTargetRecordId: string): Promi
 // "Invalid criteria specified" (code 3330) here, unlike the plain-text
 // Production_Target_ID field on Production_Targets itself. So this one
 // takes the Production Target's record ID, not its display ID string.
-export function fetchFinishedGoodsForTarget(productionTargetRecordId: string): Promise<FinishedGoodTargetRow[]> {
+export function fetchFinishedGoodsForTarget(
+  productionTargetRecordId: string,
+): Promise<FinishedGoodTargetRow[]> {
   const criteria = `Production_Target_ID == ${productionTargetRecordId}`;
-  return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: r.ID,
-        productionTargetRecordId: lookupId(r.Production_Target_ID),
-        itemId: lookupId(r.Item),
-        itemName: display(r.Item),
-        uomId: lookupId(r.UOM),
-        uomName: display(r.UOM),
-        targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
-      };
-    });
-  });
+  return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(
+    function (rows) {
+      return rows.map(function (r: any) {
+        return {
+          id: r.ID,
+          productionTargetRecordId: lookupId(r.Production_Target_ID),
+          itemId: lookupId(r.Item),
+          itemName: display(r.Item),
+          uomId: lookupId(r.UOM),
+          uomName: display(r.UOM),
+          targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
+        };
+      });
+    },
+  );
 }
 
 // A finished good's BOM_Master row has a single BOM_Items grid — look up the
@@ -1026,24 +1176,28 @@ function fetchBomItemsForProduct(itemId: string): Promise<BomItemRow[]> {
   if (!itemId) return Promise.resolve([]);
 
   const bomCriteria = `Product == ${itemId}`;
-  return getRecords(CONFIG.BOM_MASTER_REPORT, bomCriteria).then(function (bomRows) {
-    if (!bomRows.length) return [];
-    const bomId = bomRows[0].ID;
+  return getRecords(CONFIG.BOM_MASTER_REPORT, bomCriteria).then(
+    function (bomRows) {
+      if (!bomRows.length) return [];
+      const bomId = bomRows[0].ID;
 
-    const itemsCriteria = `BOM_ID == ${bomId}`;
-    return getRecords(CONFIG.BOM_ITEMS_REPORT, itemsCriteria).then(function (itemRows) {
-      return itemRows.map(function (r: any) {
-        return {
-          bomId: display(bomId),
-          productId: lookupId(r.Product),
-          productName: display(r.Product),
-          quantityRequired: parseFloat(display(r.Quantity_Required)) || 0,
-          uomId: lookupId(r.UOM),
-          uomName: display(r.UOM),
-        };
-      });
-    });
-  });
+      const itemsCriteria = `BOM_ID == ${bomId}`;
+      return getRecords(CONFIG.BOM_ITEMS_REPORT, itemsCriteria).then(
+        function (itemRows) {
+          return itemRows.map(function (r: any) {
+            return {
+              bomId: display(bomId),
+              productId: lookupId(r.Product),
+              productName: display(r.Product),
+              quantityRequired: parseFloat(display(r.Quantity_Required)) || 0,
+              uomId: lookupId(r.UOM),
+              uomName: display(r.UOM),
+            };
+          });
+        },
+      );
+    },
+  );
 }
 
 // Available_Stocks is the source of truth for current stock — sum it across
@@ -1056,7 +1210,9 @@ function fetchBomItemsForProduct(itemId: string): Promise<BomItemRow[]> {
 // ~300-500ms round trips back to back before the Create MRP draft could even
 // render. A single OR'd criteria gets every product's rows in one request
 // instead, with no change to what's fetched or how it's aggregated.
-function fetchStockOnHandBatch(productIds: string[]): Promise<Record<string, number>> {
+function fetchStockOnHandBatch(
+  productIds: string[],
+): Promise<Record<string, number>> {
   const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
   if (!uniqueIds.length) return Promise.resolve({});
 
@@ -1066,22 +1222,26 @@ function fetchStockOnHandBatch(productIds: string[]): Promise<Record<string, num
     })
     .join(" || ");
 
-  return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
-    const totals: Record<string, number> = {};
-    rows.forEach(function (r: any) {
-      const productId = lookupId(r.Product_Master);
-      if (!productId) return;
-      const available = parseFloat(display(r.Available_Stocks)) || 0;
-      totals[productId] = (totals[productId] || 0) + available;
-    });
-    return totals;
-  });
+  return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
+    function (rows) {
+      const totals: Record<string, number> = {};
+      rows.forEach(function (r: any) {
+        const productId = lookupId(r.Product_Master);
+        if (!productId) return;
+        const available = parseFloat(display(r.Available_Stocks)) || 0;
+        totals[productId] = (totals[productId] || 0) + available;
+      });
+      return totals;
+    },
+  );
 }
 
 // Explodes every finished good through its BOM × Target_Quantity, aggregates
 // duplicate raw materials across multiple finished-good lines, then compares
 // the aggregated requirement to current stock to work out what's short.
-function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promise<RawMaterialNeedRow[]> {
+function computeRawMaterialNeeds(
+  finishedGoods: FinishedGoodTargetRow[],
+): Promise<RawMaterialNeedRow[]> {
   // Sequential (not Promise.all) — see runSequentially's comment: enough
   // finished goods/raw materials fired at once trips Creator's cap on
   // simultaneous in-flight API calls (code 2955).
@@ -1097,13 +1257,23 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
       });
     });
   }).then(function (perFinishedGood) {
-    const aggregated = new Map<string, { productId: string; productName: string; uom: string; stockRequired: number }>();
+    const aggregated = new Map<
+      string,
+      {
+        productId: string;
+        productName: string;
+        uom: string;
+        stockRequired: number;
+      }
+    >();
 
     perFinishedGood.forEach(function (lines) {
       lines.forEach(function (line) {
         const existing = aggregated.get(line.productId);
         if (existing) {
-          existing.stockRequired = roundQty(existing.stockRequired + line.requiredQuantity);
+          existing.stockRequired = roundQty(
+            existing.stockRequired + line.requiredQuantity,
+          );
         } else {
           aggregated.set(line.productId, {
             productId: line.productId,
@@ -1120,12 +1290,16 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
     return fetchStockOnHandBatch(
       aggregatedList.map(function (rm) {
         return rm.productId;
-      })
+      }),
     ).then(function (stockByProduct) {
       return aggregatedList.map(function (rm) {
         const stockOnHand = roundQty(stockByProduct[rm.productId] || 0);
-        const allocateQuantity = roundQty(Math.min(stockOnHand, rm.stockRequired));
-        const neededQuantity = roundQty(Math.max(0, rm.stockRequired - stockOnHand));
+        const allocateQuantity = roundQty(
+          Math.min(stockOnHand, rm.stockRequired),
+        );
+        const neededQuantity = roundQty(
+          Math.max(0, rm.stockRequired - stockOnHand),
+        );
         return {
           productId: rm.productId,
           productName: rm.productName,
@@ -1134,7 +1308,9 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
           stockRequired: rm.stockRequired,
           allocateQuantity: allocateQuantity,
           neededQuantity: neededQuantity,
-          status: (neededQuantity > 0 ? "Needs Purchase" : "Stock Available") as RawMaterialNeedRow["status"],
+          status: (neededQuantity > 0
+            ? "Needs Purchase"
+            : "Stock Available") as RawMaterialNeedRow["status"],
         };
       });
     });
@@ -1146,7 +1322,10 @@ function computeRawMaterialNeeds(finishedGoods: FinishedGoodTargetRow[]): Promis
 // mirroring the app's native Deluge "Generate MRP ID" workflow.
 function fetchSequenceMasterRow(): Promise<any> {
   return getRecords(CONFIG.SEQUENCE_MASTER_REPORT).then(function (rows) {
-    if (!rows.length) return Promise.reject(new Error("Sequence_Master has no row configured."));
+    if (!rows.length)
+      return Promise.reject(
+        new Error("Sequence_Master has no row configured."),
+      );
     return rows[0];
   });
 }
@@ -1159,7 +1338,10 @@ function generateMrpId(sequenceRow: any): string {
 
 // Only call this once the full MRP create has succeeded — bumping the
 // counter first would burn a sequence number on a failed/partial create.
-function bumpMrpSequence(sequenceRowId: string, currentMrpNo: number): Promise<any> {
+function bumpMrpSequence(
+  sequenceRowId: string,
+  currentMrpNo: number,
+): Promise<any> {
   return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
     MRP_No: currentMrpNo + 1,
   });
@@ -1171,9 +1353,11 @@ function bumpMrpSequence(sequenceRowId: string, currentMrpNo: number): Promise<a
 // does: match UOM_Master's own UOM text field.
 function resolveUomMasterId(uomText: string): Promise<string> {
   if (!uomText) return Promise.resolve("");
-  return getRecords(CONFIG.UOM_MASTER_REPORT, `UOM == "${uomText}"`).then(function (rows) {
-    return rows.length ? display(rows[0].ID) : "";
-  });
+  return getRecords(CONFIG.UOM_MASTER_REPORT, `UOM == "${uomText}"`).then(
+    function (rows) {
+      return rows.length ? display(rows[0].ID) : "";
+    },
+  );
 }
 
 // The app only ever books MRPs against "Main Warehouse" — no picker needed,
@@ -1183,7 +1367,9 @@ function fetchDefaultWarehouseId(): Promise<string> {
   const criteria = `Warehouse_Name == "Main Warehouse"`;
   return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
     if (!rows.length) {
-      return Promise.reject(new Error('Could not find a "Main Warehouse" row in Warehouse_Master.'));
+      return Promise.reject(
+        new Error('Could not find a "Main Warehouse" row in Warehouse_Master.'),
+      );
     }
     return display(rows[0].ID);
   });
@@ -1210,7 +1396,9 @@ function fetchDefaultWarehouseCode(): Promise<string> {
 // Warehouse_Name. Returns both the record ID (for a lookup field write) and
 // the code itself (for a denormalized Warehouse_Code write), or null if no
 // such warehouse row exists.
-function fetchWarehouseByCode(code: string): Promise<{ id: string; code: string } | null> {
+function fetchWarehouseByCode(
+  code: string,
+): Promise<{ id: string; code: string } | null> {
   const criteria = `Warehouse_ID == "${code}"`;
   return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
@@ -1219,7 +1407,20 @@ function fetchWarehouseByCode(code: string): Promise<{ id: string; code: string 
 }
 
 function formatDateForZoho(date: Date): string {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   const day = String(date.getDate()).padStart(2, "0");
   return `${day}-${months[date.getMonth()]}-${date.getFullYear()}`;
 }
@@ -1251,7 +1452,7 @@ function formatDateStringForZoho(dateStr: string): string {
 // Computes the draft; writes nothing to Zoho.
 export function prepareMrpDraft(
   productionTargetRecordId: string,
-  productionTargetId: string
+  productionTargetId: string,
 ): Promise<MrpDraft> {
   // Guard against duplicate MRPs — a second attempt after a page reload (or
   // a second tab) while an earlier one was still mid-flight would otherwise
@@ -1262,7 +1463,11 @@ export function prepareMrpDraft(
   // Uses productionTargetRecordId (numeric) since Production_Target is a lookup field.
   return fetchMrpRecord(productionTargetRecordId).then(function (existingMrp) {
     if (existingMrp) {
-      return Promise.reject(new Error(`An MRP (${existingMrp.mrpId}) already exists for this Production Target.`));
+      return Promise.reject(
+        new Error(
+          `An MRP (${existingMrp.mrpId}) already exists for this Production Target.`,
+        ),
+      );
     }
 
     return Promise.all([
@@ -1278,29 +1483,33 @@ export function prepareMrpDraft(
 
       if (!finishedGoods.length) {
         return Promise.reject(
-          new Error("This Production Target has no finished-good lines yet — add at least one before creating an MRP.")
+          new Error(
+            "This Production Target has no finished-good lines yet — add at least one before creating an MRP.",
+          ),
         );
       }
 
-      return computeRawMaterialNeeds(finishedGoods).then(function (rawMaterials) {
-        const hasShortfall = rawMaterials.some(function (rm) {
-          return rm.status === "Needs Purchase";
-        });
+      return computeRawMaterialNeeds(finishedGoods).then(
+        function (rawMaterials) {
+          const hasShortfall = rawMaterials.some(function (rm) {
+            return rm.status === "Needs Purchase";
+          });
 
-        return {
-          mrpId: generateMrpId(sequenceRow),
-          mrpDate: formatDateForZoho(new Date()),
-          productionTargetRecordId: productionTargetRecordId,
-          productionTargetId: productionTargetId,
-          warehouseId: warehouseId,
-          warehouseCode: warehouseCode,
-          finishedGoods: finishedGoods,
-          rawMaterials: rawMaterials,
-          hasShortfall: hasShortfall,
-          sequenceRowId: sequenceRow.ID,
-          sequenceMrpNo: parseInt(display(sequenceRow.MRP_No), 10) || 0,
-        };
-      });
+          return {
+            mrpId: generateMrpId(sequenceRow),
+            mrpDate: formatDateForZoho(new Date()),
+            productionTargetRecordId: productionTargetRecordId,
+            productionTargetId: productionTargetId,
+            warehouseId: warehouseId,
+            warehouseCode: warehouseCode,
+            finishedGoods: finishedGoods,
+            rawMaterials: rawMaterials,
+            hasShortfall: hasShortfall,
+            sequenceRowId: sequenceRow.ID,
+            sequenceMrpNo: parseInt(display(sequenceRow.MRP_No), 10) || 0,
+          };
+        },
+      );
     });
   });
 }
@@ -1330,23 +1539,32 @@ export function prepareMrpDraft(
 function reserveMainWarehouseStockForMrp(draft: MrpDraft): Promise<void> {
   return runSequentially(draft.rawMaterials, function (rm) {
     const criteria = `Product_Master == ${rm.productId}`;
-    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
-      if (rows.length > 0) {
-        const row = rows[0];
-        const reservedStock = roundQty((parseFloat(display(row.Reserved_Stock)) || 0) + rm.allocateQuantity);
-        const stockOnHand = parseFloat(display(row.Stock_On_Hand)) || 0;
-        return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, display(row.ID), {
-          Reserved_Stock: reservedStock,
-          Available_Stocks: roundQty(stockOnHand - reservedStock),
+    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
+      function (rows) {
+        if (rows.length > 0) {
+          const row = rows[0];
+          const reservedStock = roundQty(
+            (parseFloat(display(row.Reserved_Stock)) || 0) +
+              rm.allocateQuantity,
+          );
+          const stockOnHand = parseFloat(display(row.Stock_On_Hand)) || 0;
+          return updateRecord(
+            CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
+            display(row.ID),
+            {
+              Reserved_Stock: reservedStock,
+              Available_Stocks: roundQty(stockOnHand - reservedStock),
+            },
+          );
+        }
+        return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
+          Warehouse_Code: draft.warehouseCode,
+          Warehouse: draft.warehouseId,
+          Product_Master: rm.productId,
+          Reserved_Stock: rm.allocateQuantity,
         });
-      }
-      return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
-        Warehouse_Code: draft.warehouseCode,
-        Warehouse: draft.warehouseId,
-        Product_Master: rm.productId,
-        Reserved_Stock: rm.allocateQuantity,
-      });
-    });
+      },
+    );
   }).then(function () {
     return undefined;
   });
@@ -1356,13 +1574,18 @@ function reserveMainWarehouseStockForMrp(draft: MrpDraft): Promise<void> {
 // the MRP, Raw_Materials rows, the Production Target's Status update, and
 // finally the Sequence_Master bump — only after everything else has
 // succeeded, so a failed/partial commit doesn't burn a sequence number.
-export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMrpResult> {
+export function commitMrpDraft(
+  draft: MrpDraft,
+  notes: string,
+): Promise<CreateMrpResult> {
   // The procurement-required signal belongs on Production_Targets.Status
   // (values Planned/Released/Waiting for Stock/In Progress/Completed,
   // confirmed against the app's .ds export), NOT on the MRP record —
   // Material_Requirement_Planning.Status is a separate, unrelated
   // True/False field that always gets its native default here.
-  const productionTargetStatus: ProductionTargetStatus = draft.hasShortfall ? "Waiting for Stock" : "Released";
+  const productionTargetStatus: ProductionTargetStatus = draft.hasShortfall
+    ? "Waiting for Stock"
+    : "Released";
 
   return addRecord(CONFIG.MRP_FORM, {
     MRP_ID: draft.mrpId,
@@ -1437,9 +1660,13 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
         });
       })
       .then(function () {
-        return updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
-          Status: productionTargetStatus,
-        });
+        return updateRecord(
+          CONFIG.PRODUCTION_TARGET_REPORT,
+          draft.productionTargetRecordId,
+          {
+            Status: productionTargetStatus,
+          },
+        );
       })
       .then(function () {
         return bumpMrpSequence(draft.sequenceRowId, draft.sequenceMrpNo);
@@ -1458,53 +1685,69 @@ export function commitMrpDraft(draft: MrpDraft, notes: string): Promise<CreateMr
 
 export function fetchFinishedGoodsForMrp(
   mrpRecordId: string,
-  productionTargetRecordId?: string
+  productionTargetRecordId?: string,
 ): Promise<FinishedGoodTargetRow[]> {
   const criteria = `MRP_ID == ${mrpRecordId}`;
-  return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(function (rows) {
-    if (rows && rows.length > 0) {
-      return rows.map(function (r: any) {
-        return {
-          id: r.ID,
-          productionTargetRecordId: lookupId(r.Production_Target_ID) || productionTargetRecordId || "",
-          itemId: lookupId(r.Item),
-          itemName: display(r.Item),
-          uomId: lookupId(r.UOM),
-          uomName: display(r.UOM),
-          targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
-        };
-      });
-    }
-    // Fallback: lookup by Production Target record ID if not tagged with MRP_ID yet
-    if (productionTargetRecordId) {
-      return fetchFinishedGoodsForTarget(productionTargetRecordId);
-    }
-    return [];
-  });
+  return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(
+    function (rows) {
+      if (rows && rows.length > 0) {
+        return rows.map(function (r: any) {
+          return {
+            id: r.ID,
+            productionTargetRecordId:
+              lookupId(r.Production_Target_ID) ||
+              productionTargetRecordId ||
+              "",
+            itemId: lookupId(r.Item),
+            itemName: display(r.Item),
+            uomId: lookupId(r.UOM),
+            uomName: display(r.UOM),
+            targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
+          };
+        });
+      }
+      // Fallback: lookup by Production Target record ID if not tagged with MRP_ID yet
+      if (productionTargetRecordId) {
+        return fetchFinishedGoodsForTarget(productionTargetRecordId);
+      }
+      return [];
+    },
+  );
 }
 
-export function fetchRawMaterialsForMrp(mrpRecordId: string): Promise<RawMaterialNeedRow[]> {
+export function fetchRawMaterialsForMrp(
+  mrpRecordId: string,
+): Promise<RawMaterialNeedRow[]> {
   const criteria = `MRP_ID == ${mrpRecordId}`;
-  return getRecords(CONFIG.RAW_MATERIALS_REPORT, criteria).then(function (rows) {
-    if (!rows || !rows.length) return [];
-    return rows.map(function (r: any) {
-      return {
-        productId: lookupId(r.Product_Name) || lookupId(r.Product) || display(r.Product_Name),
-        productName: display(r.Product_Name) || display(r.Product),
-        uom: display(r.UOM),
-        stockOnHand: parseFloat(display(r.Stock_On_hand || r.Stock_On_Hand)) || 0,
-        stockRequired: parseFloat(display(r.Stock_Required)) || 0,
-        allocateQuantity: parseFloat(display(r.Allocate_Quantity || r.Allocated_Qty)) || 0,
-        neededQuantity: parseFloat(display(r.Needed_Quantity || r.Needed_Qty)) || 0,
-        status: (display(r.Status) || "Stock Available") as RawMaterialNeedRow["status"],
-      };
-    });
-  });
+  return getRecords(CONFIG.RAW_MATERIALS_REPORT, criteria).then(
+    function (rows) {
+      if (!rows || !rows.length) return [];
+      return rows.map(function (r: any) {
+        return {
+          productId:
+            lookupId(r.Product_Name) ||
+            lookupId(r.Product) ||
+            display(r.Product_Name),
+          productName: display(r.Product_Name) || display(r.Product),
+          uom: display(r.UOM),
+          stockOnHand:
+            parseFloat(display(r.Stock_On_hand || r.Stock_On_Hand)) || 0,
+          stockRequired: parseFloat(display(r.Stock_Required)) || 0,
+          allocateQuantity:
+            parseFloat(display(r.Allocate_Quantity || r.Allocated_Qty)) || 0,
+          neededQuantity:
+            parseFloat(display(r.Needed_Quantity || r.Needed_Qty)) || 0,
+          status: (display(r.Status) ||
+            "Stock Available") as RawMaterialNeedRow["status"],
+        };
+      });
+    },
+  );
 }
 
 export function fetchMrpDetails(
   mrpRecord: MrpRow,
-  productionTargetRecordId: string
+  productionTargetRecordId: string,
 ): Promise<MrpDetailData> {
   return Promise.all([
     fetchFinishedGoodsForMrp(mrpRecord.id, productionTargetRecordId),
@@ -1545,7 +1788,7 @@ export function fetchMrpDetails(
       mrpRecord: mrpRecord,
       finishedGoods: [],
       rawMaterials: [],
-      hasShortfall: false,  
+      hasShortfall: false,
     };
   });
 }
@@ -1554,17 +1797,22 @@ export function fetchMrpDetails(
 
 export function fetchEmployees(): Promise<EmployeeOption[]> {
   if (!employeesPromise) {
-    employeesPromise = getRecords(CONFIG.EMPLOYEE_REPORT).then(function (rows) {
-    return rows.map(function (r: any) {
-      return {
-        id: r.ID,
-        name: formatEmployeeName(r.Employee_Name) || display(r.Employee_ID) || "Unnamed",
-      };
-    });
-    }).catch(function (error) {
-      employeesPromise = null;
-      throw error;
-    });
+    employeesPromise = getRecords(CONFIG.EMPLOYEE_REPORT)
+      .then(function (rows) {
+        return rows.map(function (r: any) {
+          return {
+            id: r.ID,
+            name:
+              formatEmployeeName(r.Employee_Name) ||
+              display(r.Employee_ID) ||
+              "Unnamed",
+          };
+        });
+      })
+      .catch(function (error) {
+        employeesPromise = null;
+        throw error;
+      });
   }
   return employeesPromise;
 }
@@ -1573,7 +1821,7 @@ export function fetchEmployees(): Promise<EmployeeOption[]> {
 // and updating its Start_Date, End_Date, and Assigned_To from the user input.
 export function startProduction(
   productionTargetRecordId: string,
-  details: StartProductionDetails
+  details: StartProductionDetails,
 ): Promise<any> {
   const payload: Record<string, any> = {
     Status: "In Progress" as ProductionTargetStatus,
@@ -1586,7 +1834,11 @@ export function startProduction(
     payload.Assigned_To = details.assignedToId;
   }
 
-  return updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, productionTargetRecordId, payload);
+  return updateRecord(
+    CONFIG.PRODUCTION_TARGET_REPORT,
+    productionTargetRecordId,
+    payload,
+  );
 }
 
 // ⚠️ Fill these in from the Custom API's Summary page in Microservices.
@@ -1601,7 +1853,9 @@ const ALLOCATE_STOCK_API = {
 // Calls the Custom API that runs the allocateStockOnProductionStart Deluge
 // function — allocates raw-material stock for this Production Target's MRP.
 // Does NOT touch Production_Target.Status; that's still startProduction()'s job.
-export function allocateStockOnProductionStart(productionTargetRecordId: string): Promise<any> {
+export function allocateStockOnProductionStart(
+  productionTargetRecordId: string,
+): Promise<any> {
   return window.ZOHO.CREATOR.DATA.invokeCustomApi({
     api_name: ALLOCATE_STOCK_API.api_name,
     workspace_name: ALLOCATE_STOCK_API.workspace_name,
@@ -1620,9 +1874,16 @@ export function allocateStockOnProductionStart(productionTargetRecordId: string)
     // successful call as a failure. Check the actual shape instead:
     // { code: 3000, result: { status: "success", message: "...", ... } }.
     const result = resp && resp.result;
-    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
+    if (
+      !resp ||
+      resp.code !== 3000 ||
+      (result && result.status && result.status !== "success")
+    ) {
       return Promise.reject(
-        new Error((result && result.message) || "Failed to allocate stock for production.")
+        new Error(
+          (result && result.message) ||
+            "Failed to allocate stock for production.",
+        ),
       );
     }
     return resp;
@@ -1655,7 +1916,9 @@ const ALLOCATE_AND_COMMIT_BATCH_API = {
 // fetchBatchAllocationsForProductionTarget below) sidesteps that entirely,
 // since Zoho's own REST API always returns record IDs as precision-safe
 // strings — and it's what makes the breakdown survive a page reload too.
-export function allocateAndCommitBatch(productionTargetRecordId: string): Promise<void> {
+export function allocateAndCommitBatch(
+  productionTargetRecordId: string,
+): Promise<void> {
   return window.ZOHO.CREATOR.DATA.invokeCustomApi({
     api_name: ALLOCATE_AND_COMMIT_BATCH_API.api_name,
     workspace_name: ALLOCATE_AND_COMMIT_BATCH_API.workspace_name,
@@ -1667,9 +1930,16 @@ export function allocateAndCommitBatch(productionTargetRecordId: string): Promis
     public_key: ALLOCATE_AND_COMMIT_BATCH_API.public_key,
   }).then(function (resp: any) {
     const result = resp && resp.result;
-    if (!resp || resp.code !== 3000 || (result && result.status && result.status !== "success")) {
+    if (
+      !resp ||
+      resp.code !== 3000 ||
+      (result && result.status && result.status !== "success")
+    ) {
       return Promise.reject(
-        new Error((result && result.message) || "Failed to allocate batches for this production run.")
+        new Error(
+          (result && result.message) ||
+            "Failed to allocate batches for this production run.",
+        ),
       );
     }
   });
@@ -1682,31 +1952,36 @@ export function allocateAndCommitBatch(productionTargetRecordId: string): Promis
 // ([Batch_Number] / [Product_Name] respectively), so display() on them
 // already returns the human-readable text, not the raw ID.
 export function fetchBatchAllocationsForProductionTarget(
-  productionTargetRecordId: string
+  productionTargetRecordId: string,
 ): Promise<BatchAllocationLine[]> {
   if (!productionTargetRecordId) return Promise.resolve([]);
   const criteria = `Production_Targets == ${productionTargetRecordId}`;
-  return getRecords(CONFIG.FEFO_BATCH_ALLOCATION_REPORT, criteria).then(function (headerRows) {
-    if (!headerRows || !headerRows.length) return [];
-    // One header per Start Production click — if it's ever clicked more
-    // than once for the same target, use the most recently created one.
-    const headerId = headerRows[headerRows.length - 1].ID;
-    return getRecords(CONFIG.BATCH_ALLOCATION_REPORT, `FEFO_Batch_ID == ${headerId}`).then(function (rows) {
-      if (!rows || !rows.length) return [];
-      return rows.map(function (r: any): BatchAllocationLine {
-        return {
-          batchId: lookupId(r.Batch_NO) || display(r.Batch_NO),
-          batchNumber: display(r.Batch_NO) || undefined,
-          productId: lookupId(r.Product) || display(r.Product),
-          productName: display(r.Product) || undefined,
-          expiryDate: display(r.Expiry_Date),
-          stockOnHand: parseFloat(display(r.Stock_On_Hand)) || 0,
-          batchQty: parseFloat(display(r.Batch_Qty)) || 0,
-          remainingQty: parseFloat(display(r.Remaining_Qty)) || 0,
-        };
+  return getRecords(CONFIG.FEFO_BATCH_ALLOCATION_REPORT, criteria).then(
+    function (headerRows) {
+      if (!headerRows || !headerRows.length) return [];
+      // One header per Start Production click — if it's ever clicked more
+      // than once for the same target, use the most recently created one.
+      const headerId = headerRows[headerRows.length - 1].ID;
+      return getRecords(
+        CONFIG.BATCH_ALLOCATION_REPORT,
+        `FEFO_Batch_ID == ${headerId}`,
+      ).then(function (rows) {
+        if (!rows || !rows.length) return [];
+        return rows.map(function (r: any): BatchAllocationLine {
+          return {
+            batchId: lookupId(r.Batch_NO) || display(r.Batch_NO),
+            batchNumber: display(r.Batch_NO) || undefined,
+            productId: lookupId(r.Product) || display(r.Product),
+            productName: display(r.Product) || undefined,
+            expiryDate: display(r.Expiry_Date),
+            stockOnHand: parseFloat(display(r.Stock_On_Hand)) || 0,
+            batchQty: parseFloat(display(r.Batch_Qty)) || 0,
+            remainingQty: parseFloat(display(r.Remaining_Qty)) || 0,
+          };
+        });
       });
-    });
-  });
+    },
+  );
 }
 
 // ───────────── Complete Production (Consumption Entry) ─────────────
@@ -1733,7 +2008,10 @@ function generateConsumptionId(sequenceRow: any): string {
   return prefix + String(currentNo).padStart(3, "0");
 }
 
-function bumpConsumptionSequence(sequenceRowId: string, currentConsumptionNo: number): Promise<any> {
+function bumpConsumptionSequence(
+  sequenceRowId: string,
+  currentConsumptionNo: number,
+): Promise<any> {
   return updateRecord(CONFIG.SEQUENCE_MASTER_REPORT, sequenceRowId, {
     Consumption_No: currentConsumptionNo + 1,
   });
@@ -1746,11 +2024,13 @@ function bumpConsumptionSequence(sequenceRowId: string, currentConsumptionNo: nu
 export function prepareConsumptionDraft(
   productionTargetRecordId: string,
   productionTargetId: string,
-  mrpRecordId: string
+  mrpRecordId: string,
 ): Promise<ConsumptionEntryDraft> {
   return Promise.all([
     fetchFinishedGoodsForTarget(productionTargetRecordId),
-    mrpRecordId ? fetchRawMaterialsForMrp(mrpRecordId) : Promise.resolve([] as RawMaterialNeedRow[]),
+    mrpRecordId
+      ? fetchRawMaterialsForMrp(mrpRecordId)
+      : Promise.resolve([] as RawMaterialNeedRow[]),
     fetchSequenceMasterRow(),
   ]).then(function (results) {
     const finishedGoods = results[0];
@@ -1759,7 +2039,9 @@ export function prepareConsumptionDraft(
 
     if (!finishedGoods.length) {
       return Promise.reject(
-        new Error("This Production Target has no finished-good lines to log production against.")
+        new Error(
+          "This Production Target has no finished-good lines to log production against.",
+        ),
       );
     }
 
@@ -1796,7 +2078,8 @@ export function prepareConsumptionDraft(
         };
       }),
       sequenceRowId: sequenceRow.ID,
-      sequenceConsumptionNo: parseInt(display(sequenceRow.Consumption_No), 10) || 0,
+      sequenceConsumptionNo:
+        parseInt(display(sequenceRow.Consumption_No), 10) || 0,
     };
   });
 }
@@ -1820,10 +2103,18 @@ export function prepareConsumptionDraft(
 const BATCH_NUMBER_PREFIX = "BFG-";
 const BATCH_NUMBER_DIGITS = 6;
 
-function findUnusedBatchNumber(candidateNo: number, attempt: number): Promise<string> {
-  const candidate = BATCH_NUMBER_PREFIX + String(candidateNo).padStart(BATCH_NUMBER_DIGITS, "0");
+function findUnusedBatchNumber(
+  candidateNo: number,
+  attempt: number,
+): Promise<string> {
+  const candidate =
+    BATCH_NUMBER_PREFIX +
+    String(candidateNo).padStart(BATCH_NUMBER_DIGITS, "0");
   if (attempt > 5) return Promise.resolve(candidate);
-  return getRecords(CONFIG.BATCH_DETAILS_REPORT, `Batch_Number == "${candidate}"`).then(function (existing) {
+  return getRecords(
+    CONFIG.BATCH_DETAILS_REPORT,
+    `Batch_Number == "${candidate}"`,
+  ).then(function (existing) {
     if (!existing.length) return candidate;
     return findUnusedBatchNumber(candidateNo + 1, attempt + 1);
   });
@@ -1837,85 +2128,133 @@ function findUnusedBatchNumber(candidateNo: number, attempt: number): Promise<st
 // someone typed "BFG-000050" manually) can never collide with it.
 export function generateNextBatchNumber(): Promise<string> {
   const criteria = `Batch_Number.startsWith("${BATCH_NUMBER_PREFIX}")`;
-  return getRecords(CONFIG.BATCH_DETAILS_REPORT, criteria, 1000).then(function (rows) {
-    let maxNo = 0;
-    rows.forEach(function (r: any) {
-      const suffix = display(r.Batch_Number).slice(BATCH_NUMBER_PREFIX.length);
-      const num = parseInt(suffix, 10);
-      if (!isNaN(num) && num > maxNo) maxNo = num;
-    });
-    return findUnusedBatchNumber(maxNo + 1, 0);
-  });
+  return getRecords(CONFIG.BATCH_DETAILS_REPORT, criteria, 1000).then(
+    function (rows) {
+      let maxNo = 0;
+      rows.forEach(function (r: any) {
+        const suffix = display(r.Batch_Number).slice(
+          BATCH_NUMBER_PREFIX.length,
+        );
+        const num = parseInt(suffix, 10);
+        if (!isNaN(num) && num > maxNo) maxNo = num;
+      });
+      return findUnusedBatchNumber(maxNo + 1, 0);
+    },
+  );
 }
 
-function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promise<void> {
-  function updateOrCreateMainWarehouseForFinishedGood(fg: (typeof draft.finishedGoods)[number]): Promise<any> {
+function updateWarehouseStockForConsumption(
+  draft: ConsumptionEntryDraft,
+): Promise<void> {
+  function updateOrCreateMainWarehouseForFinishedGood(
+    fg: (typeof draft.finishedGoods)[number],
+  ): Promise<any> {
     const criteria = `Product_Master == ${fg.itemId}`;
-    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
-      if (rows.length > 0) {
-        const row = rows[0];
-        const stockOnHand = roundQty((parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity);
-        return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, display(row.ID), {
-          Stock_On_Hand: stockOnHand,
-          Available_Stocks: stockOnHand,
+    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
+      function (rows) {
+        if (rows.length > 0) {
+          const row = rows[0];
+          const stockOnHand = roundQty(
+            (parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity,
+          );
+          return updateRecord(
+            CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
+            display(row.ID),
+            {
+              Stock_On_Hand: stockOnHand,
+              Available_Stocks: stockOnHand,
+            },
+          );
+        }
+        return fetchWarehouseByCode("WH-001").then(function (mainWh) {
+          if (!mainWh) return null;
+          return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
+            Warehouse_Code: mainWh.code,
+            Warehouse: mainWh.id,
+            Product_Master: fg.itemId,
+            Stock_On_Hand: fg.producedQuantity,
+            Available_Stocks: fg.producedQuantity,
+          });
         });
-      }
-      return fetchWarehouseByCode("WH-001").then(function (mainWh) {
-        if (!mainWh) return null;
-        return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
-          Warehouse_Code: mainWh.code,
-          Warehouse: mainWh.id,
-          Product_Master: fg.itemId,
-          Stock_On_Hand: fg.producedQuantity,
-          Available_Stocks: fg.producedQuantity,
-        });
-      });
-    });
+      },
+    );
   }
 
-  function updateOrCreateScrapWarehouse(productId: string, scrapQuantity: number): Promise<any> {
+  function updateOrCreateScrapWarehouse(
+    productId: string,
+    scrapQuantity: number,
+  ): Promise<any> {
     if (!(scrapQuantity > 0)) return Promise.resolve(null);
     const criteria = `Product_Master == ${productId}`;
-    return getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
-      if (rows.length > 0) {
+    return getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, criteria).then(
+      function (rows) {
+        if (rows.length > 0) {
+          const row = rows[0];
+          return updateRecord(
+            CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT,
+            display(row.ID),
+            {
+              Scrap_Quantity: roundQty(
+                (parseFloat(display(row.Scrap_Quantity)) || 0) + scrapQuantity,
+              ),
+            },
+          );
+        }
+        return fetchWarehouseByCode("WH-003").then(function (scrapWh) {
+          if (!scrapWh) return null;
+          return addRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_FORM, {
+            Warehouse_Code: scrapWh.code,
+            Warehouse: scrapWh.id,
+            Product_Master: productId,
+            Scrap_Quantity: scrapQuantity,
+          });
+        });
+      },
+    );
+  }
+
+  function releaseMainWarehouseForRawMaterial(
+    rm: (typeof draft.rawMaterials)[number],
+  ): Promise<any> {
+    const criteria = `Product_Master == ${rm.productId}`;
+    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
+      function (rows) {
+        if (!rows.length) return null;
         const row = rows[0];
-        return updateRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, display(row.ID), {
-          Scrap_Quantity: roundQty((parseFloat(display(row.Scrap_Quantity)) || 0) + scrapQuantity),
-        });
-      }
-      return fetchWarehouseByCode("WH-003").then(function (scrapWh) {
-        if (!scrapWh) return null;
-        return addRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_FORM, {
-          Warehouse_Code: scrapWh.code,
-          Warehouse: scrapWh.id,
-          Product_Master: productId,
-          Scrap_Quantity: scrapQuantity,
-        });
-      });
-    });
+        return updateRecord(
+          CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
+          display(row.ID),
+          {
+            Committed_Stocks: roundQty(
+              (parseFloat(display(row.Committed_Stocks)) || 0) -
+                rm.allocatedQuantity,
+            ),
+            Stock_On_Hand: roundQty(
+              (parseFloat(display(row.Stock_On_Hand)) || 0) -
+                rm.allocatedQuantity,
+            ),
+          },
+        );
+      },
+    );
   }
 
-  function releaseMainWarehouseForRawMaterial(rm: (typeof draft.rawMaterials)[number]): Promise<any> {
+  function releaseProductionWarehouseForRawMaterial(
+    rm: (typeof draft.rawMaterials)[number],
+  ): Promise<any> {
     const criteria = `Product_Master == ${rm.productId}`;
-    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(function (rows) {
-      if (!rows.length) return null;
-      const row = rows[0];
-      return updateRecord(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, display(row.ID), {
-        Committed_Stocks: roundQty((parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity),
-        Stock_On_Hand: roundQty((parseFloat(display(row.Stock_On_Hand)) || 0) - rm.allocatedQuantity),
-      });
-    });
-  }
-
-  function releaseProductionWarehouseForRawMaterial(rm: (typeof draft.rawMaterials)[number]): Promise<any> {
-    const criteria = `Product_Master == ${rm.productId}`;
-    return getRecords(CONFIG.PRODUCTION_STOCK_REPORT, criteria).then(function (rows) {
-      if (!rows.length) return null;
-      const row = rows[0];
-      return updateRecord(CONFIG.PRODUCTION_STOCK_REPORT, display(row.ID), {
-        Committed_Stocks: roundQty((parseFloat(display(row.Committed_Stocks)) || 0) - rm.allocatedQuantity),
-      });
-    });
+    return getRecords(CONFIG.PRODUCTION_STOCK_REPORT, criteria).then(
+      function (rows) {
+        if (!rows.length) return null;
+        const row = rows[0];
+        return updateRecord(CONFIG.PRODUCTION_STOCK_REPORT, display(row.ID), {
+          Committed_Stocks: roundQty(
+            (parseFloat(display(row.Committed_Stocks)) || 0) -
+              rm.allocatedQuantity,
+          ),
+        });
+      },
+    );
   }
 
   // Per-batch tracking, per the native workflow: a finished good's own
@@ -1923,25 +2262,32 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
   // product — batch numbers are treated as unique on their own), updated if
   // found, or created fresh if this is the first time that batch number has
   // ever been logged.
-  function updateOrCreateBatchDetailsForFinishedGood(fg: (typeof draft.finishedGoods)[number]): Promise<any> {
+  function updateOrCreateBatchDetailsForFinishedGood(
+    fg: (typeof draft.finishedGoods)[number],
+  ): Promise<any> {
     if (!fg.batchNo) return Promise.resolve(null);
     const criteria = `Batch_Number == "${fg.batchNo}"`;
-    return getRecords(CONFIG.BATCH_DETAILS_REPORT, criteria).then(function (rows) {
-      if (rows.length > 0) {
-        const row = rows[0];
-        return updateRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID), {
-          Stock_On_Hand: roundQty((parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity),
+    return getRecords(CONFIG.BATCH_DETAILS_REPORT, criteria).then(
+      function (rows) {
+        if (rows.length > 0) {
+          const row = rows[0];
+          return updateRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID), {
+            Stock_On_Hand: roundQty(
+              (parseFloat(display(row.Stock_On_Hand)) || 0) +
+                fg.producedQuantity,
+            ),
+          });
+        }
+        return addRecord(CONFIG.BATCH_DETAILS_FORM, {
+          Product_Master: fg.itemId,
+          Batch_Number: fg.batchNo,
+          Manufacturing_Date: formatDateStringForZoho(fg.manufacturingDate),
+          Expiry_Date: formatDateStringForZoho(fg.expiryDate),
+          Stock_On_Hand: fg.producedQuantity,
+          Available_Stocks: fg.producedQuantity,
         });
-      }
-      return addRecord(CONFIG.BATCH_DETAILS_FORM, {
-        Product_Master: fg.itemId,
-        Batch_Number: fg.batchNo,
-        Manufacturing_Date: formatDateStringForZoho(fg.manufacturingDate),
-        Expiry_Date: formatDateStringForZoho(fg.expiryDate),
-        Stock_On_Hand: fg.producedQuantity,
-        Available_Stocks: fg.producedQuantity,
-      });
-    });
+      },
+    );
   }
 
   // Per-batch release for raw materials, per the native workflow: finds
@@ -1956,17 +2302,24 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
   // an explicit choice to keep both in sync rather than only one of them.
   function releaseBatchDetailsForRawMaterial(
     batchAllocationLines: BatchAllocationLine[],
-    rm: (typeof draft.rawMaterials)[number]
+    rm: (typeof draft.rawMaterials)[number],
   ): Promise<any> {
     const matchingLines = batchAllocationLines.filter(function (line) {
       return line.productId === rm.productId && !!line.batchId;
     });
     return runSequentially(matchingLines, function (line) {
-      return getRecords(CONFIG.BATCH_DETAILS_REPORT, `ID == ${line.batchId}`).then(function (rows) {
+      return getRecords(
+        CONFIG.BATCH_DETAILS_REPORT,
+        `ID == ${line.batchId}`,
+      ).then(function (rows) {
         if (!rows.length) return null;
         const row = rows[0];
-        const committedStocks = roundQty((parseFloat(display(row.Committed_Stocks)) || 0) - line.batchQty);
-        const stockOnHand = roundQty((parseFloat(display(row.Stock_On_Hand)) || 0) - line.batchQty);
+        const committedStocks = roundQty(
+          (parseFloat(display(row.Committed_Stocks)) || 0) - line.batchQty,
+        );
+        const stockOnHand = roundQty(
+          (parseFloat(display(row.Stock_On_Hand)) || 0) - line.batchQty,
+        );
         const availableStocks = roundQty(stockOnHand - committedStocks);
         if (availableStocks <= 0) {
           return deleteRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID));
@@ -1991,13 +2344,15 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
         .then(function () {
           return updateOrCreateScrapWarehouse(fg.itemId, fg.scrapQuantity);
         });
-    }
+    },
   )
     .then(function () {
       // Fetched once up front (not per raw material) — the same FEFO pick
       // covers every raw material on this production target, so this is a
       // single read reused across the whole loop below.
-      return fetchBatchAllocationsForProductionTarget(draft.productionTargetRecordId);
+      return fetchBatchAllocationsForProductionTarget(
+        draft.productionTargetRecordId,
+      );
     })
     .then(function (batchAllocationLines) {
       return runSequentially(
@@ -2010,12 +2365,18 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
               return releaseProductionWarehouseForRawMaterial(rm);
             })
             .then(function () {
-              return releaseBatchDetailsForRawMaterial(batchAllocationLines, rm);
+              return releaseBatchDetailsForRawMaterial(
+                batchAllocationLines,
+                rm,
+              );
             })
             .then(function () {
-              return updateOrCreateScrapWarehouse(rm.productId, rm.scrapQuantity);
+              return updateOrCreateScrapWarehouse(
+                rm.productId,
+                rm.scrapQuantity,
+              );
             });
-        }
+        },
       );
     })
     .then(function () {
@@ -2029,7 +2390,9 @@ function updateWarehouseStockForConsumption(draft: ConsumptionEntryDraft): Promi
 // workflow), bumps the Sequence_Master counter, and updates warehouse stock
 // (see updateWarehouseStockForConsumption) — only after everything else has
 // succeeded, so a failed/partial commit doesn't burn a sequence number.
-export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<ConsumptionEntryRow> {
+export function commitConsumptionEntry(
+  draft: ConsumptionEntryDraft,
+): Promise<ConsumptionEntryRow> {
   return addRecord(CONFIG.CONSUMPTION_ENTRY_FORM, {
     Consumption_ID: draft.consumptionId,
     Production_Target: draft.productionTargetRecordId,
@@ -2073,15 +2436,22 @@ export function commitConsumptionEntry(draft: ConsumptionEntryDraft): Promise<Co
         });
       })
       .then(function () {
-        return updateRecord(CONFIG.PRODUCTION_TARGET_REPORT, draft.productionTargetRecordId, {
-          Status: "Completed" as ProductionTargetStatus,
-        });
+        return updateRecord(
+          CONFIG.PRODUCTION_TARGET_REPORT,
+          draft.productionTargetRecordId,
+          {
+            Status: "Completed" as ProductionTargetStatus,
+          },
+        );
       })
       .then(function () {
         return updateWarehouseStockForConsumption(draft);
       })
       .then(function () {
-        return bumpConsumptionSequence(draft.sequenceRowId, draft.sequenceConsumptionNo);
+        return bumpConsumptionSequence(
+          draft.sequenceRowId,
+          draft.sequenceConsumptionNo,
+        );
       })
       .then(function () {
         return {
@@ -2134,13 +2504,17 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
     // Production Target itself is created (see fetchFinishedGoodsForTarget's
     // own comment on the two-Finished_Goods-rows-per-run architecture), so
     // the Overview tab can show them before an MRP even exists.
-    const productionInProgressPromise = fetchProductionInProgress(productionTargetId);
+    const productionInProgressPromise =
+      fetchProductionInProgress(productionTargetId);
     const consumptionEntriesPromise = fetchConsumptionEntries(record.id);
-    const finishedGoodsForTargetPromise = fetchFinishedGoodsForTarget(record.id);
+    const finishedGoodsForTargetPromise = fetchFinishedGoodsForTarget(
+      record.id,
+    );
 
     return fetchMrpRecord(record.id).then(function (mrpRecord) {
-      const mrpDetailsPromise =
-        mrpRecord ? fetchMrpDetails(mrpRecord, record.id) : Promise.resolve(null as MrpDetailData | null);
+      const mrpDetailsPromise = mrpRecord
+        ? fetchMrpDetails(mrpRecord, record.id)
+        : Promise.resolve(null as MrpDetailData | null);
       const nonStockItemsPromise = mrpRecord
         ? fetchNonStockItemsForMrp(mrpRecord.id)
         : Promise.resolve([] as NonStockItemRow[]);
@@ -2170,4 +2544,3 @@ export function fetchProductionOverview(productionTargetId: string): Promise<{
     });
   });
 }
-
