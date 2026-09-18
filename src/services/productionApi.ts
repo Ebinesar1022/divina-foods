@@ -581,7 +581,14 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
         return bumpPoSequence(draft.sequenceRowId, draft.sequencePurchaseNo);
       })
       .then(function () {
-        return { poRecordId: poRecordId, poNumber: draft.poNumber };
+        const result = { poRecordId: poRecordId, poNumber: draft.poNumber };
+        return syncPurchaseOrderToBooks(poRecordId, draft.supplierId)
+          .catch(function (err: any) {
+            console.warn("Books PO sync failed (Purchase Order still created in Creator):", err);
+          })
+          .then(function () {
+            return result;
+          });
       });
   });
 }
@@ -757,6 +764,15 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
         })
         .then(function () {
           return processPurchaseReceive(receiveRecordId);
+        })
+        .then(function (result) {
+          return syncPurchaseReceiveToBooks(receiveRecordId, draft.supplierId)
+            .catch(function (err: any) {
+              console.warn("Books PR sync failed (Purchase Receive still recorded in Creator):", err);
+            })
+            .then(function () {
+              return result;
+            });
         });
     });
   });
@@ -792,6 +808,70 @@ function processPurchaseReceive(receiveRecordId: string): Promise<any> {
       return Promise.reject(new Error((result && result.message) || "Failed to process the purchase receive."));
     }
     return resp;
+  });
+}
+
+// ───────────── Books sync (Purchase Order / Purchase Receive) ─────────────
+// Best-effort: Creator is the source of truth for the PO/PR workflow itself,
+// so a Books sync failure never rejects commitCreatePo/commitReceivePo —
+// callers just get the record they asked for either way. Errors are logged
+// so they're visible without blocking the user on an integration that's
+// still being hardened (tax fields, purchasereceives payload format, etc.).
+
+// Published as "syncPO" in Microservices (function: PO.SyncCreatorToBooks).
+const SYNC_PO_TO_BOOKS_API = {
+  api_name: "syncPO",
+  workspace_name: "info_divinafoodco",
+  public_key: "rWapybq1J9GCpXkDeXHQ8NBwz",
+};
+
+export function syncPurchaseOrderToBooks(purchaseOrderRecordId: string, supplierRecordId: string): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: SYNC_PO_TO_BOOKS_API.api_name,
+    workspace_name: SYNC_PO_TO_BOOKS_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      purchase_id: purchaseOrderRecordId,
+      supplier_id: supplierRecordId,
+    },
+    public_key: SYNC_PO_TO_BOOKS_API.public_key,
+  }).then(function (resp: any) {
+    const result = resp && resp.result;
+    // Checked against result.code (set on every branch of PO.SyncCreatorToBooks,
+    // success or failure) rather than result.status, which is only ever set
+    // on the success branch and would silently miss every error response.
+    if (!resp || resp.code !== 3000 || !result || result.code !== 3000) {
+      return Promise.reject(new Error((result && result.message) || "Failed to sync Purchase Order to Books."));
+    }
+    return result;
+  });
+}
+
+// Published as "syncPR" in Microservices (function: PR.SyncCreatorToBooks).
+const SYNC_PR_TO_BOOKS_API = {
+  api_name: "syncPR",
+  workspace_name: "info_divinafoodco",
+  public_key: "U7eygp4uRCBx6jWMB0Aa2KN9C",
+};
+
+export function syncPurchaseReceiveToBooks(receiveRecordId: string, supplierRecordId: string): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: SYNC_PR_TO_BOOKS_API.api_name,
+    workspace_name: SYNC_PR_TO_BOOKS_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      receive_id: receiveRecordId,
+      supplier_id: supplierRecordId,
+    },
+    public_key: SYNC_PR_TO_BOOKS_API.public_key,
+  }).then(function (resp: any) {
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || !result || result.code !== 3000) {
+      return Promise.reject(new Error((result && result.message) || "Failed to sync Purchase Receive to Books."));
+    }
+    return result;
   });
 }
 
