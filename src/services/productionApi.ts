@@ -546,6 +546,14 @@ export function commitCreatePo(draft: CreatePoDraft): Promise<{ poRecordId: stri
     Status: "Not Received",
   }).then(function (poRecord) {
     const poRecordId: string = display(poRecord.ID);
+    if (!poRecordId) {
+      // Guards against ever silently writing PO_Line_Items rows with a
+      // blank PO_Number lookup — better to fail the whole commit loudly
+      // here than leave orphaned lines nothing in the UI can find later.
+      return Promise.reject(
+        new Error("Purchase Order was created but its record ID couldn't be resolved — no line items were written.")
+      );
+    }
 
     return runSequentially(computedLines, function (entry) {
       const line = entry.line;
