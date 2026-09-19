@@ -70,6 +70,10 @@ function subtextFor(
   procurementRecords: PurchaseOrderDetail[],
   consumptionEntries: ConsumptionEntryRow[]
 ): string {
+  // "skipped" here now only occurs when procurementRecords.length === 0
+  // (all stock was on hand, no POs needed). The old check just tested status,
+  // so it could show "Skipped" even when POs had been raised — fixed by the
+  // procurementSkipped recalculation in ProductionOverview.tsx.
   if (state === "skipped") return "Skipped — Stock Available";
   if (state === "pending") return "Upcoming";
 

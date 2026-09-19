@@ -812,7 +812,13 @@ export default function ProductionOverview({
   }
 
   const { record, mrpRecord, procurementRecords, consumptionEntries, finishedGoodsForTarget } = data;
-  const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status);
+  // Procurement is only truly "skipped" (i.e. all materials were in stock and
+  // no POs needed) when the MRP exists, the target is past the procurement
+  // stage, AND no Purchase Orders were ever raised for this run. If POs exist,
+  // the team went through procurement even if the status has since moved on —
+  // show those POs in the Procurement tab and count the stage as done, not
+  // skipped, so the pipeline stepper and activity timeline reflect reality.
+  const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status) && procurementRecords.length === 0;
   // Non_Stock_Items is the source of truth here (not Raw_Materials) — once a
   // PO is raised for an item its Status flips to "PO Created" and it drops
   // out of this list, matching the native Non_Stock_Items_Report filter.
@@ -1239,13 +1245,131 @@ export default function ProductionOverview({
                       description="This target went all the way from MRP through procurement to a finished run. Nice work."
                     />
                   ) : (
-                    <CenteredStateCard
-                      icon={<CheckCircleOutlineIcon sx={{ fontSize: 28 }} />}
-                      iconBg="#ECFDF5"
-                      iconColor="#059669"
-                      title="Procurement Complete"
-                      description="All raw materials are available. Head to the Initiate Production tab to start the run."
-                    />
+                    // Status is neither "Waiting for Stock" nor "Completed" —
+                    // materials cleared procurement. Show a completion banner
+                    // and, if POs were raised as part of fulfilling the shortfall,
+                    // render them beneath so users can review what was ordered.
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      <CenteredStateCard
+                        icon={<CheckCircleOutlineIcon sx={{ fontSize: 28 }} />}
+                        iconBg="#ECFDF5"
+                        iconColor="#059669"
+                        title="Procurement Complete"
+                        description={
+                          procurementRecords.length > 0
+                            ? "All Purchase Orders have been received. Head to Initiate Production to start the run."
+                            : "All raw materials are available. Head to the Initiate Production tab to start the run."
+                        }
+                      />
+
+                      {procurementRecords.length > 0 && (
+                        <Box>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
+                            <LocalShippingIcon sx={{ color: "#2563eb", fontSize: 19 }} />
+                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Purchase Orders</Typography>
+                          </Box>
+                          {procurementRecords.map((po) => {
+                            const pending = po.lines.reduce(
+                              (sum, l) => sum + Math.max(0, l.orderQuantity - l.receivedQuantity),
+                              0,
+                            );
+                            return (
+                              <Paper
+                                key={po.id}
+                                variant="outlined"
+                                sx={{
+                                  p: 1.75,
+                                  mb: 1.5,
+                                  borderRadius: "14px",
+                                  borderColor: "rgba(148,163,184,0.25)",
+                                  boxShadow: "0 4px 16px rgba(15, 23, 42, 0.04)",
+                                }}
+                              >
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 1.5,
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    mb: 1,
+                                  }}
+                                >
+                                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                                    <Typography sx={{ fontWeight: 700 }}>{po.poNumber}</Typography>
+                                    <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                                      {po.poDate}
+                                    </Typography>
+                                    {po.supplierName && (
+                                      <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                                        · {po.supplierName}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                    <StatusChip value={po.status} />
+                                    {pending > 0 && (
+                                      <Button
+                                        variant="contained"
+                                        size="small"
+                                        startIcon={<LocalShippingIcon />}
+                                        onClick={() => handleOpenReceivePo(po)}
+                                        sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                                      >
+                                        Receive
+                                      </Button>
+                                    )}
+                                  </Box>
+                                </Box>
+                                <TableContainer sx={{ borderRadius: "10px", overflow: "hidden" }}>
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow sx={TABLE_HEAD_ROW_SX}>
+                                        <TableCell>Product</TableCell>
+                                        <TableCell align="right">Ordered</TableCell>
+                                        <TableCell align="right">Received</TableCell>
+                                        <TableCell align="right">Unit Price</TableCell>
+                                        <TableCell align="right">Line Total</TableCell>
+                                        <TableCell align="right">Tax</TableCell>
+                                        <TableCell align="right">Total</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {po.lines.map((line) => (
+                                        <TableRow key={line.id} sx={tableRowSx()}>
+                                          <TableCell>{line.productName}</TableCell>
+                                          <TableCell align="right">{line.orderQuantity}</TableCell>
+                                          <TableCell align="right">{line.receivedQuantity}</TableCell>
+                                          <TableCell align="right">{line.unitPrice.toFixed(2)}</TableCell>
+                                          <TableCell align="right">{line.lineTotal.toFixed(2)}</TableCell>
+                                          <TableCell align="right">
+                                            {line.taxAmount > 0
+                                              ? `${line.taxAmount.toFixed(2)} (${line.taxPercentage}%)`
+                                              : "—"}
+                                          </TableCell>
+                                          <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                            {(line.lineTotal + line.taxAmount).toFixed(2)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
+                                <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
+                                  <Typography sx={{ fontSize: 13, color: "#64748B" }}>
+                                    Sub Total {po.subTotal.toFixed(2)} &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
+                                    &nbsp;·&nbsp;{" "}
+                                  </Typography>
+                                  <Typography sx={{ fontSize: 13, fontWeight: 700, ml: 0.5 }}>
+                                    Grand Total {po.grandTotal.toFixed(2)}
+                                  </Typography>
+                                </Box>
+                              </Paper>
+                            );
+                          })}
+                        </Box>
+                      )}
+                    </Box>
                   )}
                 </Box>
               )}
