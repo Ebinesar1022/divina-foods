@@ -16,8 +16,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  Snackbar,
-  Alert,
   IconButton,
   Tooltip,
   Chip,
@@ -41,6 +39,7 @@ import PipelineStepper from "./PipelineStepper";
 import ActivityTimeline from "./ActivityTimeline";
 import StatusChip from "./StatusChip";
 import FoodProductionLoader from "./FoodProductionLoader";
+import ModernSnackbar from "./common/ModernSnackbar";
 import {
   checkStockForMrp,
   commitMrpDraft,
@@ -1984,53 +1983,26 @@ export default function ProductionOverview({
         </DialogActions>
       </Dialog>
 
-      <Snackbar
+      <ModernSnackbar
         open={checkStockSuccessOpen}
-        autoHideDuration={4000}
         onClose={() => setCheckStockSuccessOpen(false)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={() => setCheckStockSuccessOpen(false)}
-          severity="success"
-          variant="filled"
-          sx={{ borderRadius: "10px", fontWeight: 600 }}
-        >
-          Stock check complete — all raw materials are now available.
-        </Alert>
-      </Snackbar>
+        severity="success"
+        message="Stock check complete — all raw materials are now available."
+      />
 
-      <Snackbar
+      <ModernSnackbar
         open={checkStockWarningOpen}
-        autoHideDuration={4000}
         onClose={() => setCheckStockWarningOpen(false)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={() => setCheckStockWarningOpen(false)}
-          severity="warning"
-          variant="filled"
-          sx={{ borderRadius: "10px", fontWeight: 600 }}
-        >
-          Need to Receive Raw Materials
-        </Alert>
-      </Snackbar>
+        severity="warning"
+        message="Need to Receive Raw Materials"
+      />
 
-      <Snackbar
+      <ModernSnackbar
         open={!!successMessage}
-        autoHideDuration={4000}
         onClose={() => setSuccessMessage("")}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={() => setSuccessMessage("")}
-          severity="success"
-          variant="filled"
-          sx={{ borderRadius: "10px", fontWeight: 600 }}
-        >
-          {successMessage}
-        </Alert>
-      </Snackbar>
+        severity="success"
+        message={successMessage}
+      />
     </Box>
   );
 }

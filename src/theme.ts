@@ -219,6 +219,55 @@ const theme = createTheme({
         },
       },
     },
+    MuiSnackbar: {
+      styleOverrides: {
+        root: {
+          zIndex: 9999,
+        },
+      },
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: {
+          borderRadius: 14,
+          fontSize: "0.875rem",
+          fontWeight: 500,
+          boxShadow: "0 10px 30px -4px rgba(15, 23, 42, 0.08)",
+        },
+        filledSuccess: {
+          backgroundColor: "#059669",
+        },
+        filledWarning: {
+          backgroundColor: "#D97706",
+        },
+        filledError: {
+          backgroundColor: "#DC2626",
+        },
+        filledInfo: {
+          backgroundColor: "#2563EB",
+        },
+        standardSuccess: {
+          backgroundColor: "rgba(16, 185, 129, 0.10)",
+          color: "#065f46",
+          border: "1px solid rgba(16, 185, 129, 0.25)",
+        },
+        standardWarning: {
+          backgroundColor: "rgba(245, 158, 11, 0.10)",
+          color: "#92400e",
+          border: "1px solid rgba(245, 158, 11, 0.25)",
+        },
+        standardError: {
+          backgroundColor: "rgba(239, 68, 68, 0.10)",
+          color: "#991b1b",
+          border: "1px solid rgba(239, 68, 68, 0.25)",
+        },
+        standardInfo: {
+          backgroundColor: "rgba(37, 99, 235, 0.10)",
+          color: "#1e40af",
+          border: "1px solid rgba(37, 99, 235, 0.25)",
+        },
+      },
+    },
   },
 });
 
