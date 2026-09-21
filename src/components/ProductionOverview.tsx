@@ -68,6 +68,9 @@ import {
   startProduction,
   allocateAndCommitBatch,
   fetchBatchAllocationsForProductionTarget,
+  describeError,
+  openInParentWindow,
+  uploadBatchAllocationPdf,
 } from "../services/productionApi";
 import {
   computeProgress,
@@ -3071,37 +3074,79 @@ function BatchAllocationSummary({
     // else's initial bundle (same reasoning as the lazy dialogs above).
     import("../utils/batchAllocationPdf")
       .then(function (mod) {
-        return mod.downloadBatchAllocationPdf({
+        const pdf = mod.createBatchAllocationPdf({
           productionTarget,
           mrpRecord,
           groups,
           finishedGoods,
         });
-      })
-      .then(function (delivery) {
-        if (delivery === "cancelled") return;
-        if (delivery === "shared") {
-          setPdfSnackbar({
-            message: "Batch allocation PDF is ready.",
-            severity: "success",
-          });
-          return;
+
+        const uploaded = uploadBatchAllocationPdf(
+          productionTarget.id,
+          pdf.blob,
+          pdf.filename,
+        );
+
+        if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          // A browser can save the Blob itself, so the download happens
+          // right away; the upload only keeps a copy on the record, and a
+          // failure there just downgrades the message.
+          mod.saveBatchAllocationPdf(pdf.blob, pdf.filename);
+          return uploaded.then(
+            function () {
+              setPdfSnackbar({
+                message:
+                  "Batch allocation PDF is Downloading and saved to this Production Target.",
+                severity: "success",
+              });
+            },
+            function (err) {
+              console.error("Batch allocation PDF upload failed", err);
+              setPdfSnackbar({
+                message:
+                  "Batch allocation PDF is Downloading, but a copy couldn't be saved to the Production Target: " +
+                  describeError(err),
+                severity: "info",
+                autoHideMs: 12000,
+              });
+            },
+          );
         }
-        // A plain download can't be confirmed from inside a mobile webview
-        // (the host app may ignore it), so don't claim success there.
-        if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-          setPdfSnackbar({
-            message:
-              "PDF requested. If nothing was saved, open this page in your phone's browser (e.g. Chrome) and download it from there.",
-            severity: "info",
-            autoHideMs: 9000,
-          });
-          return;
-        }
-        setPdfSnackbar({
-          message: "Batch allocation PDF is Downloading.",
-          severity: "success",
-        });
+
+        // The Creator mobile app's webview drops a Blob download, so on
+        // phones the PDF is stored on the Production Target and opened
+        // from its Creator file URL instead.
+        return uploaded.then(
+          function (url) {
+            // No URL means the file is saved on the record but its stored
+            // path couldn't be determined, so there's nothing to open.
+            let opened = !!url;
+            if (url) {
+              try {
+                openInParentWindow(url);
+              } catch (err) {
+                opened = false;
+              }
+            }
+            setPdfSnackbar({
+              message: opened
+                ? "PDF saved to this Production Target (Batch Allocation PDF). Opening it now."
+                : "PDF saved to this Production Target — open its Batch Allocation PDF field to download it.",
+              severity: "success",
+              autoHideMs: 8000,
+            });
+          },
+          function (err) {
+            console.error("Batch allocation PDF upload failed", err);
+            setPdfSnackbar({
+              message:
+                "Couldn't save the PDF to the Production Target: " +
+                describeError(err),
+              severity: "error",
+              autoHideMs: 12000,
+            });
+          },
+        );
       })
       .catch(function () {
         setPdfSnackbar({

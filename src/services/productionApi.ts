@@ -127,6 +127,16 @@ export const CONFIG = {
   // React state.
   FEFO_BATCH_ALLOCATION_REPORT: "FEFO_Batch_Allocation_Report",
   BATCH_ALLOCATION_REPORT: "All_Batch_Allocations",
+
+  // File Upload field on Production_Targets that receives the generated
+  // Batch Allocation PDF on phones (the Creator mobile app's webview can't
+  // save a Blob download, so the PDF is opened from a real Creator URL).
+  BATCH_ALLOCATION_PDF_FIELD: "Batch_Allocation_PDF",
+  // Fallbacks for the file URL — the origin normally comes from the widget's
+  // own ?serviceOrigin=… (see creatorServiceOrigin). Owner/app read from the
+  // live app URL: https://creatorapp.zoho.com.au/<ACCOUNT_OWNER>/<APP_NAME>/
+  CREATOR_ORIGIN: "https://creatorapp.zoho.com.au",
+  ACCOUNT_OWNER: "info_divinafoodco",
 };
 
 function display(value: any): string {
@@ -317,6 +327,176 @@ function deleteRecord(reportName: string, recordId: string): Promise<any> {
     }
     return resp;
   });
+}
+
+// ───────────── Batch allocation PDF (Creator mobile app) ─────────────
+// Creator SDK rejections arrive in several shapes — a bare string, an Error,
+// or the API's own { code, description | message } body — so flatten
+// whichever one shows up into a single readable line for the UI.
+export function describeError(err: any): string {
+  if (err == null) return "";
+  if (typeof err === "string") return err;
+  const text = err.description || err.message || err.error_message || "";
+  const code = err.code != null ? String(err.code) : "";
+  if (text || code) return (code ? code + " – " : "") + text;
+  try {
+    return JSON.stringify(err).slice(0, 160);
+  } catch {
+    return String(err);
+  }
+}
+
+// A file field's value comes back as a download path whose `filepath` query
+// param is the stored file's internal name — same thing uploadFile returns.
+function filePathFromFieldValue(value: any): string {
+  const match =
+    typeof value === "string" ? value.match(/[?&]filepath=([^&]+)/) : null;
+  return match ? decodeURIComponent(match[1]).replace(/^\//, "") : "";
+}
+
+function parseMaybeJson(value: any): any {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+// The upload response's exact shape isn't guaranteed by the SDK — the docs
+// show { code, data: { filepath } }, but it can also be flat, a JSON string,
+// or spell the key filePath/file_path — so search the whole thing for it.
+function findFilePath(value: any, depth: number): string {
+  if (value == null || depth > 4) return "";
+  if (typeof value === "string") return filePathFromFieldValue(value);
+  if (typeof value !== "object") return "";
+  const keys = Object.keys(value);
+  for (let i = 0; i < keys.length; i++) {
+    const item = value[keys[i]];
+    if (/^file_?path$/i.test(keys[i]) && typeof item === "string" && item) {
+      return item.replace(/^\//, "");
+    }
+  }
+  for (let i = 0; i < keys.length; i++) {
+    const found = findFilePath(value[keys[i]], depth + 1);
+    if (found) return found;
+  }
+  return "";
+}
+
+// The origin Creator serves this widget (and its files) from. The widget's
+// own URL carries it as ?serviceOrigin=… — the app builder's
+// creator.zoho.com.au is a different host, so the config value is only a
+// fallback.
+function creatorServiceOrigin(): string {
+  const match = window.location.search.match(/[?&]serviceOrigin=([^&]+)/);
+  if (match) {
+    const origin = decodeURIComponent(match[1]).replace(/\/+$/, "");
+    if (/^https:\/\/[\w-]+(\.[\w-]+)*\.zoho\.[a-z]+(\.[a-z]+)?$/i.test(origin)) {
+      return origin;
+    }
+  }
+  return CONFIG.CREATOR_ORIGIN;
+}
+
+// The SDK's uploadFile only reads `.name` off the file and hands it to
+// FileReader, so a named Blob is enough where `new File()` isn't available.
+function toUploadFile(blob: Blob, filename: string): File {
+  try {
+    return new File([blob], filename, { type: "application/pdf" });
+  } catch {
+    const named: any = blob;
+    named.name = filename;
+    return named as File;
+  }
+}
+
+// Uploads the PDF into Production_Targets.Batch_Allocation_PDF. Resolves
+// with the Creator URL that opens it in the signed-in session, or null when
+// the file was saved but its stored path couldn't be worked out (so there's
+// no URL to build). Rejects only if the upload itself failed.
+//
+// NOTE: the upload is an edit of the Production_Targets record, so its
+// on-edit workflows run — the SDK's uploadFile has no way to skip them.
+export function uploadBatchAllocationPdf(
+  productionTargetRecordId: string,
+  blob: Blob,
+  filename: string,
+): Promise<string | null> {
+  // Starting from a resolved promise turns a synchronous throw (SDK missing
+  // `FILE`, bad argument) into a rejection callers can handle like any other.
+  return Promise.resolve()
+    .then(function () {
+      return window.ZOHO.CREATOR.FILE.uploadFile({
+        app_name: CONFIG.APP_NAME,
+        report_name: CONFIG.PRODUCTION_TARGET_REPORT,
+        id: productionTargetRecordId,
+        field_name: CONFIG.BATCH_ALLOCATION_PDF_FIELD,
+        file: toUploadFile(blob, filename),
+      });
+    })
+    .then(function (rawResp: any) {
+      const resp = parseMaybeJson(rawResp);
+      if (!resp || (resp.code != null && resp.code !== 3000)) {
+        return Promise.reject(
+          new Error(
+            "Upload rejected" +
+              (resp ? " (" + describeError(resp) + ")" : "") +
+              ".",
+          ),
+        );
+      }
+      const fromResponse = findFilePath(resp, 0);
+      if (fromResponse) return fromResponse;
+      // Response carried no path — read it back off the record instead
+      // (only works if the field is a column of the report).
+      return getRecords(
+        CONFIG.PRODUCTION_TARGET_REPORT,
+        "ID == " + productionTargetRecordId,
+        200,
+      ).then(function (rows) {
+        const fromRecord = rows.length
+          ? filePathFromFieldValue(rows[0][CONFIG.BATCH_ALLOCATION_PDF_FIELD])
+          : "";
+        if (!fromRecord) {
+          console.warn(
+            "Batch allocation PDF was saved, but its file path wasn't found in the upload response:",
+            rawResp,
+          );
+        }
+        return fromRecord;
+      });
+    })
+    .then(function (filePath: string) {
+      if (!filePath) return null;
+      return (
+        creatorServiceOrigin() +
+        "/file/" +
+        CONFIG.ACCOUNT_OWNER +
+        "/" +
+        CONFIG.APP_NAME +
+        "/" +
+        CONFIG.PRODUCTION_TARGET_REPORT +
+        "/" +
+        productionTargetRecordId +
+        "/" +
+        CONFIG.BATCH_ALLOCATION_PDF_FIELD +
+        "/download?filepath=/" +
+        encodeURIComponent(filePath)
+      );
+    });
+}
+
+// Opens a URL through the Creator shell (the widget itself is a sandboxed
+// iframe and can't open windows or leave the page). Fire-and-forget: the
+// SDK's promise may never settle once the shell takes over navigation.
+export function openInParentWindow(url: string): void {
+  const nav = window.ZOHO.CREATOR.UTIL.navigateParentURL({
+    action: "open",
+    url: url,
+    window: "new",
+  });
+  if (nav && typeof nav.catch === "function") nav.catch(function () {});
 }
 
 // ───────────── Production Target ─────────────
@@ -618,7 +798,9 @@ export function commitCreatePo(
       // blank PO_Number lookup — better to fail the whole commit loudly
       // here than leave orphaned lines nothing in the UI can find later.
       return Promise.reject(
-        new Error("Purchase Order was created but its record ID couldn't be resolved — no line items were written.")
+        new Error(
+          "Purchase Order was created but its record ID couldn't be resolved — no line items were written.",
+        ),
       );
     }
 
