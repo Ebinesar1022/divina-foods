@@ -69,6 +69,7 @@ import {
   allocateAndCommitBatch,
   fetchBatchAllocationsForProductionTarget,
   describeError,
+  goBackToProductionTargets,
   openInParentWindow,
   uploadBatchAllocationPdf,
 } from "../services/productionApi";
@@ -351,7 +352,7 @@ export default function ProductionOverview({
   // ProjectHeader's React.memo actually skips re-rendering it when nothing
   // it cares about has changed.
   const handleBack = useCallback(() => {
-    window.history.back();
+    goBackToProductionTargets();
   }, []);
 
   function handleOpenCreateMrp() {

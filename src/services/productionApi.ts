@@ -487,9 +487,10 @@ export function uploadBatchAllocationPdf(
     });
 }
 
-// Opens a URL through the Creator shell (the widget itself is a sandboxed
-// iframe and can't open windows or leave the page). Fire-and-forget: the
-// SDK's promise may never settle once the shell takes over navigation.
+// The widget is a sandboxed iframe inside a Creator page, so it can't open
+// windows or navigate the page itself — the Creator shell does it through
+// navigateParentURL. Fire-and-forget: the SDK's promise may never settle
+// once the shell takes over navigation.
 export function openInParentWindow(url: string): void {
   const nav = window.ZOHO.CREATOR.UTIL.navigateParentURL({
     action: "open",
@@ -497,6 +498,62 @@ export function openInParentWindow(url: string): void {
     window: "new",
   });
   if (nav && typeof nav.catch === "function") nav.catch(function () {});
+}
+
+function navigateTopOrSelf(url: string): void {
+  try {
+    if (window.top) {
+      window.top.location.href = url;
+      return;
+    }
+  } catch (err) {
+    console.warn("window.top navigation failed, falling back:", err);
+  }
+  window.location.href = url;
+}
+
+// Navigates the Creator page hosting this widget to `url` (same window).
+// Goes through the SDK first; if that isn't available, throws, or rejects,
+// falls back to window.top and finally to the widget's own window.
+//
+// NOTE: navigateParentURL takes a config object, not a URL string — passed
+// a string it rejects with "Improper Configuration..!!" without navigating.
+export function navigateParentTo(url: string): void {
+  try {
+    const util =
+      window.ZOHO && window.ZOHO.CREATOR && window.ZOHO.CREATOR.UTIL;
+    if (util && typeof util.navigateParentURL === "function") {
+      const nav = util.navigateParentURL({
+        action: "open",
+        url: url,
+        window: "same",
+      });
+      if (nav && typeof nav.catch === "function") {
+        nav.catch(function (err: any) {
+          console.warn("navigateParentURL rejected, falling back:", err);
+          navigateTopOrSelf(url);
+        });
+      }
+      return;
+    }
+  } catch (err) {
+    console.warn("navigateParentURL failed, falling back:", err);
+  }
+  navigateTopOrSelf(url);
+}
+
+// The header's Back button returns to the Production Targets list, which is
+// where this widget's page is opened from.
+export function goBackToProductionTargets(): void {
+  navigateParentTo(
+    creatorServiceOrigin() +
+      "/" +
+      CONFIG.ACCOUNT_OWNER +
+      "/" +
+      CONFIG.APP_NAME +
+      "#Report:" +
+      CONFIG.PRODUCTION_TARGET_REPORT,
+  );
 }
 
 // ───────────── Production Target ─────────────
