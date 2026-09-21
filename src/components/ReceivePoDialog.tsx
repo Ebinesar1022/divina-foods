@@ -19,6 +19,12 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import {
+  fullScreenDialogActionsSx,
+  fullScreenDialogPaperSx,
+  stackedTableHeadControlSx,
+  stackedTableSx,
+} from "./common/responsive";
 import type { ReceiveLineDraftRow, ReceivePoDraft } from "../types";
 
 interface ReceivePoDialogProps {
@@ -106,6 +112,7 @@ export default function ReceivePoDialog({
           borderRadius: "22px",
           overflow: "hidden",
           boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+          ...fullScreenDialogPaperSx,
         },
       }}
     >
@@ -113,18 +120,20 @@ export default function ReceivePoDialog({
         sx={{
           background: "linear-gradient(135deg, #064e3b 0%, #059669 50%, #10b981 100%)",
           color: "#fff",
-          px: 3,
-          py: 2.5,
+          px: { xs: 2, sm: 3 },
+          py: { xs: 1.75, sm: 2.5 },
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 1,
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1.25, sm: 1.5 }, minWidth: 0 }}>
           <Box
             sx={{
               width: 38,
               height: 38,
+              flexShrink: 0,
               borderRadius: "10px",
               bgcolor: "rgba(255, 255, 255, 0.18)",
               display: "flex",
@@ -135,21 +144,21 @@ export default function ReceivePoDialog({
           >
             <LocalShippingIcon sx={{ fontSize: 22 }} />
           </Box>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 17 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: { xs: 16, sm: 17 } }}>
               Receive Purchase Order
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontSize: { xs: 12, sm: 12.5 } }}>
               {poNumber ? `Record receipt against ${poNumber}` : "Record receipt"}
             </Typography>
           </Box>
         </Box>
-        <IconButton onClick={onCancel} disabled={committing} sx={{ color: "#fff" }} aria-label="Close">
+        <IconButton onClick={onCancel} disabled={committing} sx={{ color: "#fff", flexShrink: 0 }} aria-label="Close">
           <CloseIcon />
         </IconButton>
       </Box>
 
-      <DialogContent sx={{ p: 3, bgcolor: "#F8FAFC" }}>
+      <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: "#F8FAFC" }}>
         {isPreparing && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
             <CircularProgress size={28} />
@@ -180,11 +189,16 @@ export default function ReceivePoDialog({
             </Box>
 
             <Typography sx={{ fontWeight: 700, mb: 1 }}>Items to Receive</Typography>
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+            <TableContainer
+              component={Paper}
+              variant="outlined"
+              sx={[{ borderRadius: "12px" }, stackedTableSx, stackedTableHeadControlSx]}
+            >
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
-                    <TableCell padding="checkbox">
+                    {/* data-label is the caption shown beside select-all on phones */}
+                    <TableCell padding="checkbox" data-label="Select all">
                       <input
                         type="checkbox"
                         aria-label="Select all items"
@@ -229,10 +243,10 @@ export default function ReceivePoDialog({
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell align="right">{line.orderedQuantity}</TableCell>
-                      <TableCell align="right">{line.receivedQuantitySoFar}</TableCell>
-                      <TableCell align="right">{line.pendingQuantity}</TableCell>
-                      <TableCell align="right">
+                      <TableCell align="right" data-label="Ordered">{line.orderedQuantity}</TableCell>
+                      <TableCell align="right" data-label="Received">{line.receivedQuantitySoFar}</TableCell>
+                      <TableCell align="right" data-label="Pending">{line.pendingQuantity}</TableCell>
+                      <TableCell align="right" data-label="Receiving Now">
                         <TextField
                           type="number"
                           size="small"
@@ -243,7 +257,7 @@ export default function ReceivePoDialog({
                           sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="Batch No">
                         <TextField
                           size="small"
                           placeholder="Batch No"
@@ -253,7 +267,7 @@ export default function ReceivePoDialog({
                           sx={{ bgcolor: "#fff", borderRadius: "8px", width: 120 }}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="Expiry Date">
                         <TextField
                           type="date"
                           size="small"
@@ -280,7 +294,7 @@ export default function ReceivePoDialog({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC" }}>
+      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC", ...fullScreenDialogActionsSx }}>
         <Button
           onClick={onCancel}
           disabled={committing}

@@ -99,7 +99,8 @@ export default function ModernSnackbar({
       anchorOrigin={anchorOrigin}
       TransitionComponent={SlideUpTransition}
       sx={{
-        bottom: { xs: 16, sm: 28 },
+        // Clear the iOS home indicator on phones.
+        bottom: { xs: "calc(16px + env(safe-area-inset-bottom))", sm: 28 },
       }}
     >
       <Box
@@ -118,7 +119,7 @@ export default function ModernSnackbar({
           position: "relative",
           overflow: "hidden",
           maxWidth: { xs: "92vw", sm: 540 },
-          minWidth: 280,
+          minWidth: { xs: 0, sm: 280 },
           pointerEvents: "auto",
         }}
       >
@@ -165,7 +166,8 @@ export default function ModernSnackbar({
             onClick={onClose}
             aria-label="close"
             sx={{
-              p: 0.5,
+              // Larger hit area on phones (icon itself stays 16px).
+              p: { xs: 1, sm: 0.5 },
               ml: 0.5,
               color: "#94A3B8",
               borderRadius: "8px",

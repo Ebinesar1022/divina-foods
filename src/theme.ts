@@ -1,4 +1,5 @@
 import { createTheme } from "@mui/material/styles";
+import { CAN_HOVER, PHONE } from "./components/common/responsive";
 
 // ───────────── Glass design tokens ─────────────
 // Shared constants for the light glassmorphism / liquid-glass look.
@@ -96,6 +97,21 @@ const theme = createTheme({
           overflowX: "hidden",
           scrollBehavior: "smooth",
           boxSizing: "border-box",
+          // Stop iOS from inflating text after a rotation, and drop the grey
+          // tap flash — pressed states are drawn by the components instead.
+          WebkitTextSizeAdjust: "100%",
+          textSizeAdjust: "100%",
+          WebkitTapHighlightColor: "transparent",
+        },
+        // Native checkboxes (used in the data tables) default to ~13px —
+        // far below a comfortable touch target.
+        'input[type="checkbox"]': {
+          width: 20,
+          height: 20,
+          margin: 0,
+          accentColor: "#2563EB",
+          cursor: "pointer",
+          verticalAlign: "middle",
         },
         "*, *::before, *::after": {
           boxSizing: "inherit",
@@ -136,6 +152,12 @@ const theme = createTheme({
           border: "1px solid rgba(255,255,255,0.85)",
           boxShadow: "0 8px 32px rgba(15, 23, 42, 0.05), 0 2px 8px rgba(37, 99, 235, 0.04)",
           transition: "transform 200ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms ease",
+          // Nested glass panels stack several backdrop blurs; on phone GPUs
+          // (esp. iOS webviews) a lighter blur keeps scrolling smooth.
+          [PHONE]: {
+            backdropFilter: "blur(10px) saturate(130%)",
+            WebkitBackdropFilter: "blur(10px) saturate(130%)",
+          },
         },
       },
     },
@@ -154,6 +176,8 @@ const theme = createTheme({
           borderBottom: "1px solid rgba(148,163,184,0.12)",
           fontVariantNumeric: "tabular-nums",
           fontSize: 13,
+          // 16px per side eats ~40% of a 4-column table at 320px wide.
+          [PHONE]: { paddingLeft: 10, paddingRight: 10 },
         },
       },
     },
@@ -177,34 +201,56 @@ const theme = createTheme({
           "&:active": {
             transform: "scale(0.98)",
           },
+          // Comfortable touch targets on phones (Apple HIG: 44pt).
+          [PHONE]: { minHeight: 44 },
         },
+        sizeSmall: {
+          [PHONE]: { minHeight: 38 },
+        },
+        // The gradient backgrounds below stay on when disabled, leaving MUI's
+        // grey disabled label on saturated blue/green — nearly unreadable
+        // (e.g. a disabled "Create Purchase Order"). Flatten to a neutral chip.
+        contained: {
+          "&.Mui-disabled": {
+            background: "rgba(148, 163, 184, 0.22)",
+            color: "rgba(71, 85, 105, 0.75)",
+            boxShadow: "none",
+          },
+        },
+        // Hover lift only where a real hover exists (see CAN_HOVER).
         containedPrimary: {
           background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
           boxShadow: "0 4px 14px rgba(37, 99, 235, 0.25)",
-          "&:hover": {
-            background: "linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)",
-            boxShadow: "0 6px 20px rgba(37, 99, 235, 0.35)",
-            transform: "translateY(-1px)",
+          [CAN_HOVER]: {
+            "&:hover": {
+              background: "linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)",
+              boxShadow: "0 6px 20px rgba(37, 99, 235, 0.35)",
+              transform: "translateY(-1px)",
+            },
           },
         },
         containedSuccess: {
           background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
           boxShadow: "0 4px 14px rgba(16, 185, 129, 0.25)",
-          "&:hover": {
-            background: "linear-gradient(135deg, #34D399 0%, #10B981 100%)",
-            boxShadow: "0 6px 20px rgba(16, 185, 129, 0.35)",
-            transform: "translateY(-1px)",
+          [CAN_HOVER]: {
+            "&:hover": {
+              background: "linear-gradient(135deg, #34D399 0%, #10B981 100%)",
+              boxShadow: "0 6px 20px rgba(16, 185, 129, 0.35)",
+              transform: "translateY(-1px)",
+            },
           },
         },
         outlined: {
           backgroundColor: "rgba(255,255,255,0.7)",
           borderColor: "rgba(148,163,184,0.30)",
           backdropFilter: "blur(8px)",
-          "&:hover": {
-            borderColor: "#2563EB",
-            backgroundColor: "rgba(255,255,255,0.95)",
-            boxShadow: "0 4px 12px rgba(37, 99, 235, 0.08)",
-            transform: "translateY(-1px)",
+          [CAN_HOVER]: {
+            "&:hover": {
+              borderColor: "#2563EB",
+              backgroundColor: "rgba(255,255,255,0.95)",
+              boxShadow: "0 4px 12px rgba(37, 99, 235, 0.08)",
+              transform: "translateY(-1px)",
+            },
           },
         },
       },

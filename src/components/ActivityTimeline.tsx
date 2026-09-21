@@ -3,6 +3,7 @@ import { Box, Paper, Typography, keyframes } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { STAGES, stepState } from "../config/stages.config";
+import { CAN_HOVER } from "./common/responsive";
 import type { ConsumptionEntryRow, MrpRow, ProductionTargetRow, PurchaseOrderDetail } from "../types";
 
 interface ActivityTimelineProps {
@@ -359,15 +360,17 @@ function ActivityTimeline({
                       ? "0 4px 18px rgba(37, 99, 235, 0.10)"
                       : "0 2px 8px rgba(15, 23, 42, 0.03)",
                     transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-                    "&:hover": {
-                      bgcolor: isActive
-                        ? "rgba(37, 99, 235, 0.09)"
-                        : "rgba(255, 255, 255, 0.98)",
-                      boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
-                      borderColor: isActive
-                        ? "rgba(37, 99, 235, 0.5)"
-                        : "rgba(148, 163, 184, 0.45)",
-                      transform: "translateX(4px)",
+                    [CAN_HOVER]: {
+                      "&:hover": {
+                        bgcolor: isActive
+                          ? "rgba(37, 99, 235, 0.09)"
+                          : "rgba(255, 255, 255, 0.98)",
+                        boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
+                        borderColor: isActive
+                          ? "rgba(37, 99, 235, 0.5)"
+                          : "rgba(148, 163, 184, 0.45)",
+                        transform: "translateX(4px)",
+                      },
                     },
                   }}
                 >

@@ -40,6 +40,7 @@ import ActivityTimeline from "./ActivityTimeline";
 import StatusChip from "./StatusChip";
 import FoodProductionLoader from "./FoodProductionLoader";
 import ModernSnackbar from "./common/ModernSnackbar";
+import { CAN_HOVER, PHONE, stackedTableSx } from "./common/responsive";
 import {
   checkStockForMrp,
   commitMrpDraft,
@@ -111,11 +112,16 @@ const TABS = [
 // (Non-Stock Items, PO Lines, Finished Goods, Consumption Entry's two
 // tables) reads as one consistent design instead of a mix of styles.
 // Purely presentational — never touches column content or row data.
+//
+// overflowX is "auto", not "hidden": with "hidden" a table wider than the
+// screen was silently clipped on phones, leaving its right-hand columns
+// unreachable. The rounded corners still clip the scrolling content.
 const TABLE_CONTAINER_SX = {
   borderRadius: "14px",
   borderColor: "rgba(148,163,184,0.25)",
   boxShadow: "0 4px 16px rgba(15, 23, 42, 0.04)",
-  overflow: "hidden",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
 } as const;
 
 const TABLE_HEAD_ROW_SX = {
@@ -845,7 +851,7 @@ export default function ProductionOverview({
           mt: { xs: 2.5, md: 3 },
         }}
       >
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, width: "100%" }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 2, md: 3 }, minWidth: 0, width: "100%" }}>
           <Paper
             elevation={0}
             sx={{
@@ -868,7 +874,7 @@ export default function ProductionOverview({
                     size="small"
                     onClick={handleCheckStock}
                     disabled={checkStockRunning || !mrpRecord}
-                    sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 700, fontSize: 11.5, px: 1.35, py: 0.35, minWidth: 0 }}
+                    sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 700, fontSize: { xs: 12.5, sm: 11.5 }, px: 1.35, py: 0.35, minWidth: 0 }}
                   >
                     {checkStockRunning ? "Checking…" : "Check Stock"}
                   </Button>
@@ -901,7 +907,7 @@ export default function ProductionOverview({
                   fontSize: { xs: 13, sm: 13.5 },
                   textTransform: "none",
                   minHeight: 52,
-                  px: { xs: 2, sm: 2.75 },
+                  px: { xs: 1.75, sm: 2.75 },
                   py: 1.5,
                   color: "#64748B",
                   transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -927,14 +933,14 @@ export default function ProductionOverview({
               ))}
             </Tabs>
 
-            <Box sx={{ p: { xs: 2, sm: 2.5, md: 3.5 }, animation: "fadeIn 0.35s ease-out" }} key={activeTab}>
+            <Box sx={{ p: { xs: 1.5, sm: 2.5, md: 3.5 }, animation: "fadeIn 0.35s ease-out" }} key={activeTab}>
               {activeTab === "overview" && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 2.5, sm: 3 } }}>
                   <Box
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(2, 1fr)", md: "repeat(4, 1fr)" },
-                      gap: 2,
+                      gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" },
+                      gap: { xs: 1.5, sm: 2 },
                     }}
                   >
                     <InfoCard
@@ -942,10 +948,11 @@ export default function ProductionOverview({
                       value={record.productionTargetId}
                     />
                     <InfoCard label="Date" value={record.date} />
-                    <InfoCard label="Assigned To" value={record.assignedTo} />
+                    <InfoCard label="Assigned To" value={record.assignedTo} wideOnPhone />
                     <InfoCard
                       label="Current Status"
                       valueNode={<StatusChip value={record.status} />}
+                      wideOnPhone
                     />
                   </Box>
 
@@ -1060,7 +1067,7 @@ export default function ProductionOverview({
                             startIcon={<ShoppingCartCheckoutIcon />}
                             disabled={!selectedNonStockItemIds.length}
                             onClick={handleOpenCreatePo}
-                            sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                            sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600, width: { xs: "100%", sm: "auto" } }}
                           >
                             Create Purchase Order{selectedNonStockItemIds.length ? ` (${selectedNonStockItemIds.length})` : ""}
                           </Button>
@@ -1144,7 +1151,7 @@ export default function ProductionOverview({
                                 key={po.id}
                                 variant="outlined"
                                 sx={{
-                                  p: 1.75,
+                                  p: { xs: 1.5, sm: 1.75 },
                                   mb: 1.5,
                                   borderRadius: "14px",
                                   borderColor: "rgba(148,163,184,0.25)",
@@ -1161,18 +1168,34 @@ export default function ProductionOverview({
                                     mb: 1,
                                   }}
                                 >
-                                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                                    <Typography sx={{ fontWeight: 700 }}>{po.poNumber}</Typography>
-                                    <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                                  {/* Wraps as a unit: PO number stays whole, date and supplier
+                                      drop underneath it rather than splitting "PO-/0012". */}
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      columnGap: 1.5,
+                                      rowGap: 0.25,
+                                      alignItems: "baseline",
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <Typography sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{po.poNumber}</Typography>
+                                    <Typography color="text.secondary" sx={{ fontSize: 13, whiteSpace: "nowrap" }}>
                                       {po.poDate}
                                     </Typography>
                                     {po.supplierName && (
-                                      <Typography color="text.secondary" sx={{ fontSize: 13 }}>
-                                        · {po.supplierName}
+                                      // The "·" separator is drawn in CSS so it can disappear
+                                      // on phones, where the supplier wraps onto its own line.
+                                      <Typography
+                                        color="text.secondary"
+                                        sx={{ fontSize: 13, "&::before": { content: '"· "', [PHONE]: { content: "none" } } }}
+                                      >
+                                        {po.supplierName}
                                       </Typography>
                                     )}
                                   </Box>
-                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                                     <StatusChip value={po.status} />
                                     {pending > 0 && (
                                       <Button
@@ -1187,7 +1210,15 @@ export default function ProductionOverview({
                                     )}
                                   </Box>
                                 </Box>
-                                <TableContainer sx={{ borderRadius: "10px", overflow: "hidden" }}>
+                                <TableContainer
+                                  sx={[
+                                    { borderRadius: "10px", overflowX: "auto", WebkitOverflowScrolling: "touch" },
+                                    stackedTableSx,
+                                    // Nested inside the PO card, so its line cards use the
+                                    // page tint instead of a second layer of white.
+                                    { [PHONE]: { "& tbody tr": { bgcolor: "#F8FAFC" } } },
+                                  ]}
+                                >
                                   <Table size="small">
                                     <TableHead>
                                       <TableRow sx={TABLE_HEAD_ROW_SX}>
@@ -1204,16 +1235,16 @@ export default function ProductionOverview({
                                       {po.lines.map((line) => (
                                         <TableRow key={line.id} sx={tableRowSx()}>
                                           <TableCell>{line.productName}</TableCell>
-                                          <TableCell align="right">{line.orderQuantity}</TableCell>
-                                          <TableCell align="right">{line.receivedQuantity}</TableCell>
-                                          <TableCell align="right">{line.unitPrice.toFixed(2)}</TableCell>
-                                          <TableCell align="right">{line.lineTotal.toFixed(2)}</TableCell>
-                                          <TableCell align="right">
+                                          <TableCell align="right" data-label="Ordered" data-span="third">{line.orderQuantity}</TableCell>
+                                          <TableCell align="right" data-label="Received" data-span="third">{line.receivedQuantity}</TableCell>
+                                          <TableCell align="right" data-label="Unit Price" data-span="third">{line.unitPrice.toFixed(2)}</TableCell>
+                                          <TableCell align="right" data-label="Line Total" data-span="third">{line.lineTotal.toFixed(2)}</TableCell>
+                                          <TableCell align="right" data-label="Tax" data-span="third">
                                             {line.taxAmount > 0
                                               ? `${line.taxAmount.toFixed(2)} (${line.taxPercentage}%)`
                                               : "—"}
                                           </TableCell>
-                                          <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                          <TableCell align="right" data-label="Total" data-span="third" sx={{ fontWeight: 600 }}>
                                             {(line.lineTotal + line.taxAmount).toFixed(2)}
                                           </TableCell>
                                         </TableRow>
@@ -1221,12 +1252,23 @@ export default function ProductionOverview({
                                     </TableBody>
                                   </Table>
                                 </TableContainer>
-                                <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    justifyContent: "flex-end",
+                                    columnGap: 0.5,
+                                    mt: 1,
+                                  }}
+                                >
                                   <Typography sx={{ fontSize: 13, color: "#64748B" }}>
                                     Sub Total {po.subTotal.toFixed(2)} &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
-                                    &nbsp;·&nbsp;{" "}
+                                    {/* trailing separator would dangle at a line end once Grand Total wraps below */}
+                                    <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                                      &nbsp;·&nbsp;
+                                    </Box>{" "}
                                   </Typography>
-                                  <Typography sx={{ fontSize: 13, fontWeight: 700, ml: 0.5 }}>
+                                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
                                     Grand Total {po.grandTotal.toFixed(2)}
                                   </Typography>
                                 </Box>
@@ -1278,7 +1320,7 @@ export default function ProductionOverview({
                                 key={po.id}
                                 variant="outlined"
                                 sx={{
-                                  p: 1.75,
+                                  p: { xs: 1.5, sm: 1.75 },
                                   mb: 1.5,
                                   borderRadius: "14px",
                                   borderColor: "rgba(148,163,184,0.25)",
@@ -1295,18 +1337,34 @@ export default function ProductionOverview({
                                     mb: 1,
                                   }}
                                 >
-                                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                                    <Typography sx={{ fontWeight: 700 }}>{po.poNumber}</Typography>
-                                    <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+                                  {/* Wraps as a unit: PO number stays whole, date and supplier
+                                      drop underneath it rather than splitting "PO-/0012". */}
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      columnGap: 1.5,
+                                      rowGap: 0.25,
+                                      alignItems: "baseline",
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <Typography sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{po.poNumber}</Typography>
+                                    <Typography color="text.secondary" sx={{ fontSize: 13, whiteSpace: "nowrap" }}>
                                       {po.poDate}
                                     </Typography>
                                     {po.supplierName && (
-                                      <Typography color="text.secondary" sx={{ fontSize: 13 }}>
-                                        · {po.supplierName}
+                                      // The "·" separator is drawn in CSS so it can disappear
+                                      // on phones, where the supplier wraps onto its own line.
+                                      <Typography
+                                        color="text.secondary"
+                                        sx={{ fontSize: 13, "&::before": { content: '"· "', [PHONE]: { content: "none" } } }}
+                                      >
+                                        {po.supplierName}
                                       </Typography>
                                     )}
                                   </Box>
-                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                                     <StatusChip value={po.status} />
                                     {pending > 0 && (
                                       <Button
@@ -1321,7 +1379,15 @@ export default function ProductionOverview({
                                     )}
                                   </Box>
                                 </Box>
-                                <TableContainer sx={{ borderRadius: "10px", overflow: "hidden" }}>
+                                <TableContainer
+                                  sx={[
+                                    { borderRadius: "10px", overflowX: "auto", WebkitOverflowScrolling: "touch" },
+                                    stackedTableSx,
+                                    // Nested inside the PO card, so its line cards use the
+                                    // page tint instead of a second layer of white.
+                                    { [PHONE]: { "& tbody tr": { bgcolor: "#F8FAFC" } } },
+                                  ]}
+                                >
                                   <Table size="small">
                                     <TableHead>
                                       <TableRow sx={TABLE_HEAD_ROW_SX}>
@@ -1338,16 +1404,16 @@ export default function ProductionOverview({
                                       {po.lines.map((line) => (
                                         <TableRow key={line.id} sx={tableRowSx()}>
                                           <TableCell>{line.productName}</TableCell>
-                                          <TableCell align="right">{line.orderQuantity}</TableCell>
-                                          <TableCell align="right">{line.receivedQuantity}</TableCell>
-                                          <TableCell align="right">{line.unitPrice.toFixed(2)}</TableCell>
-                                          <TableCell align="right">{line.lineTotal.toFixed(2)}</TableCell>
-                                          <TableCell align="right">
+                                          <TableCell align="right" data-label="Ordered" data-span="third">{line.orderQuantity}</TableCell>
+                                          <TableCell align="right" data-label="Received" data-span="third">{line.receivedQuantity}</TableCell>
+                                          <TableCell align="right" data-label="Unit Price" data-span="third">{line.unitPrice.toFixed(2)}</TableCell>
+                                          <TableCell align="right" data-label="Line Total" data-span="third">{line.lineTotal.toFixed(2)}</TableCell>
+                                          <TableCell align="right" data-label="Tax" data-span="third">
                                             {line.taxAmount > 0
                                               ? `${line.taxAmount.toFixed(2)} (${line.taxPercentage}%)`
                                               : "—"}
                                           </TableCell>
-                                          <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                          <TableCell align="right" data-label="Total" data-span="third" sx={{ fontWeight: 600 }}>
                                             {(line.lineTotal + line.taxAmount).toFixed(2)}
                                           </TableCell>
                                         </TableRow>
@@ -1355,12 +1421,23 @@ export default function ProductionOverview({
                                     </TableBody>
                                   </Table>
                                 </TableContainer>
-                                <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    justifyContent: "flex-end",
+                                    columnGap: 0.5,
+                                    mt: 1,
+                                  }}
+                                >
                                   <Typography sx={{ fontSize: 13, color: "#64748B" }}>
                                     Sub Total {po.subTotal.toFixed(2)} &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
-                                    &nbsp;·&nbsp;{" "}
+                                    {/* trailing separator would dangle at a line end once Grand Total wraps below */}
+                                    <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                                      &nbsp;·&nbsp;
+                                    </Box>{" "}
                                   </Typography>
-                                  <Typography sx={{ fontSize: 13, fontWeight: 700, ml: 0.5 }}>
+                                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
                                     Grand Total {po.grandTotal.toFixed(2)}
                                   </Typography>
                                 </Box>
@@ -1385,19 +1462,21 @@ export default function ProductionOverview({
                         variant="outlined"
                         sx={{
                           position: "relative",
-                          p: { xs: 2, sm: 2.5 },
+                          p: { xs: 1.5, sm: 2.5 },
                           borderRadius: "18px",
                           borderColor: "rgba(37, 99, 235, 0.18)",
                           boxShadow: "0 8px 30px rgba(37, 99, 235, 0.12)",
                           overflow: "hidden",
                         }}
                       >
-                        {/* Dimmed/muted card grid so stamp pops without losing legibility */}
+                        {/* Dimmed/muted card grid so stamp pops without losing legibility.
+                            Two columns on phones (was one) keeps six cards from becoming a
+                            tall column the stamp then has to straddle. */}
                         <Box
                           sx={{
                             display: "grid",
-                            gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-                            gap: 2,
+                            gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" },
+                            gap: { xs: 1.25, sm: 2 },
                             opacity: 0.78,
                             filter: "contrast(0.95)",
                             "& .MuiPaper-root": {
@@ -1515,8 +1594,8 @@ export default function ProductionOverview({
                       <Box
                         sx={{
                           display: "grid",
-                          gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" },
-                          gap: 2,
+                          gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" },
+                          gap: { xs: 1.5, sm: 2 },
                         }}
                       >
                         <InfoCard label="Production Target ID" value={record.productionTargetId} />
@@ -1534,6 +1613,7 @@ export default function ProductionOverview({
                           startIcon={<TaskAltIcon />}
                           onClick={handleOpenCompleteProduction}
                           sx={{
+                            width: { xs: "100%", sm: "auto" },
                             borderRadius: "12px",
                             textTransform: "none",
                             fontWeight: 700,
@@ -1580,7 +1660,7 @@ export default function ProductionOverview({
                       >
                         <Box
                           sx={{
-                            px: 2.5,
+                            px: { xs: 1.75, sm: 2.5 },
                             py: 1.75,
                             bgcolor: "#ECFDF5",
                             display: "flex",
@@ -1604,11 +1684,11 @@ export default function ProductionOverview({
                           )}
                         </Box>
 
-                        <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2.5 }}>
+                        <Box sx={{ p: { xs: 1.25, sm: 2 }, display: "flex", flexDirection: "column", gap: 2.5 }}>
                           {entry.finishedGoods.length > 0 && (
                             <Box>
                               <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>Finished Goods</Typography>
-                              <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
+                              <TableContainer component={Paper} variant="outlined" sx={[TABLE_CONTAINER_SX, stackedTableSx]}>
                                 <Table size="small">
                                   <TableHead>
                                     <TableRow sx={TABLE_HEAD_ROW_SX}>
@@ -1624,11 +1704,11 @@ export default function ProductionOverview({
                                     {entry.finishedGoods.map((fg) => (
                                       <TableRow key={fg.id} sx={tableRowSx()}>
                                         <TableCell>{fg.itemName}</TableCell>
-                                        <TableCell align="right">{fg.targetQuantity}</TableCell>
-                                        <TableCell align="right">{fg.producedQuantity}</TableCell>
-                                        <TableCell align="right">{fg.scrapQuantity}</TableCell>
-                                        <TableCell>{fg.batchNo || "—"}</TableCell>
-                                        <TableCell>{fg.expiryDate || "—"}</TableCell>
+                                        <TableCell align="right" data-label="Target" data-span="third">{fg.targetQuantity}</TableCell>
+                                        <TableCell align="right" data-label="Produced" data-span="third">{fg.producedQuantity}</TableCell>
+                                        <TableCell align="right" data-label="Scrap" data-span="third">{fg.scrapQuantity}</TableCell>
+                                        <TableCell data-label="Batch No">{fg.batchNo || "—"}</TableCell>
+                                        <TableCell data-label="Expiry">{fg.expiryDate || "—"}</TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
@@ -1642,7 +1722,7 @@ export default function ProductionOverview({
                               <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>
                                 Raw Materials Consumed
                               </Typography>
-                              <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
+                              <TableContainer component={Paper} variant="outlined" sx={[TABLE_CONTAINER_SX, stackedTableSx]}>
                                 <Table size="small">
                                   <TableHead>
                                     <TableRow sx={TABLE_HEAD_ROW_SX}>
@@ -1657,10 +1737,10 @@ export default function ProductionOverview({
                                     {entry.rawMaterials.map((rm) => (
                                       <TableRow key={rm.id} sx={tableRowSx()}>
                                         <TableCell>{rm.productName}</TableCell>
-                                        <TableCell>{rm.uom}</TableCell>
-                                        <TableCell align="right">{rm.allocatedQuantity}</TableCell>
-                                        <TableCell align="right">{rm.consumedQuantity}</TableCell>
-                                        <TableCell align="right">{rm.scrapQuantity}</TableCell>
+                                        <TableCell data-label="UOM">{rm.uom}</TableCell>
+                                        <TableCell align="right" data-label="Allocated">{rm.allocatedQuantity}</TableCell>
+                                        <TableCell align="right" data-label="Consumed">{rm.consumedQuantity}</TableCell>
+                                        <TableCell align="right" data-label="Scrap">{rm.scrapQuantity}</TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
@@ -1785,6 +1865,9 @@ export default function ProductionOverview({
             boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
             border: "1px solid rgba(255, 255, 255, 0.9)",
             bgcolor: "#fff",
+            // A short prompt: stay a card on phones, but claim the width the
+            // default 32px side margins waste.
+            [PHONE]: { m: 2, width: "calc(100% - 32px)", maxHeight: "calc(100% - 32px)" },
           },
         }}
       >
@@ -1792,14 +1875,15 @@ export default function ProductionOverview({
           sx={{
             background: "linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%)",
             color: "#fff",
-            px: { xs: 2.5, sm: 3 },
+            px: { xs: 2, sm: 3 },
             py: 2.25,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 1,
           }}
         >
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1.25, sm: 1.75 }, minWidth: 0 }}>
             <Box
               sx={{
                 width: 44,
@@ -1817,8 +1901,8 @@ export default function ProductionOverview({
             >
               <WarningAmberRoundedIcon sx={{ fontSize: 26, color: "#fff" }} />
             </Box>
-            <Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 1, rowGap: 0.5 }}>
                 <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 18, color: "#fff" }}>
                   Stock Still Short
                 </Typography>
@@ -1843,6 +1927,7 @@ export default function ProductionOverview({
           <IconButton
             onClick={() => setStockStillShortOpen(false)}
             sx={{
+              flexShrink: 0,
               color: "rgba(255,255,255,0.85)",
               "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.15)" },
             }}
@@ -1852,7 +1937,7 @@ export default function ProductionOverview({
           </IconButton>
         </Box>
 
-        <DialogContent sx={{ p: { xs: 2.5, sm: 3 }, bgcolor: "#F8FAFC" }}>
+        <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: "#F8FAFC" }}>
           <Box
             sx={{
               display: "flex",
@@ -1882,8 +1967,9 @@ export default function ProductionOverview({
 
           <Box
             sx={{
-              maxHeight: 280,
+              maxHeight: { xs: "min(280px, 38vh)", sm: 280 },
               overflowY: "auto",
+              WebkitOverflowScrolling: "touch",
               display: "flex",
               flexDirection: "column",
               gap: 1,
@@ -1909,10 +1995,12 @@ export default function ProductionOverview({
                   justifyContent: "space-between",
                   gap: 1.5,
                   transition: "all 150ms ease",
-                  "&:hover": {
-                    borderColor: "rgba(245, 158, 11, 0.45)",
-                    boxShadow: "0 4px 14px rgba(245, 158, 11, 0.08)",
-                    transform: "translateY(-1px)",
+                  [CAN_HOVER]: {
+                    "&:hover": {
+                      borderColor: "rgba(245, 158, 11, 0.45)",
+                      boxShadow: "0 4px 14px rgba(245, 158, 11, 0.08)",
+                      transform: "translateY(-1px)",
+                    },
                   },
                 }}
               >
@@ -1987,6 +2075,14 @@ export default function ProductionOverview({
             alignItems: "center",
             justifyContent: "space-between",
             gap: 1.5,
+            // Two labelled buttons don't fit side by side in ~300px: stack
+            // them full-width with the primary action on top.
+            [PHONE]: {
+              flexDirection: "column-reverse",
+              alignItems: "stretch",
+              px: 2,
+              "& > :not(:first-of-type)": { ml: 0 },
+            },
           }}
         >
           <Button
@@ -2041,7 +2137,13 @@ export default function ProductionOverview({
         onClose={handlePostReceiveCheckLater}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: "20px", overflow: "hidden" } }}
+        PaperProps={{
+          sx: {
+            borderRadius: "20px",
+            overflow: "hidden",
+            [PHONE]: { m: 2, width: "calc(100% - 32px)" },
+          },
+        }}
       >
         <Box
           sx={{
@@ -2081,7 +2183,21 @@ export default function ProductionOverview({
             Check Stock for reserving raw material for this production, or check back later once you're ready.
           </DialogContentText>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3, pt: 0, bgcolor: "#F8FAFC", gap: 1.25 }}>
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+            pt: 0,
+            bgcolor: "#F8FAFC",
+            gap: 1.25,
+            [PHONE]: {
+              flexDirection: "column-reverse",
+              alignItems: "stretch",
+              px: 2.5,
+              "& > :not(:first-of-type)": { ml: 0 },
+            },
+          }}
+        >
           <Button
             onClick={handlePostReceiveCheckLater}
             fullWidth
@@ -2252,6 +2368,8 @@ function BatchAllocationSummary({
                 color: "#2563eb",
                 bgcolor: "rgba(37, 99, 235, 0.08)",
                 border: "1px solid rgba(37, 99, 235, 0.20)",
+                // 34px by default — bump to a proper touch target on phones.
+                [PHONE]: { width: 42, height: 42 },
                 "&:hover": { bgcolor: "rgba(37, 99, 235, 0.16)" },
               }}
             >
@@ -2295,11 +2413,13 @@ function BatchAllocationGroupRow({
         backdropFilter: "blur(8px)",
         p: { xs: 1.5, sm: 1.85 },
         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-        "&:hover": {
-          boxShadow: "0 8px 24px rgba(37, 99, 235, 0.08)",
-          borderColor: "rgba(37, 99, 235, 0.3)",
-          bgcolor: "rgba(255, 255, 255, 0.95)",
-          transform: "translateY(-1px)",
+        [CAN_HOVER]: {
+          "&:hover": {
+            boxShadow: "0 8px 24px rgba(37, 99, 235, 0.08)",
+            borderColor: "rgba(37, 99, 235, 0.3)",
+            bgcolor: "rgba(255, 255, 255, 0.95)",
+            transform: "translateY(-1px)",
+          },
         },
       }}
     >
@@ -2350,10 +2470,12 @@ function BatchChip({ line }: { line: BatchAllocationLine }) {
         border: "1px solid rgba(37, 99, 235, 0.20)",
         backdropFilter: "blur(6px)",
         transition: "all 0.2s ease",
-        "&:hover": {
-          bgcolor: "rgba(37, 99, 235, 0.10)",
-          borderColor: "rgba(37, 99, 235, 0.35)",
-          transform: "translateY(-1px)",
+        [CAN_HOVER]: {
+          "&:hover": {
+            bgcolor: "rgba(37, 99, 235, 0.10)",
+            borderColor: "rgba(37, 99, 235, 0.35)",
+            transform: "translateY(-1px)",
+          },
         },
       }}
     >
@@ -2377,16 +2499,22 @@ function InfoCard({
   label,
   value,
   valueNode,
+  wideOnPhone = false,
 }: {
   label: string;
   value?: string;
   valueNode?: React.ReactNode;
+  // Span both columns of the phone's two-column grid — for long values and
+  // status chips, which don't fit in a half-width card.
+  wideOnPhone?: boolean;
 }) {
   return (
     <Paper
       variant="outlined"
       sx={{
-        p: { xs: 1.75, sm: 2.25 },
+        p: { xs: 1.5, sm: 2.25 },
+        minWidth: 0,
+        gridColumn: wideOnPhone ? { xs: "1 / -1", sm: "auto" } : undefined,
         borderRadius: "16px",
         bgcolor: "rgba(255,255,255,0.75)",
         backdropFilter: "blur(12px)",
@@ -2395,10 +2523,12 @@ function InfoCard({
         transition: "all 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
         position: "relative",
         overflow: "hidden",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: "0 12px 30px rgba(37, 99, 235, 0.12)",
-          borderColor: "rgba(37, 99, 235, 0.35)",
+        [CAN_HOVER]: {
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow: "0 12px 30px rgba(37, 99, 235, 0.12)",
+            borderColor: "rgba(37, 99, 235, 0.35)",
+          },
         },
       }}
     >
@@ -2436,7 +2566,7 @@ function CenteredStateCard({
     <Paper
       variant="outlined"
       sx={{
-        p: { xs: 3.5, sm: 4.5 },
+        p: { xs: 2.5, sm: 4.5 },
         borderRadius: "20px",
         textAlign: "center",
         bgcolor: "rgba(255,255,255,0.60)",
@@ -2449,10 +2579,12 @@ function CenteredStateCard({
         gap: 2,
         boxShadow: "0 8px 24px rgba(15, 23, 42, 0.03)",
         transition: "all 0.25s ease",
-        "&:hover": {
-          borderColor: "rgba(37,99,235,0.45)",
-          bgcolor: "rgba(255,255,255,0.80)",
-          boxShadow: "0 12px 32px rgba(37, 99, 235, 0.08)",
+        [CAN_HOVER]: {
+          "&:hover": {
+            borderColor: "rgba(37,99,235,0.45)",
+            bgcolor: "rgba(255,255,255,0.80)",
+            boxShadow: "0 12px 32px rgba(37, 99, 235, 0.08)",
+          },
         },
       }}
     >
@@ -2469,8 +2601,10 @@ function CenteredStateCard({
           boxShadow: `0 4px 16px ${iconColor}25`,
           border: `1px solid ${iconColor}30`,
           transition: "transform 0.25s ease",
-          "&:hover": {
-            transform: "scale(1.08)",
+          [CAN_HOVER]: {
+            "&:hover": {
+              transform: "scale(1.08)",
+            },
           },
         }}
       >
@@ -2486,7 +2620,19 @@ function CenteredStateCard({
           </Typography>
         )}
       </Box>
-      {action}
+      {/* Primary action spans the card on phones — long labels such as
+          "Allocate Batch & Start Production" otherwise wrap inside a
+          shrink-wrapped button. */}
+      {action && (
+        <Box
+          sx={{
+            width: { xs: "100%", sm: "auto" },
+            "& > .MuiButton-root": { width: { xs: "100%", sm: "auto" } },
+          }}
+        >
+          {action}
+        </Box>
+      )}
     </Paper>
   );
 }
@@ -2525,13 +2671,19 @@ function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string
             ? "0 8px 30px rgba(16, 185, 129, 0.3), 0 0 0 2px rgba(255,255,255,0.8)"
             : "0 8px 30px rgba(37, 99, 235, 0.3), 0 0 0 2px rgba(255,255,255,0.8)",
           fontWeight: 900,
-          fontSize: { xs: 17, sm: 22, md: 24 },
-          letterSpacing: "0.14em",
+          fontSize: { xs: 15, sm: 22, md: 24 },
+          letterSpacing: { xs: "0.1em", sm: "0.14em" },
           textTransform: "uppercase",
-          px: { xs: 2.75, sm: 4 },
+          px: { xs: 2, sm: 4 },
           py: { xs: 0.85, sm: 1.3 },
           opacity: 0.96,
-          whiteSpace: "nowrap",
+          // Wraps to two centred lines on phones ("PRODUCTION / COMPLETED")
+          // instead of running ~300px wide and being clipped by the card.
+          whiteSpace: { xs: "normal", sm: "nowrap" },
+          textAlign: "center",
+          lineHeight: 1.25,
+          width: { xs: "max-content", sm: "auto" },
+          maxWidth: { xs: 210, sm: "none" },
           "&::before": {
             content: '""',
             position: "absolute",

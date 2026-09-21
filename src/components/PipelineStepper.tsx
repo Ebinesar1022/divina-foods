@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Box, Typography, keyframes } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import { STAGES, stepState } from '../config/stages.config';
+import { CAN_HOVER, PHONE } from './common/responsive';
 import type { StageKey, StageState } from '../types';
 
 interface PipelineStepperProps {
@@ -59,11 +61,33 @@ export default function PipelineStepper({
   renderStageExtra,
   onStageClick,
 }: PipelineStepperProps) {
+  // On a phone the five stages don't fit side by side, so the row scrolls
+  // horizontally. Keep the stage the user cares about (the current one, or
+  // the last when everything is done) centred instead of leaving them to
+  // discover it off-screen to the right.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const focusRef = useRef<HTMLDivElement>(null);
+  const focusIndex = isFullyComplete ? STAGES.length - 1 : currentIndex;
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const node = focusRef.current;
+    if (!scroller || !node || scroller.scrollWidth <= scroller.clientWidth) return;
+    const s = scroller.getBoundingClientRect();
+    const n = node.getBoundingClientRect();
+    scroller.scrollLeft += n.left + n.width / 2 - (s.left + s.width / 2);
+  }, [focusIndex, procurementSkipped]);
+
   return (
     <Box
+      ref={scrollerRef}
       sx={{
         width: '100%',
         overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        // Keep a horizontal swipe here from chaining into the host app's
+        // back-swipe / page scroll.
+        overscrollBehaviorX: 'contain',
         py: { xs: 1.5, sm: 2.25 },
         px: { xs: 1, sm: 2 },
         '&::-webkit-scrollbar': { height: 4 },
@@ -71,13 +95,22 @@ export default function PipelineStepper({
           bgcolor: 'rgba(148, 163, 184, 0.3)',
           borderRadius: '999px',
         },
+        // Soft edge fade = "there is more this way". The first/last nodes sit
+        // ≥28px in from the edges, so at rest nothing is dimmed.
+        [PHONE]: {
+          WebkitMaskImage:
+            'linear-gradient(90deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%)',
+          maskImage:
+            'linear-gradient(90deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%)',
+        },
       }}
     >
       <Box
         sx={{
           display: 'flex',
           alignItems: 'flex-start',
-          minWidth: { xs: 600, md: '100%' },
+          // 5 stages × ~108px keeps every label on ≤3 lines at 11.5px.
+          minWidth: { xs: 540, md: '100%' },
           width: '100%',
         }}
       >
@@ -107,6 +140,7 @@ export default function PipelineStepper({
           return (
             <Box
               key={stage.key}
+              ref={index === focusIndex ? focusRef : undefined}
               sx={{
                 flex: 1,
                 display: 'flex',
@@ -178,11 +212,13 @@ export default function PipelineStepper({
                       opacity: state === 'skipped' ? 0.65 : 1,
                       cursor: onStageClick ? 'pointer' : 'default',
                       outline: 'none',
-                      '&:hover': {
-                        transform: isActive ? 'scale(1.16)' : 'scale(1.08) translateY(-2px)',
-                        boxShadow: isActive
-                          ? '0 8px 24px rgba(37, 99, 235, 0.45)'
-                          : '0 6px 18px rgba(15, 23, 42, 0.12)',
+                      [CAN_HOVER]: {
+                        '&:hover': {
+                          transform: isActive ? 'scale(1.16)' : 'scale(1.08) translateY(-2px)',
+                          boxShadow: isActive
+                            ? '0 8px 24px rgba(37, 99, 235, 0.45)'
+                            : '0 6px 18px rgba(15, 23, 42, 0.12)',
+                        },
                       },
                       '&:focus-visible': onStageClick
                         ? { boxShadow: `0 0 0 3px rgba(37, 99, 235, 0.35), ${styles.shadow || 'none'}` }

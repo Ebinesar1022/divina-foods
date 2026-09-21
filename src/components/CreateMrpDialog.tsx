@@ -21,6 +21,11 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddTaskIcon from "@mui/icons-material/AddTask";
 import StatusChip from "./StatusChip";
 import FoodProductionLoader from "./FoodProductionLoader";
+import {
+  fullScreenDialogActionsSx,
+  fullScreenDialogPaperSx,
+  stackedTableSx,
+} from "./common/responsive";
 import type { MrpDraft } from "../types";
 
 interface CreateMrpDialogProps {
@@ -59,6 +64,7 @@ export default function CreateMrpDialog({
           borderRadius: "22px",
           overflow: "hidden",
           boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+          ...fullScreenDialogPaperSx,
         },
       }}
     >
@@ -66,18 +72,20 @@ export default function CreateMrpDialog({
         sx={{
           background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #2563eb 100%)",
           color: "#fff",
-          px: 3,
-          py: 2.5,
+          px: { xs: 2, sm: 3 },
+          py: { xs: 1.75, sm: 2.5 },
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 1,
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1.25, sm: 1.5 }, minWidth: 0 }}>
           <Box
             sx={{
               width: 38,
               height: 38,
+              flexShrink: 0,
               borderRadius: "10px",
               bgcolor: "rgba(255, 255, 255, 0.15)",
               display: "flex",
@@ -88,21 +96,21 @@ export default function CreateMrpDialog({
           >
             <AddTaskIcon sx={{ fontSize: 22 }} />
           </Box>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 17 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: { xs: 16, sm: 17 } }}>
               Create Material Requirement &amp; Planning
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)", fontSize: 12.5 }}>
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.8)", fontSize: { xs: 12, sm: 12.5 } }}>
               Review the computed plan, then confirm to create it
             </Typography>
           </Box>
         </Box>
-        <IconButton onClick={onCancel} disabled={committing} sx={{ color: "#fff" }} aria-label="Close">
+        <IconButton onClick={onCancel} disabled={committing} sx={{ color: "#fff", flexShrink: 0 }} aria-label="Close">
           <CloseIcon />
         </IconButton>
       </Box>
 
-      <DialogContent sx={{ p: 3, bgcolor: "#F8FAFC" }}>
+      <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: "#F8FAFC" }}>
         {isPreparing && (
           <FoodProductionLoader
             size="medium"
@@ -160,7 +168,7 @@ export default function CreateMrpDialog({
             </TableContainer>
 
             <Typography sx={{ fontWeight: 700, mb: 1 }}>Raw Materials</Typography>
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px" }}>
+            <TableContainer component={Paper} variant="outlined" sx={[{ borderRadius: "12px" }, stackedTableSx]}>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
@@ -177,12 +185,12 @@ export default function CreateMrpDialog({
                   {draft.rawMaterials.map((rm) => (
                     <TableRow key={rm.productId}>
                       <TableCell>{rm.productName}</TableCell>
-                      <TableCell>{rm.uom}</TableCell>
-                      <TableCell align="right">{rm.stockOnHand.toFixed(2)}</TableCell>
-                      <TableCell align="right">{rm.stockRequired.toFixed(2)}</TableCell>
-                      <TableCell align="right">{rm.allocateQuantity.toFixed(2)}</TableCell>
-                      <TableCell align="right">{rm.neededQuantity.toFixed(2)}</TableCell>
-                      <TableCell>
+                      <TableCell data-label="UOM">{rm.uom}</TableCell>
+                      <TableCell data-label="Stock On Hand" align="right">{rm.stockOnHand.toFixed(2)}</TableCell>
+                      <TableCell data-label="Stock Required" align="right">{rm.stockRequired.toFixed(2)}</TableCell>
+                      <TableCell data-label="Allocate Qty" align="right">{rm.allocateQuantity.toFixed(2)}</TableCell>
+                      <TableCell data-label="Needed Qty" align="right">{rm.neededQuantity.toFixed(2)}</TableCell>
+                      <TableCell data-label="Status">
                         <StatusChip value={rm.status} />
                       </TableCell>
                     </TableRow>
@@ -210,7 +218,7 @@ export default function CreateMrpDialog({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC" }}>
+      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC", ...fullScreenDialogActionsSx }}>
         <Button
           onClick={onCancel}
           disabled={committing}

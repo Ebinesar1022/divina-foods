@@ -21,6 +21,11 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ShoppingCartCheckoutIcon from "@mui/icons-material/ShoppingCartCheckout";
+import {
+  fullScreenDialogActionsSx,
+  fullScreenDialogPaperSx,
+  stackedTableSx,
+} from "./common/responsive";
 import type { CreatePoDraft, PaymentTermOption, PoLineDraftRow, SupplierOption, TaxOption } from "../types";
 
 interface CreatePoDialogProps {
@@ -107,6 +112,7 @@ export default function CreatePoDialog({
           borderRadius: "22px",
           overflow: "hidden",
           boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+          ...fullScreenDialogPaperSx,
         },
       }}
     >
@@ -114,18 +120,20 @@ export default function CreatePoDialog({
         sx={{
           background: "linear-gradient(135deg, #1e1b4b 0%, #4338ca 50%, #6366f1 100%)",
           color: "#fff",
-          px: 3,
-          py: 2.5,
+          px: { xs: 2, sm: 3 },
+          py: { xs: 1.75, sm: 2.5 },
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 1,
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1.25, sm: 1.5 }, minWidth: 0 }}>
           <Box
             sx={{
               width: 38,
               height: 38,
+              flexShrink: 0,
               borderRadius: "10px",
               bgcolor: "rgba(255, 255, 255, 0.18)",
               display: "flex",
@@ -136,21 +144,21 @@ export default function CreatePoDialog({
           >
             <ShoppingCartCheckoutIcon sx={{ fontSize: 22 }} />
           </Box>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 17 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: { xs: 16, sm: 17 } }}>
               Create Purchase Order
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5 }}>
+            <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.85)", fontSize: { xs: 12, sm: 12.5 } }}>
               For the selected shortfall items
             </Typography>
           </Box>
         </Box>
-        <IconButton onClick={onCancel} disabled={committing} sx={{ color: "#fff" }} aria-label="Close">
+        <IconButton onClick={onCancel} disabled={committing} sx={{ color: "#fff", flexShrink: 0 }} aria-label="Close">
           <CloseIcon />
         </IconButton>
       </Box>
 
-      <DialogContent sx={{ p: 3, bgcolor: "#F8FAFC" }}>
+      <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: "#F8FAFC" }}>
         {isPreparing && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
             <CircularProgress size={28} />
@@ -224,7 +232,7 @@ export default function CreatePoDialog({
             </Box>
 
             <Typography sx={{ fontWeight: 700, mb: 1 }}>Line Items</Typography>
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: "12px", mb: 2 }}>
+            <TableContainer component={Paper} variant="outlined" sx={[{ borderRadius: "12px", mb: 2 }, stackedTableSx]}>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
@@ -259,8 +267,8 @@ export default function CreatePoDialog({
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell align="right">{line.neededQuantity}</TableCell>
-                        <TableCell align="right">
+                        <TableCell align="right" data-label="Needed Qty">{line.neededQuantity}</TableCell>
+                        <TableCell align="right" data-label="Order Qty">
                           <TextField
                             type="number"
                             size="small"
@@ -283,7 +291,7 @@ export default function CreatePoDialog({
                             sx={{ bgcolor: "#fff", borderRadius: "8px", width: 90 }}
                           />
                         </TableCell>
-                        <TableCell align="right">
+                        <TableCell align="right" data-label="Unit Price">
                           <TextField
                             type="number"
                             size="small"
@@ -295,8 +303,8 @@ export default function CreatePoDialog({
                             sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
                           />
                         </TableCell>
-                        <TableCell align="right">{lineTotal.toFixed(2)}</TableCell>
-                        <TableCell>
+                        <TableCell align="right" data-label="Line Total">{lineTotal.toFixed(2)}</TableCell>
+                        <TableCell data-label="Tax Type">
                           <TextField
                             select
                             size="small"
@@ -316,7 +324,7 @@ export default function CreatePoDialog({
                             ))}
                           </TextField>
                         </TableCell>
-                        <TableCell align="right">
+                        <TableCell align="right" data-label="Tax %">
                           <TextField
                             type="number"
                             size="small"
@@ -327,8 +335,8 @@ export default function CreatePoDialog({
                             sx={{ bgcolor: "#fff", borderRadius: "8px", width: 80 }}
                           />
                         </TableCell>
-                        <TableCell align="right">{taxAmount.toFixed(2)}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                        <TableCell align="right" data-label="Tax Amt">{taxAmount.toFixed(2)}</TableCell>
+                        <TableCell align="right" data-label="Total" sx={{ fontWeight: 600 }}>
                           {(lineTotal + taxAmount).toFixed(2)}
                         </TableCell>
                       </TableRow>
@@ -339,7 +347,7 @@ export default function CreatePoDialog({
             </TableContainer>
 
             <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
-              <Box sx={{ minWidth: 220 }}>
+              <Box sx={{ minWidth: { xs: "100%", sm: 220 } }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
                   <Typography sx={{ fontSize: 13.5, color: "#64748B" }}>Sub Total</Typography>
                   <Typography sx={{ fontSize: 13.5 }}>{subTotal.toFixed(2)}</Typography>
@@ -364,7 +372,7 @@ export default function CreatePoDialog({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC" }}>
+      <DialogActions sx={{ px: 3, py: 2, bgcolor: "#F8FAFC", ...fullScreenDialogActionsSx }}>
         <Button
           onClick={onCancel}
           disabled={committing}

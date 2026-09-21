@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { Box, Typography, keyframes } from "@mui/material";
+import { CAN_HOVER } from "./common/responsive";
 
 export const STATUS_COLORS: Record<string, string> = {
   Planned: "#6366F1",
@@ -47,11 +48,13 @@ function StatusChip({
         boxShadow: `0 2px 8px ${color}15`,
         backdropFilter: "blur(6px)",
         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-        "&:hover": {
-          backgroundColor: `${color}20`,
-          borderColor: `${color}55`,
-          transform: "translateY(-1px)",
-          boxShadow: `0 4px 12px ${color}25`,
+        [CAN_HOVER]: {
+          "&:hover": {
+            backgroundColor: `${color}20`,
+            borderColor: `${color}55`,
+            transform: "translateY(-1px)",
+            boxShadow: `0 4px 12px ${color}25`,
+          },
         },
       }}
     >

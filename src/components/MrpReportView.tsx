@@ -18,6 +18,7 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import StatusChip from "./StatusChip";
 import FoodProductionLoader from "./FoodProductionLoader";
+import { CAN_HOVER, PHONE, stackedTableSx } from "./common/responsive";
 import type { MrpDetailData, MrpRow, ProductionTargetRow } from "../types";
 
 interface MrpReportViewProps {
@@ -45,12 +46,12 @@ export default function MrpReportView({
   const inStockCount = totalRawItems - needsPurchaseCount;
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 2.5, sm: 3 } }}>
       {/* Header Banner */}
       <Paper
         elevation={0}
         sx={{
-          p: { xs: 2, sm: 2.5 },
+          p: { xs: 1.75, sm: 2.5 },
           borderRadius: "18px",
           boxShadow: "0 10px 30px rgba(37, 99, 235, 0.08)",
           border: "1px solid rgba(255, 255, 255, 0.85)",
@@ -63,11 +64,12 @@ export default function MrpReportView({
           gap: 2,
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
           <Box
             sx={{
               width: 44,
               height: 44,
+              flexShrink: 0,
               borderRadius: "12px",
               background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
               color: "#fff",
@@ -79,7 +81,7 @@ export default function MrpReportView({
           >
             <AssignmentTurnedInIcon sx={{ fontSize: 24 }} />
           </Box>
-          <Box>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="h6" sx={{ fontWeight: 800, color: "#0F172A", lineHeight: 1.2, fontSize: { xs: "1.05rem", sm: "1.2rem" } }}>
               Material Requirement &amp; Planning Report
             </Typography>
@@ -113,16 +115,17 @@ export default function MrpReportView({
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
-          gap: 2,
+          gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" },
+          gap: { xs: 1.5, sm: 2 },
         }}
       >
         <MetricCard label="MRP ID" value={mrpRecord.mrpId} highlight />
         <MetricCard label="MRP Date" value={mrpRecord.date || "—"} />
-        <MetricCard label="Production Target" value={productionTarget.productionTargetId} />
+        <MetricCard label="Production Target" value={productionTarget.productionTargetId} wideOnPhone />
         <MetricCard
           label="Target Status"
           valueNode={<StatusChip value={productionTarget.status} />}
+          wideOnPhone
         />
       </Box>
 
@@ -229,7 +232,9 @@ export default function MrpReportView({
               sx={{
                 borderRadius: "12px",
                 borderColor: "rgba(148,163,184,0.25)",
-                overflow: "hidden",
+                // "auto", not "hidden" — see TABLE_CONTAINER_SX in ProductionOverview.
+                overflowX: "auto",
+                WebkitOverflowScrolling: "touch",
               }}
             >
               <Table size="small">
@@ -342,11 +347,16 @@ export default function MrpReportView({
             <TableContainer
               component={Paper}
               variant="outlined"
-              sx={{
-                borderRadius: "12px",
-                borderColor: "rgba(148,163,184,0.25)",
-                overflow: "hidden",
-              }}
+              sx={[
+                {
+                  borderRadius: "12px",
+                  borderColor: "rgba(148,163,184,0.25)",
+                  overflowX: "auto",
+                  WebkitOverflowScrolling: "touch",
+                },
+                // 7 columns: each raw material becomes a labelled card on phones.
+                stackedTableSx,
+              ]}
             >
               <Table size="small">
                 <TableHead>
@@ -383,25 +393,36 @@ export default function MrpReportView({
                             "&:hover": {
                               bgcolor: isShortfall ? "rgba(254, 242, 242, 0.7)" : "#F8FAFC",
                             },
+                            // As a phone card the row keeps its "short on stock" tint
+                            // ("&&" outranks the stacked-card white).
+                            ...(isShortfall
+                              ? {
+                                  [PHONE]: {
+                                    "&&": { bgcolor: "#FEF2F2", borderColor: "rgba(239, 68, 68, 0.28)" },
+                                  },
+                                }
+                              : {}),
                           }}
                         >
                           <TableCell sx={{ fontWeight: 600, color: "#1E293B" }}>
                             {rm.productName}
                           </TableCell>
-                          <TableCell sx={{ color: "#64748B" }}>{rm.uom}</TableCell>
-                          <TableCell align="right" sx={{ color: "#334155" }}>
+                          <TableCell data-label="UOM" sx={{ color: "#64748B" }}>{rm.uom}</TableCell>
+                          <TableCell data-label="Stock On Hand" align="right" sx={{ color: "#334155" }}>
                             {rm.stockOnHand.toFixed(2)}
                           </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 600, color: "#1E293B" }}>
+                          <TableCell data-label="Stock Required" align="right" sx={{ fontWeight: 600, color: "#1E293B" }}>
                             {rm.stockRequired.toFixed(2)}
                           </TableCell>
                           <TableCell
+                            data-label="Allocate Qty"
                             align="right"
                             sx={{ color: rm.allocateQuantity > 0 ? "#059669" : "#64748B" }}
                           >
                             {rm.allocateQuantity.toFixed(2)}
                           </TableCell>
                           <TableCell
+                            data-label="Needed Qty"
                             align="right"
                             sx={{
                               fontWeight: rm.neededQuantity > 0 ? 700 : 400,
@@ -410,7 +431,7 @@ export default function MrpReportView({
                           >
                             {rm.neededQuantity.toFixed(2)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell data-label="Status">
                             <StatusChip value={rm.status} />
                           </TableCell>
                         </TableRow>
@@ -438,17 +459,22 @@ function MetricCard({
   value,
   valueNode,
   highlight = false,
+  wideOnPhone = false,
 }: {
   label: string;
   value?: string;
   valueNode?: React.ReactNode;
   highlight?: boolean;
+  // Span the phone grid's two columns — a status chip won't fit in half.
+  wideOnPhone?: boolean;
 }) {
   return (
     <Paper
       variant="outlined"
       sx={{
-        p: { xs: 1.75, sm: 2.25 },
+        p: { xs: 1.5, sm: 2.25 },
+        minWidth: 0,
+        gridColumn: wideOnPhone ? { xs: "1 / -1", md: "auto" } : undefined,
         borderRadius: "16px",
         bgcolor: highlight ? "rgba(239, 246, 255, 0.75)" : "rgba(255,255,255,0.70)",
         backdropFilter: "blur(12px)",
@@ -457,10 +483,12 @@ function MetricCard({
           ? "0 6px 22px rgba(37, 99, 235, 0.12)"
           : "0 4px 16px rgba(30, 58, 138, 0.04)",
         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: "0 12px 30px rgba(37, 99, 235, 0.12)",
-          borderColor: highlight ? "rgba(37,99,235,0.5)" : "rgba(37,99,235,0.3)",
+        [CAN_HOVER]: {
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow: "0 12px 30px rgba(37, 99, 235, 0.12)",
+            borderColor: highlight ? "rgba(37,99,235,0.5)" : "rgba(37,99,235,0.3)",
+          },
         },
       }}
     >

@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Box, Typography, IconButton, Chip, Stack, Paper } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { ProductionTargetRow } from '../types';
+import { CAN_HOVER } from './common/responsive';
 
 interface ProjectHeaderProps {
   record: ProductionTargetRow;
@@ -30,8 +31,10 @@ function ProgressDonut({ value, size = 82 }: { value: number; size?: number }) {
   const offset = circumference - (Math.min(Math.max(value, 0), 100) / 100) * circumference;
 
   return (
-    <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    // The SVG scales with its box (viewBox stays `size`-based), so the ring
+    // can shrink on phones without recomputing any geometry.
+    <Box sx={{ position: 'relative', width: { xs: 62, sm: size }, height: { xs: 62, sm: size }, flexShrink: 0 }}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -67,10 +70,20 @@ function ProgressDonut({ value, size = 82 }: { value: number; size?: number }) {
           flexDirection: 'column',
         }}
       >
-        <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: { xs: 16, sm: 18 }, lineHeight: 1 }}>
+        <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: { xs: 15, sm: 18 }, lineHeight: 1 }}>
           {value}%
         </Typography>
-        <Typography sx={{ color: 'rgba(255,255,255,0.75)', fontSize: 9.5, fontWeight: 600, mt: 0.25, letterSpacing: '0.04em' }}>
+        {/* 9.5px caption is illegible inside the smaller phone ring */}
+        <Typography
+          sx={{
+            display: { xs: 'none', sm: 'block' },
+            color: 'rgba(255,255,255,0.75)',
+            fontSize: 9.5,
+            fontWeight: 600,
+            mt: 0.25,
+            letterSpacing: '0.04em',
+          }}
+        >
           PROGRESS
         </Typography>
       </Box>
@@ -88,8 +101,8 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
         position: 'relative',
         overflow: 'hidden',
         borderRadius: '22px',
-        px: { xs: 2.5, sm: 3.5, md: 4 },
-        py: { xs: 2.5, sm: 3, md: 3.5 },
+        px: { xs: 2, sm: 3.5, md: 4 },
+        py: { xs: 2, sm: 3, md: 3.5 },
         background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 40%, #2563eb 75%, #0ea5e9 100%)',
         border: '1px solid rgba(255, 255, 255, 0.22)',
         color: '#fff',
@@ -141,30 +154,39 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
         }}
       />
 
+      {/* One row at every width — the ring used to drop under the title on
+          phones and the unwrappable notes line pushed the row wider than
+          the screen. minWidth:0 lets the text column shrink and wrap. */}
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        direction="row"
+        alignItems="center"
         justifyContent="space-between"
-        spacing={{ xs: 2, sm: 3 }}
+        spacing={{ xs: 1.5, sm: 3 }}
         sx={{ position: 'relative', zIndex: 1, width: '100%' }}
       >
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 0, flex: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={{ xs: 1.5, sm: 2 }} sx={{ minWidth: 0, flex: 1 }}>
           <IconButton
             onClick={onBack}
             aria-label="Go back"
             sx={{
+              flexShrink: 0,
+              width: { xs: 44, sm: 40 },
+              height: { xs: 44, sm: 40 },
               color: '#fff',
               bgcolor: 'rgba(255, 255, 255, 0.14)',
               backdropFilter: 'blur(10px)',
               border: '1px solid rgba(255, 255, 255, 0.22)',
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-              '&:hover': {
-                bgcolor: 'rgba(255, 255, 255, 0.26)',
-                transform: 'translateX(-3px) scale(1.04)',
-                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
+              [CAN_HOVER]: {
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.26)',
+                  transform: 'translateX(-3px) scale(1.04)',
+                  boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
+                },
               },
               '&:active': {
                 transform: 'scale(0.96)',
+                bgcolor: 'rgba(255, 255, 255, 0.26)',
               },
               transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
@@ -199,8 +221,10 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
                   boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
                   px: 0.5,
                   transition: 'transform 0.2s ease',
-                  '&:hover': {
-                    transform: 'scale(1.04)',
+                  [CAN_HOVER]: {
+                    '&:hover': {
+                      transform: 'scale(1.04)',
+                    },
                   },
                 }}
               />
@@ -224,13 +248,17 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
                 variant="caption"
                 sx={{
                   color: 'rgba(255, 255, 255, 0.65)',
-                  display: 'block',
                   mt: 0.5,
                   maxWidth: 560,
+                  // One ellipsised line on wider screens (as before); two
+                  // lines on phones so the note stays readable instead of
+                  // being cut mid-word.
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
+                  display: '-webkit-box',
+                  WebkitBoxOrient: 'vertical',
+                  WebkitLineClamp: { xs: 2, sm: 1 },
                   fontSize: 11.5,
+                  lineHeight: 1.4,
                 }}
               >
                 {record.notes}
@@ -239,7 +267,7 @@ function ProjectHeader({ record, progressPercent, onBack }: ProjectHeaderProps) 
           </Box>
         </Stack>
 
-        <Box sx={{ alignSelf: { xs: 'flex-end', sm: 'center' } }}>
+        <Box sx={{ flexShrink: 0 }}>
           <ProgressDonut value={progressPercent} size={82} />
         </Box>
       </Stack>
