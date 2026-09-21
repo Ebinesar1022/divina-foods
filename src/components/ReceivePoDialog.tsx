@@ -19,6 +19,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import PoReceiveLoader from "./loaders/PoReceiveLoader";
 import {
   fullScreenDialogActionsSx,
   fullScreenDialogPaperSx,
@@ -109,6 +110,7 @@ export default function ReceivePoDialog({
       maxWidth="md"
       PaperProps={{
         sx: {
+          position: "relative",
           borderRadius: "22px",
           overflow: "hidden",
           boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
@@ -314,6 +316,31 @@ export default function ReceivePoDialog({
           {committing ? "Receiving…" : `Confirm Receipt${selectedCount ? ` (${selectedCount})` : ""}`}
         </Button>
       </DialogActions>
+
+      {committing && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 100,
+            bgcolor: "rgba(240, 253, 244, 0.97)",
+            backdropFilter: "blur(14px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            p: { xs: 1.5, sm: 3 },
+            overflowY: "auto",
+            animation: "receiveOverlayFadeIn 0.25s ease-out",
+            "@keyframes receiveOverlayFadeIn": {
+              from: { opacity: 0, transform: "scale(0.98)" },
+              to: { opacity: 1, transform: "scale(1)" },
+            },
+          }}
+        >
+          <PoReceiveLoader poNumber={poNumber} itemCount={selectedCount} />
+        </Box>
+      )}
     </Dialog>
   );
 }

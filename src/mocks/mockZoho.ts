@@ -246,7 +246,11 @@ export function installMockZoho() {
         addRecords(params: { form_name: string; payload: { data: any } }) {
           const newId = String(Date.now());
           const record = { ID: newId, ...params.payload.data };
-          return Promise.resolve({ code: 3000, data: record });
+          return new Promise(function (resolve) {
+            setTimeout(function () {
+              resolve({ code: 3000, data: record });
+            }, 4000);
+          });
         },
         updateRecordById(params: { report_name: string; id: string; payload: { data: any } }) {
           const rows = REPORT_DATA[params.report_name] || [];

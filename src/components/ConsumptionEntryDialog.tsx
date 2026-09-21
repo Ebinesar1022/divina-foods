@@ -24,6 +24,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import FoodProductionLoader from "./FoodProductionLoader";
+import ConsumptionLoader from "./loaders/ConsumptionLoader";
 import { generateNextBatchNumber } from "../services/productionApi";
 import {
   fullScreenDialogActionsSx,
@@ -140,6 +141,7 @@ export default function ConsumptionEntryDialog({
       maxWidth="md"
       PaperProps={{
         sx: {
+          position: "relative",
           borderRadius: "22px",
           overflow: "hidden",
           boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
@@ -453,6 +455,31 @@ export default function ConsumptionEntryDialog({
           {committing ? "Completing…" : "Complete Production"}
         </Button>
       </DialogActions>
+
+      {committing && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 100,
+            bgcolor: "rgba(240, 253, 244, 0.97)",
+            backdropFilter: "blur(14px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            p: { xs: 1.5, sm: 3 },
+            overflowY: "auto",
+            animation: "dialogOverlayFadeIn 0.25s ease-out",
+            "@keyframes dialogOverlayFadeIn": {
+              from: { opacity: 0, transform: "scale(0.98)" },
+              to: { opacity: 1, transform: "scale(1)" },
+            },
+          }}
+        >
+          <ConsumptionLoader />
+        </Box>
+      )}
     </Dialog>
   );
 }
