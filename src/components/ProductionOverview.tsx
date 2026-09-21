@@ -3000,7 +3000,8 @@ function BatchAllocationSummary({
 }) {
   const [pdfSnackbar, setPdfSnackbar] = useState<{
     message: string;
-    severity: "success" | "error";
+    severity: "success" | "error" | "info";
+    autoHideMs?: number;
   } | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
@@ -3070,12 +3071,33 @@ function BatchAllocationSummary({
     // else's initial bundle (same reasoning as the lazy dialogs above).
     import("../utils/batchAllocationPdf")
       .then(function (mod) {
-        mod.downloadBatchAllocationPdf({
+        return mod.downloadBatchAllocationPdf({
           productionTarget,
           mrpRecord,
           groups,
           finishedGoods,
         });
+      })
+      .then(function (delivery) {
+        if (delivery === "cancelled") return;
+        if (delivery === "shared") {
+          setPdfSnackbar({
+            message: "Batch allocation PDF is ready.",
+            severity: "success",
+          });
+          return;
+        }
+        // A plain download can't be confirmed from inside a mobile webview
+        // (the host app may ignore it), so don't claim success there.
+        if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          setPdfSnackbar({
+            message:
+              "PDF requested. If nothing was saved, open this page in your phone's browser (e.g. Chrome) and download it from there.",
+            severity: "info",
+            autoHideMs: 9000,
+          });
+          return;
+        }
         setPdfSnackbar({
           message: "Batch allocation PDF is Downloading.",
           severity: "success",
@@ -3178,6 +3200,7 @@ function BatchAllocationSummary({
         onClose={() => setPdfSnackbar(null)}
         severity={pdfSnackbar?.severity || "success"}
         message={pdfSnackbar?.message || ""}
+        autoHideDuration={pdfSnackbar?.autoHideMs}
       />
     </Paper>
   );

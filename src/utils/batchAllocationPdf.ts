@@ -89,7 +89,7 @@ export function downloadBatchAllocationPdf(params: {
   mrpRecord: MrpRow | null;
   groups: BatchAllocationPdfGroup[];
   finishedGoods: FinishedGoodTargetRow[];
-}): void {
+}): Promise<PdfDelivery> {
   const { productionTarget, mrpRecord, groups, finishedGoods } = params;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -435,19 +435,65 @@ export function downloadBatchAllocationPdf(params: {
   const safeId = (productionTarget.productionTargetId || "Report").replace(/[^\w-]+/g, "_");
   const filename = `Batch_Allocation_${safeId}.pdf`;
 
-  // `doc.save()` is unreliable in mobile browsers and embedded webviews.
-  // A Blob URL download works on Android; iOS opens the PDF in a separate
-  // tab so the user can save or share it without leaving this application.
-  const pdfUrl = URL.createObjectURL(doc.output("blob"));
+  return deliverPdf(doc.output("blob"), filename);
+}
+
+// How the PDF left the widget. "download" only means a download was
+// *requested* — a webview gives the page no way to learn whether its host
+// app actually saved the file, so callers must not present it as confirmed.
+export type PdfDelivery = "shared" | "cancelled" | "download";
+
+function isAndroid(): boolean {
+  return /Android/i.test(navigator.userAgent);
+}
+
+function deliverPdf(blob: Blob, filename: string): Promise<PdfDelivery> {
+  // Embedded webviews (the Creator mobile app) hand a Blob download to the
+  // host app, which frequently ignores `blob:` URLs, so the click silently
+  // does nothing. The share sheet is handled by the OS instead, so use it
+  // whenever the webview exposes it and can share a PDF file.
+  const nav = navigator as Navigator & {
+    canShare?: (data: { files?: File[] }) => boolean;
+  };
+  let file: File | null = null;
+  try {
+    file = new File([blob], filename, { type: "application/pdf" });
+  } catch {
+    // Very old webviews have no File constructor — use the download path.
+  }
+
+  if (file && typeof nav.share === "function" && typeof nav.canShare === "function" && nav.canShare({ files: [file] })) {
+    return nav
+      .share({ files: [file], title: filename })
+      .then(function (): PdfDelivery {
+        return "shared";
+      })
+      .catch(function (err: unknown): PdfDelivery {
+        // Dismissing the share sheet is the user's choice, not a failure.
+        if (err && (err as { name?: string }).name === "AbortError") return "cancelled";
+        return downloadViaAnchor(blob, filename);
+      });
+  }
+
+  return Promise.resolve(downloadViaAnchor(blob, filename));
+}
+
+function downloadViaAnchor(blob: Blob, filename: string): PdfDelivery {
+  const pdfUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = pdfUrl;
   link.download = filename;
-  link.target = "_blank";
   link.rel = "noopener";
+  // iOS shows the PDF in a separate tab so it can be saved or shared from
+  // there. On Android a webview usually can't open a new window, which
+  // makes `target="_blank"` drop the click entirely — let the `download`
+  // attribute alone route it to the host app's download handler.
+  if (!isAndroid()) link.target = "_blank";
   document.body.appendChild(link);
   link.click();
   link.remove();
 
   // Mobile PDF viewers may start reading the Blob after the click event.
   window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+  return "download";
 }
