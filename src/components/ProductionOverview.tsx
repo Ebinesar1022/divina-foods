@@ -1,4 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Box,
   Tab,
@@ -19,6 +27,7 @@ import {
   IconButton,
   Tooltip,
   Chip,
+  CircularProgress,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -89,7 +98,9 @@ import type {
 } from "../types";
 
 const CreateMrpDialog = lazy(() => import("./CreateMrpDialog"));
-const InitiateProductionDialog = lazy(() => import("./InitiateProductionDialog"));
+const InitiateProductionDialog = lazy(
+  () => import("./InitiateProductionDialog"),
+);
 const ConsumptionEntryDialog = lazy(() => import("./ConsumptionEntryDialog"));
 const CreatePoDialog = lazy(() => import("./CreatePoDialog"));
 const ReceivePoDialog = lazy(() => import("./ReceivePoDialog"));
@@ -235,13 +246,16 @@ export default function ProductionOverview({
   // AllocateAndCommitBatch call — only lives in this component's state
   // (no persistent record is created for it), so it's populated right
   // after Start Production and shown for the rest of this session.
-  const [batchAllocations, setBatchAllocations] = useState<BatchAllocationLine[]>([]);
+  const [batchAllocations, setBatchAllocations] = useState<
+    BatchAllocationLine[]
+  >([]);
 
   // Complete Production: dialog prefilled from the Production Target's own
   // finished goods + the MRP's allocated raw materials (mirrors the native
   // "Complete Production" custom action, which opens this same form).
   const [consumptionDialogOpen, setConsumptionDialogOpen] = useState(false);
-  const [consumptionDraft, setConsumptionDraft] = useState<ConsumptionEntryDraft | null>(null);
+  const [consumptionDraft, setConsumptionDraft] =
+    useState<ConsumptionEntryDraft | null>(null);
   const [consumptionDraftError, setConsumptionDraftError] = useState("");
   const [consumptionCommitError, setConsumptionCommitError] = useState("");
   const [consumptionCommitting, setConsumptionCommitting] = useState(false);
@@ -249,9 +263,13 @@ export default function ProductionOverview({
   const committingConsumptionRef = useRef(false);
 
   // Procurement: select shortfall items → Create Purchase Order.
-  const [selectedNonStockItemIds, setSelectedNonStockItemIds] = useState<string[]>([]);
+  const [selectedNonStockItemIds, setSelectedNonStockItemIds] = useState<
+    string[]
+  >([]);
   const [createPoDialogOpen, setCreatePoDialogOpen] = useState(false);
-  const [createPoDraft, setCreatePoDraft] = useState<CreatePoDraft | null>(null);
+  const [createPoDraft, setCreatePoDraft] = useState<CreatePoDraft | null>(
+    null,
+  );
   const [createPoDraftError, setCreatePoDraftError] = useState("");
   const [createPoCommitError, setCreatePoCommitError] = useState("");
   const [createPoCommitting, setCreatePoCommitting] = useState(false);
@@ -273,7 +291,8 @@ export default function ProductionOverview({
   // was the last outstanding PO for this MRP (every PO's derived status is
   // now "Received") — the natural moment to suggest re-checking stock,
   // since procurement for this run is fully done.
-  const [postReceiveCheckPromptOpen, setPostReceiveCheckPromptOpen] = useState(false);
+  const [postReceiveCheckPromptOpen, setPostReceiveCheckPromptOpen] =
+    useState(false);
   // Shared success snackbar for every other commit action (Create MRP,
   // Start Production, Create PO, Receive PO, Complete Production) — each
   // is a distinct user-initiated action so there's never more than one
@@ -283,8 +302,12 @@ export default function ProductionOverview({
 
   // Procurement: Receive a Purchase Order.
   const [receivePoDialogOpen, setReceivePoDialogOpen] = useState(false);
-  const [receivingPo, setReceivingPo] = useState<PurchaseOrderDetail | null>(null);
-  const [receivePoDraft, setReceivePoDraft] = useState<ReceivePoDraft | null>(null);
+  const [receivingPo, setReceivingPo] = useState<PurchaseOrderDetail | null>(
+    null,
+  );
+  const [receivePoDraft, setReceivePoDraft] = useState<ReceivePoDraft | null>(
+    null,
+  );
   const [receivePoDraftError, setReceivePoDraftError] = useState("");
   const [receivePoCommitError, setReceivePoCommitError] = useState("");
   const [receivePoCommitting, setReceivePoCommitting] = useState(false);
@@ -309,11 +332,14 @@ export default function ProductionOverview({
       // it's there for any run that already started.
       if (
         result.record &&
-        (result.record.status === "In Progress" || result.record.status === "Completed")
+        (result.record.status === "In Progress" ||
+          result.record.status === "Completed")
       ) {
-        fetchBatchAllocationsForProductionTarget(result.record.id).then(function (allocations) {
-          setBatchAllocations(allocations);
-        });
+        fetchBatchAllocationsForProductionTarget(result.record.id).then(
+          function (allocations) {
+            setBatchAllocations(allocations);
+          },
+        );
       }
     });
   }, [productionTargetId]);
@@ -444,14 +470,20 @@ export default function ProductionOverview({
     setPoCommitError("");
     const productionTargetRecordId = data.record.id;
     Promise.all([
-      startProduction(productionTargetRecordId, { startDate, endDate, assignedToId }),
+      startProduction(productionTargetRecordId, {
+        startDate,
+        endDate,
+        assignedToId,
+      }),
       allocateAndCommitBatch(productionTargetRecordId),
     ])
       .then(function () {
         // Read the FEFO_Batch_Allocation record AllocateAndCommitBatch just
         // wrote, rather than trying to parse its own response — that's also
         // what makes this breakdown survive a page reload later.
-        return fetchBatchAllocationsForProductionTarget(productionTargetRecordId);
+        return fetchBatchAllocationsForProductionTarget(
+          productionTargetRecordId,
+        );
       })
       .then(function (allocations) {
         setBatchAllocations(allocations);
@@ -485,13 +517,18 @@ export default function ProductionOverview({
     setConsumptionDraft(null);
     setConsumptionDraftError("");
     setConsumptionCommitError("");
-    prepareConsumptionDraft(data.record.id, productionTargetId, data.mrpRecord?.id || "")
+    prepareConsumptionDraft(
+      data.record.id,
+      productionTargetId,
+      data.mrpRecord?.id || "",
+    )
       .then(function (draft) {
         setConsumptionDraft(draft);
       })
       .catch(function (err: any) {
         setConsumptionDraftError(
-          (err && err.message) || "Failed to prepare the consumption entry. Please try again.",
+          (err && err.message) ||
+            "Failed to prepare the consumption entry. Please try again.",
         );
       })
       .finally(function () {
@@ -542,14 +579,21 @@ export default function ProductionOverview({
             // the refresh path fails temporarily. We still update the current
             // page with the confirmed entry so the user is not left looking at
             // stale data.
-            console.error("Failed to refresh production overview after completing production.", refreshErr);
+            console.error(
+              "Failed to refresh production overview after completing production.",
+              refreshErr,
+            );
             setData(function (prev) {
               if (!prev) return prev;
               const nextEntries =
-                prev.consumptionEntries && prev.consumptionEntries.length ? prev.consumptionEntries : [newEntry];
+                prev.consumptionEntries && prev.consumptionEntries.length
+                  ? prev.consumptionEntries
+                  : [newEntry];
               return {
                 ...prev,
-                record: prev.record ? { ...prev.record, status: "Completed" } : prev.record,
+                record: prev.record
+                  ? { ...prev.record, status: "Completed" }
+                  : prev.record,
                 consumptionEntries: nextEntries,
               };
             });
@@ -560,7 +604,8 @@ export default function ProductionOverview({
       })
       .catch(function (err: any) {
         setConsumptionCommitError(
-          (err && err.message) || "Failed to complete production. Please try again.",
+          (err && err.message) ||
+            "Failed to complete production. Please try again.",
         );
       })
       .finally(function () {
@@ -582,7 +627,9 @@ export default function ProductionOverview({
   // every currently-visible needsPurchaseItems row.
   function handleToggleSelectAllNonStockItems() {
     setSelectedNonStockItemIds((prev) =>
-      prev.length === needsPurchaseItems.length ? [] : needsPurchaseItems.map((item) => item.id),
+      prev.length === needsPurchaseItems.length
+        ? []
+        : needsPurchaseItems.map((item) => item.id),
     );
   }
 
@@ -611,7 +658,10 @@ export default function ProductionOverview({
         setTaxTypes(results[3]);
       })
       .catch(function (err: any) {
-        setCreatePoDraftError((err && err.message) || "Failed to prepare the Purchase Order. Please try again.");
+        setCreatePoDraftError(
+          (err && err.message) ||
+            "Failed to prepare the Purchase Order. Please try again.",
+        );
       })
       .finally(function () {
         preparingCreatePoRef.current = false;
@@ -634,9 +684,11 @@ export default function ProductionOverview({
     setCreatePoCommitError("");
     commitCreatePo(createPoDraft)
       .then(function () {
-        return fetchProductionOverview(productionTargetId).then(function (result) {
-          setData(result);
-        });
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            setData(result);
+          },
+        );
       })
       .then(function () {
         setCreatePoDialogOpen(false);
@@ -645,7 +697,10 @@ export default function ProductionOverview({
         setSuccessMessage("Purchase Order created successfully.");
       })
       .catch(function (err: any) {
-        setCreatePoCommitError((err && err.message) || "Failed to create the Purchase Order. Please try again.");
+        setCreatePoCommitError(
+          (err && err.message) ||
+            "Failed to create the Purchase Order. Please try again.",
+        );
       })
       .finally(function () {
         committingCreatePoRef.current = false;
@@ -661,34 +716,38 @@ export default function ProductionOverview({
     setCheckStockError("");
     checkStockForMrp(data.mrpRecord.id)
       .then(function () {
-        return fetchProductionOverview(productionTargetId).then(function (result) {
-          setData(result);
-          // Items with no PO raised yet — let the user pick them and raise
-          // one, same as before.
-          const needsPurchase = (result.nonStockItems || []).filter(
-            (item) => item.status === "Needs Purchase"
-          );
-          if (needsPurchase.length > 0) {
-            setStockShortItems(needsPurchase);
-            setStockStillShortOpen(true);
-            return;
-          }
-          // Everything already has a PO raised, so there's nothing left to
-          // select — but Non_Stock_Items.Status stays "PO Created" forever
-          // and never reflects whether the goods actually arrived.
-          // Production_Target.Status is what MRP.CheckStock just
-          // re-validated and (now that its Production_Targets[ID==...]
-          // lookup correctly uses .ID) actually updates, so it's the
-          // authoritative "is this genuinely resolved" signal here.
-          if (result.record && result.record.status === "Waiting for Stock") {
-            setCheckStockWarningOpen(true);
-          } else {
-            setCheckStockSuccessOpen(true);
-          }
-        });
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            setData(result);
+            // Items with no PO raised yet — let the user pick them and raise
+            // one, same as before.
+            const needsPurchase = (result.nonStockItems || []).filter(
+              (item) => item.status === "Needs Purchase",
+            );
+            if (needsPurchase.length > 0) {
+              setStockShortItems(needsPurchase);
+              setStockStillShortOpen(true);
+              return;
+            }
+            // Everything already has a PO raised, so there's nothing left to
+            // select — but Non_Stock_Items.Status stays "PO Created" forever
+            // and never reflects whether the goods actually arrived.
+            // Production_Target.Status is what MRP.CheckStock just
+            // re-validated and (now that its Production_Targets[ID==...]
+            // lookup correctly uses .ID) actually updates, so it's the
+            // authoritative "is this genuinely resolved" signal here.
+            if (result.record && result.record.status === "Waiting for Stock") {
+              setCheckStockWarningOpen(true);
+            } else {
+              setCheckStockSuccessOpen(true);
+            }
+          },
+        );
       })
       .catch(function (err: any) {
-        setCheckStockError((err && err.message) || "Failed to check stock. Please try again.");
+        setCheckStockError(
+          (err && err.message) || "Failed to check stock. Please try again.",
+        );
       })
       .finally(function () {
         checkingStockRef.current = false;
@@ -709,7 +768,10 @@ export default function ProductionOverview({
         setReceivePoDraft(draft);
       })
       .catch(function (err: any) {
-        setReceivePoDraftError((err && err.message) || "Failed to prepare the receipt. Please try again.");
+        setReceivePoDraftError(
+          (err && err.message) ||
+            "Failed to prepare the receipt. Please try again.",
+        );
       })
       .finally(function () {
         preparingReceivePoRef.current = false;
@@ -733,18 +795,22 @@ export default function ProductionOverview({
     setReceivePoCommitError("");
     commitReceivePo(receivePoDraft)
       .then(function () {
-        return fetchProductionOverview(productionTargetId).then(function (result) {
-          setData(result);
-          // Every PO for this MRP is now fully received — procurement for
-          // this run is done, so this is the natural moment to prompt a
-          // fresh stock check rather than leaving the user to remember to
-          // click it themselves.
-          const records = result.procurementRecords || [];
-          const allReceived = records.length > 0 && records.every((po) => po.status === "Received");
-          if (allReceived) {
-            setPostReceiveCheckPromptOpen(true);
-          }
-        });
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            setData(result);
+            // Every PO for this MRP is now fully received — procurement for
+            // this run is done, so this is the natural moment to prompt a
+            // fresh stock check rather than leaving the user to remember to
+            // click it themselves.
+            const records = result.procurementRecords || [];
+            const allReceived =
+              records.length > 0 &&
+              records.every((po) => po.status === "Received");
+            if (allReceived) {
+              setPostReceiveCheckPromptOpen(true);
+            }
+          },
+        );
       })
       .then(function () {
         setReceivePoDialogOpen(false);
@@ -753,7 +819,10 @@ export default function ProductionOverview({
         setSuccessMessage("Purchase Order receipt recorded successfully.");
       })
       .catch(function (err: any) {
-        setReceivePoCommitError((err && err.message) || "Failed to record the receipt. Please try again.");
+        setReceivePoCommitError(
+          (err && err.message) ||
+            "Failed to record the receipt. Please try again.",
+        );
       })
       .finally(function () {
         committingReceivePoRef.current = false;
@@ -810,25 +879,36 @@ export default function ProductionOverview({
           Production Target not found
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          No Production Target matches "{productionTargetId}". It may have been deleted, or the link
-          that opened this page may be out of date.
+          No Production Target matches "{productionTargetId}". It may have been
+          deleted, or the link that opened this page may be out of date.
         </Typography>
       </Box>
     );
   }
 
-  const { record, mrpRecord, procurementRecords, consumptionEntries, finishedGoodsForTarget } = data;
+  const {
+    record,
+    mrpRecord,
+    procurementRecords,
+    consumptionEntries,
+    finishedGoodsForTarget,
+  } = data;
   // Procurement is only truly "skipped" (i.e. all materials were in stock and
   // no POs needed) when the MRP exists, the target is past the procurement
   // stage, AND no Purchase Orders were ever raised for this run. If POs exist,
   // the team went through procurement even if the status has since moved on —
   // show those POs in the Procurement tab and count the stage as done, not
   // skipped, so the pipeline stepper and activity timeline reflect reality.
-  const procurementSkipped = !!mrpRecord && !isProcurementRequired(record.status) && procurementRecords.length === 0;
+  const procurementSkipped =
+    !!mrpRecord &&
+    !isProcurementRequired(record.status) &&
+    procurementRecords.length === 0;
   // Non_Stock_Items is the source of truth here (not Raw_Materials) — once a
   // PO is raised for an item its Status flips to "PO Created" and it drops
   // out of this list, matching the native Non_Stock_Items_Report filter.
-  const needsPurchaseItems = (data.nonStockItems || []).filter((item) => item.status === "Needs Purchase");
+  const needsPurchaseItems = (data.nonStockItems || []).filter(
+    (item) => item.status === "Needs Purchase",
+  );
   const stageKey = stageKeyFromStatus(record.status);
   const currentIndex = stageIndex(stageKey);
   const isFullyComplete = stageKey === "consumption_entry";
@@ -851,13 +931,22 @@ export default function ProductionOverview({
           mt: { xs: 2.5, md: 3 },
         }}
       >
-        <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 2, md: 3 }, minWidth: 0, width: "100%" }}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            gap: { xs: 2, md: 3 },
+            minWidth: 0,
+            width: "100%",
+          }}
+        >
           <Paper
             elevation={0}
             sx={{
               borderRadius: "20px",
               p: { xs: 1, sm: 1.5 },
-              boxShadow: "0 10px 32px rgba(37, 99, 235, 0.07), 0 2px 8px rgba(15, 23, 42, 0.03)",
+              boxShadow:
+                "0 10px 32px rgba(37, 99, 235, 0.07), 0 2px 8px rgba(15, 23, 42, 0.03)",
               border: "1px solid rgba(255, 255, 255, 0.85)",
             }}
           >
@@ -868,13 +957,22 @@ export default function ProductionOverview({
               procurementSkipped={procurementSkipped}
               onStageClick={setActiveTab}
               renderStageExtra={(stageKeyForStage) =>
-                stageKeyForStage === "procurement" && record.status === "Waiting for Stock" ? (
+                stageKeyForStage === "procurement" &&
+                record.status === "Waiting for Stock" ? (
                   <Button
                     variant="contained"
                     size="small"
                     onClick={handleCheckStock}
                     disabled={checkStockRunning || !mrpRecord}
-                    sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 700, fontSize: { xs: 12.5, sm: 11.5 }, px: 1.35, py: 0.35, minWidth: 0 }}
+                    sx={{
+                      borderRadius: "8px",
+                      textTransform: "none",
+                      fontWeight: 700,
+                      fontSize: { xs: 12.5, sm: 11.5 },
+                      px: 1.35,
+                      py: 0.35,
+                      minWidth: 0,
+                    }}
                   >
                     {checkStockRunning ? "Checking…" : "Check Stock"}
                   </Button>
@@ -887,7 +985,8 @@ export default function ProductionOverview({
             elevation={0}
             sx={{
               borderRadius: "20px",
-              boxShadow: "0 12px 35px rgba(37, 99, 235, 0.07), 0 2px 8px rgba(15, 23, 42, 0.03)",
+              boxShadow:
+                "0 12px 35px rgba(37, 99, 235, 0.07), 0 2px 8px rgba(15, 23, 42, 0.03)",
               border: "1px solid rgba(255, 255, 255, 0.85)",
               overflow: "hidden",
             }}
@@ -923,7 +1022,8 @@ export default function ProductionOverview({
                 "& .MuiTabs-indicator": {
                   height: 3.5,
                   borderRadius: "4px 4px 0 0",
-                  background: "linear-gradient(90deg, #2563EB 0%, #3B82F6 100%)",
+                  background:
+                    "linear-gradient(90deg, #2563EB 0%, #3B82F6 100%)",
                   boxShadow: "0 2px 10px rgba(37, 99, 235, 0.45)",
                 },
               }}
@@ -933,13 +1033,28 @@ export default function ProductionOverview({
               ))}
             </Tabs>
 
-            <Box sx={{ p: { xs: 1.5, sm: 2.5, md: 3.5 }, animation: "fadeIn 0.35s ease-out" }} key={activeTab}>
+            <Box
+              sx={{
+                p: { xs: 1.5, sm: 2.5, md: 3.5 },
+                animation: "fadeIn 0.35s ease-out",
+              }}
+              key={activeTab}
+            >
               {activeTab === "overview" && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 2.5, sm: 3 } }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: { xs: 2.5, sm: 3 },
+                  }}
+                >
                   <Box
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" },
+                      gridTemplateColumns: {
+                        xs: "repeat(2, minmax(0, 1fr))",
+                        md: "repeat(4, minmax(0, 1fr))",
+                      },
                       gap: { xs: 1.5, sm: 2 },
                     }}
                   >
@@ -948,7 +1063,11 @@ export default function ProductionOverview({
                       value={record.productionTargetId}
                     />
                     <InfoCard label="Date" value={record.date} />
-                    <InfoCard label="Assigned To" value={record.assignedTo} wideOnPhone />
+                    <InfoCard
+                      label="Assigned To"
+                      value={record.assignedTo}
+                      wideOnPhone
+                    />
                     <InfoCard
                       label="Current Status"
                       valueNode={<StatusChip value={record.status} />}
@@ -958,17 +1077,40 @@ export default function ProductionOverview({
 
                   {finishedGoodsForTarget.length > 0 && (
                     <Box>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
-                        <Inventory2OutlinedIcon sx={{ color: "#2563eb", fontSize: 19 }} />
-                        <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Finished Good</Typography>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          mb: 1.25,
+                        }}
+                      >
+                        <Inventory2OutlinedIcon
+                          sx={{ color: "#2563eb", fontSize: 19 }}
+                        />
+                        <Typography
+                          sx={{
+                            fontWeight: 700,
+                            fontSize: 15,
+                            color: "#0F172A",
+                          }}
+                        >
+                          Finished Good
+                        </Typography>
                       </Box>
-                      <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
+                      <TableContainer
+                        component={Paper}
+                        variant="outlined"
+                        sx={TABLE_CONTAINER_SX}
+                      >
                         <Table size="small">
                           <TableHead>
                             <TableRow sx={TABLE_HEAD_ROW_SX}>
                               <TableCell>Item</TableCell>
                               <TableCell>UOM</TableCell>
-                              <TableCell align="right">Target Quantity</TableCell>
+                              <TableCell align="right">
+                                Target Quantity
+                              </TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -976,7 +1118,9 @@ export default function ProductionOverview({
                               <TableRow key={fg.id} sx={tableRowSx()}>
                                 <TableCell>{fg.itemName}</TableCell>
                                 <TableCell>{fg.uomName}</TableCell>
-                                <TableCell align="right">{fg.targetQuantity}</TableCell>
+                                <TableCell align="right">
+                                  {fg.targetQuantity}
+                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -992,8 +1136,17 @@ export default function ProductionOverview({
                   {mrpRecord ? (
                     <Suspense
                       fallback={
-                        <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                          <FoodProductionLoader size="small" text="Loading MRP details…" />
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "center",
+                            py: 4,
+                          }}
+                        >
+                          <FoodProductionLoader
+                            size="small"
+                            text="Loading MRP details…"
+                          />
                         </Box>
                       }
                     >
@@ -1042,7 +1195,9 @@ export default function ProductionOverview({
                   ) : record.status === "Waiting for Stock" ? (
                     <>
                       <CenteredStateCard
-                        icon={<ShoppingCartOutlinedIcon sx={{ fontSize: 28 }} />}
+                        icon={
+                          <ShoppingCartOutlinedIcon sx={{ fontSize: 28 }} />
+                        }
                         iconBg="#FEF3C7"
                         iconColor="#D97706"
                         title="Procurement Needed"
@@ -1050,16 +1205,44 @@ export default function ProductionOverview({
                       />
 
                       {checkStockError && (
-                        <Typography color="error" sx={{ fontSize: 12.5, textAlign: "center" }}>
+                        <Typography
+                          color="error"
+                          sx={{ fontSize: 12.5, textAlign: "center" }}
+                        >
                           {checkStockError}
                         </Typography>
                       )}
 
                       <Box>
-                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25, flexWrap: "wrap", gap: 1 }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                            <ShoppingCartOutlinedIcon sx={{ color: "#2563eb", fontSize: 19 }} />
-                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Needed Items</Typography>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            mb: 1.25,
+                            flexWrap: "wrap",
+                            gap: 1,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <ShoppingCartOutlinedIcon
+                              sx={{ color: "#2563eb", fontSize: 19 }}
+                            />
+                            <Typography
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: 15,
+                                color: "#0F172A",
+                              }}
+                            >
+                              Needed Items
+                            </Typography>
                           </Box>
                           <Button
                             variant="outlined"
@@ -1067,12 +1250,24 @@ export default function ProductionOverview({
                             startIcon={<ShoppingCartCheckoutIcon />}
                             disabled={!selectedNonStockItemIds.length}
                             onClick={handleOpenCreatePo}
-                            sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600, width: { xs: "100%", sm: "auto" } }}
+                            sx={{
+                              borderRadius: "8px",
+                              textTransform: "none",
+                              fontWeight: 600,
+                              width: { xs: "100%", sm: "auto" },
+                            }}
                           >
-                            Create Purchase Order{selectedNonStockItemIds.length ? ` (${selectedNonStockItemIds.length})` : ""}
+                            Create Purchase Order
+                            {selectedNonStockItemIds.length
+                              ? ` (${selectedNonStockItemIds.length})`
+                              : ""}
                           </Button>
                         </Box>
-                        <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
+                        <TableContainer
+                          component={Paper}
+                          variant="outlined"
+                          sx={TABLE_CONTAINER_SX}
+                        >
                           <Table size="small">
                             <TableHead>
                               <TableRow sx={TABLE_HEAD_ROW_SX}>
@@ -1082,22 +1277,28 @@ export default function ProductionOverview({
                                     aria-label="Select all needed items"
                                     checked={
                                       needsPurchaseItems.length > 0 &&
-                                      selectedNonStockItemIds.length === needsPurchaseItems.length
+                                      selectedNonStockItemIds.length ===
+                                        needsPurchaseItems.length
                                     }
                                     ref={(el) => {
                                       if (el) {
                                         el.indeterminate =
                                           selectedNonStockItemIds.length > 0 &&
-                                          selectedNonStockItemIds.length < needsPurchaseItems.length;
+                                          selectedNonStockItemIds.length <
+                                            needsPurchaseItems.length;
                                       }
                                     }}
-                                    onChange={handleToggleSelectAllNonStockItems}
+                                    onChange={
+                                      handleToggleSelectAllNonStockItems
+                                    }
                                     disabled={!needsPurchaseItems.length}
                                   />
                                 </TableCell>
                                 <TableCell>Product Name</TableCell>
                                 <TableCell>UOM</TableCell>
-                                <TableCell align="right">Needed Quantity</TableCell>
+                                <TableCell align="right">
+                                  Needed Quantity
+                                </TableCell>
                               </TableRow>
                             </TableHead>
                             <TableBody>
@@ -1106,26 +1307,42 @@ export default function ProductionOverview({
                                   <TableRow
                                     key={item.id}
                                     hover
-                                    selected={selectedNonStockItemIds.includes(item.id)}
-                                    onClick={() => handleToggleSelectNonStockItem(item.id)}
+                                    selected={selectedNonStockItemIds.includes(
+                                      item.id,
+                                    )}
+                                    onClick={() =>
+                                      handleToggleSelectNonStockItem(item.id)
+                                    }
                                     sx={tableRowSx(true)}
                                   >
                                     <TableCell padding="checkbox">
                                       <input
                                         type="checkbox"
-                                        checked={selectedNonStockItemIds.includes(item.id)}
-                                        onChange={() => handleToggleSelectNonStockItem(item.id)}
+                                        checked={selectedNonStockItemIds.includes(
+                                          item.id,
+                                        )}
+                                        onChange={() =>
+                                          handleToggleSelectNonStockItem(
+                                            item.id,
+                                          )
+                                        }
                                         onClick={(e) => e.stopPropagation()}
                                       />
                                     </TableCell>
                                     <TableCell>{item.productName}</TableCell>
                                     <TableCell>{item.uomName}</TableCell>
-                                    <TableCell align="right">{item.neededQuantity.toFixed(2)}</TableCell>
+                                    <TableCell align="right">
+                                      {item.neededQuantity.toFixed(2)}
+                                    </TableCell>
                                   </TableRow>
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={4} align="center" sx={{ py: 3, color: "#94A3B8" }}>
+                                  <TableCell
+                                    colSpan={4}
+                                    align="center"
+                                    sx={{ py: 3, color: "#94A3B8" }}
+                                  >
                                     No shortfall items pending a Purchase Order.
                                   </TableCell>
                                 </TableRow>
@@ -1137,13 +1354,35 @@ export default function ProductionOverview({
 
                       {procurementRecords.length > 0 && (
                         <Box>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
-                            <LocalShippingIcon sx={{ color: "#2563eb", fontSize: 19 }} />
-                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Purchase Orders</Typography>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                              mb: 1.25,
+                            }}
+                          >
+                            <LocalShippingIcon
+                              sx={{ color: "#2563eb", fontSize: 19 }}
+                            />
+                            <Typography
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: 15,
+                                color: "#0F172A",
+                              }}
+                            >
+                              Purchase Orders
+                            </Typography>
                           </Box>
                           {procurementRecords.map((po) => {
                             const pending = po.lines.reduce(
-                              (sum, l) => sum + Math.max(0, l.orderQuantity - l.receivedQuantity),
+                              (sum, l) =>
+                                sum +
+                                Math.max(
+                                  0,
+                                  l.orderQuantity - l.receivedQuantity,
+                                ),
                               0,
                             );
                             return (
@@ -1155,7 +1394,8 @@ export default function ProductionOverview({
                                   mb: 1.5,
                                   borderRadius: "14px",
                                   borderColor: "rgba(148,163,184,0.25)",
-                                  boxShadow: "0 4px 16px rgba(15, 23, 42, 0.04)",
+                                  boxShadow:
+                                    "0 4px 16px rgba(15, 23, 42, 0.04)",
                                 }}
                               >
                                 <Box
@@ -1180,8 +1420,21 @@ export default function ProductionOverview({
                                       minWidth: 0,
                                     }}
                                   >
-                                    <Typography sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{po.poNumber}</Typography>
-                                    <Typography color="text.secondary" sx={{ fontSize: 13, whiteSpace: "nowrap" }}>
+                                    <Typography
+                                      sx={{
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {po.poNumber}
+                                    </Typography>
+                                    <Typography
+                                      color="text.secondary"
+                                      sx={{
+                                        fontSize: 13,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
                                       {po.poDate}
                                     </Typography>
                                     {po.supplierName && (
@@ -1189,13 +1442,26 @@ export default function ProductionOverview({
                                       // on phones, where the supplier wraps onto its own line.
                                       <Typography
                                         color="text.secondary"
-                                        sx={{ fontSize: 13, "&::before": { content: '"· "', [PHONE]: { content: "none" } } }}
+                                        sx={{
+                                          fontSize: 13,
+                                          "&::before": {
+                                            content: '"· "',
+                                            [PHONE]: { content: "none" },
+                                          },
+                                        }}
                                       >
                                         {po.supplierName}
                                       </Typography>
                                     )}
                                   </Box>
-                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      gap: 1,
+                                      alignItems: "center",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
                                     <StatusChip value={po.status} />
                                     {pending > 0 && (
                                       <Button
@@ -1203,7 +1469,11 @@ export default function ProductionOverview({
                                         size="small"
                                         startIcon={<LocalShippingIcon />}
                                         onClick={() => handleOpenReceivePo(po)}
-                                        sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                                        sx={{
+                                          borderRadius: "8px",
+                                          textTransform: "none",
+                                          fontWeight: 600,
+                                        }}
                                       >
                                         Receive
                                       </Button>
@@ -1212,40 +1482,98 @@ export default function ProductionOverview({
                                 </Box>
                                 <TableContainer
                                   sx={[
-                                    { borderRadius: "10px", overflowX: "auto", WebkitOverflowScrolling: "touch" },
+                                    {
+                                      borderRadius: "10px",
+                                      overflowX: "auto",
+                                      WebkitOverflowScrolling: "touch",
+                                    },
                                     stackedTableSx,
                                     // Nested inside the PO card, so its line cards use the
                                     // page tint instead of a second layer of white.
-                                    { [PHONE]: { "& tbody tr": { bgcolor: "#F8FAFC" } } },
+                                    {
+                                      [PHONE]: {
+                                        "& tbody tr": { bgcolor: "#F8FAFC" },
+                                      },
+                                    },
                                   ]}
                                 >
                                   <Table size="small">
                                     <TableHead>
                                       <TableRow sx={TABLE_HEAD_ROW_SX}>
                                         <TableCell>Product</TableCell>
-                                        <TableCell align="right">Ordered</TableCell>
-                                        <TableCell align="right">Received</TableCell>
-                                        <TableCell align="right">Unit Price</TableCell>
-                                        <TableCell align="right">Line Total</TableCell>
+                                        <TableCell align="right">
+                                          Ordered
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          Received
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          Unit Price
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          Line Total
+                                        </TableCell>
                                         <TableCell align="right">Tax</TableCell>
-                                        <TableCell align="right">Total</TableCell>
+                                        <TableCell align="right">
+                                          Total
+                                        </TableCell>
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
                                       {po.lines.map((line) => (
-                                        <TableRow key={line.id} sx={tableRowSx()}>
-                                          <TableCell>{line.productName}</TableCell>
-                                          <TableCell align="right" data-label="Ordered" data-span="third">{line.orderQuantity}</TableCell>
-                                          <TableCell align="right" data-label="Received" data-span="third">{line.receivedQuantity}</TableCell>
-                                          <TableCell align="right" data-label="Unit Price" data-span="third">{line.unitPrice.toFixed(2)}</TableCell>
-                                          <TableCell align="right" data-label="Line Total" data-span="third">{line.lineTotal.toFixed(2)}</TableCell>
-                                          <TableCell align="right" data-label="Tax" data-span="third">
+                                        <TableRow
+                                          key={line.id}
+                                          sx={tableRowSx()}
+                                        >
+                                          <TableCell>
+                                            {line.productName}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Ordered"
+                                            data-span="third"
+                                          >
+                                            {line.orderQuantity}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Received"
+                                            data-span="third"
+                                          >
+                                            {line.receivedQuantity}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Unit Price"
+                                            data-span="third"
+                                          >
+                                            {line.unitPrice.toFixed(2)}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Line Total"
+                                            data-span="third"
+                                          >
+                                            {line.lineTotal.toFixed(2)}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Tax"
+                                            data-span="third"
+                                          >
                                             {line.taxAmount > 0
                                               ? `${line.taxAmount.toFixed(2)} (${line.taxPercentage}%)`
                                               : "—"}
                                           </TableCell>
-                                          <TableCell align="right" data-label="Total" data-span="third" sx={{ fontWeight: 600 }}>
-                                            {(line.lineTotal + line.taxAmount).toFixed(2)}
+                                          <TableCell
+                                            align="right"
+                                            data-label="Total"
+                                            data-span="third"
+                                            sx={{ fontWeight: 600 }}
+                                          >
+                                            {(
+                                              line.lineTotal + line.taxAmount
+                                            ).toFixed(2)}
                                           </TableCell>
                                         </TableRow>
                                       ))}
@@ -1261,14 +1589,24 @@ export default function ProductionOverview({
                                     mt: 1,
                                   }}
                                 >
-                                  <Typography sx={{ fontSize: 13, color: "#64748B" }}>
-                                    Sub Total {po.subTotal.toFixed(2)} &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
+                                  <Typography
+                                    sx={{ fontSize: 13, color: "#64748B" }}
+                                  >
+                                    Sub Total {po.subTotal.toFixed(2)}{" "}
+                                    &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
                                     {/* trailing separator would dangle at a line end once Grand Total wraps below */}
-                                    <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                                    <Box
+                                      component="span"
+                                      sx={{
+                                        display: { xs: "none", sm: "inline" },
+                                      }}
+                                    >
                                       &nbsp;·&nbsp;
                                     </Box>{" "}
                                   </Typography>
-                                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                                  <Typography
+                                    sx={{ fontSize: 13, fontWeight: 700 }}
+                                  >
                                     Grand Total {po.grandTotal.toFixed(2)}
                                   </Typography>
                                 </Box>
@@ -1291,7 +1629,9 @@ export default function ProductionOverview({
                     // materials cleared procurement. Show a completion banner
                     // and, if POs were raised as part of fulfilling the shortfall,
                     // render them beneath so users can review what was ordered.
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <Box
+                      sx={{ display: "flex", flexDirection: "column", gap: 3 }}
+                    >
                       <CenteredStateCard
                         icon={<CheckCircleOutlineIcon sx={{ fontSize: 28 }} />}
                         iconBg="#ECFDF5"
@@ -1306,13 +1646,35 @@ export default function ProductionOverview({
 
                       {procurementRecords.length > 0 && (
                         <Box>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
-                            <LocalShippingIcon sx={{ color: "#2563eb", fontSize: 19 }} />
-                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Purchase Orders</Typography>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                              mb: 1.25,
+                            }}
+                          >
+                            <LocalShippingIcon
+                              sx={{ color: "#2563eb", fontSize: 19 }}
+                            />
+                            <Typography
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: 15,
+                                color: "#0F172A",
+                              }}
+                            >
+                              Purchase Orders
+                            </Typography>
                           </Box>
                           {procurementRecords.map((po) => {
                             const pending = po.lines.reduce(
-                              (sum, l) => sum + Math.max(0, l.orderQuantity - l.receivedQuantity),
+                              (sum, l) =>
+                                sum +
+                                Math.max(
+                                  0,
+                                  l.orderQuantity - l.receivedQuantity,
+                                ),
                               0,
                             );
                             return (
@@ -1324,7 +1686,8 @@ export default function ProductionOverview({
                                   mb: 1.5,
                                   borderRadius: "14px",
                                   borderColor: "rgba(148,163,184,0.25)",
-                                  boxShadow: "0 4px 16px rgba(15, 23, 42, 0.04)",
+                                  boxShadow:
+                                    "0 4px 16px rgba(15, 23, 42, 0.04)",
                                 }}
                               >
                                 <Box
@@ -1349,8 +1712,21 @@ export default function ProductionOverview({
                                       minWidth: 0,
                                     }}
                                   >
-                                    <Typography sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>{po.poNumber}</Typography>
-                                    <Typography color="text.secondary" sx={{ fontSize: 13, whiteSpace: "nowrap" }}>
+                                    <Typography
+                                      sx={{
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {po.poNumber}
+                                    </Typography>
+                                    <Typography
+                                      color="text.secondary"
+                                      sx={{
+                                        fontSize: 13,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
                                       {po.poDate}
                                     </Typography>
                                     {po.supplierName && (
@@ -1358,13 +1734,26 @@ export default function ProductionOverview({
                                       // on phones, where the supplier wraps onto its own line.
                                       <Typography
                                         color="text.secondary"
-                                        sx={{ fontSize: 13, "&::before": { content: '"· "', [PHONE]: { content: "none" } } }}
+                                        sx={{
+                                          fontSize: 13,
+                                          "&::before": {
+                                            content: '"· "',
+                                            [PHONE]: { content: "none" },
+                                          },
+                                        }}
                                       >
                                         {po.supplierName}
                                       </Typography>
                                     )}
                                   </Box>
-                                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      gap: 1,
+                                      alignItems: "center",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
                                     <StatusChip value={po.status} />
                                     {pending > 0 && (
                                       <Button
@@ -1372,7 +1761,11 @@ export default function ProductionOverview({
                                         size="small"
                                         startIcon={<LocalShippingIcon />}
                                         onClick={() => handleOpenReceivePo(po)}
-                                        sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                                        sx={{
+                                          borderRadius: "8px",
+                                          textTransform: "none",
+                                          fontWeight: 600,
+                                        }}
                                       >
                                         Receive
                                       </Button>
@@ -1381,40 +1774,98 @@ export default function ProductionOverview({
                                 </Box>
                                 <TableContainer
                                   sx={[
-                                    { borderRadius: "10px", overflowX: "auto", WebkitOverflowScrolling: "touch" },
+                                    {
+                                      borderRadius: "10px",
+                                      overflowX: "auto",
+                                      WebkitOverflowScrolling: "touch",
+                                    },
                                     stackedTableSx,
                                     // Nested inside the PO card, so its line cards use the
                                     // page tint instead of a second layer of white.
-                                    { [PHONE]: { "& tbody tr": { bgcolor: "#F8FAFC" } } },
+                                    {
+                                      [PHONE]: {
+                                        "& tbody tr": { bgcolor: "#F8FAFC" },
+                                      },
+                                    },
                                   ]}
                                 >
                                   <Table size="small">
                                     <TableHead>
                                       <TableRow sx={TABLE_HEAD_ROW_SX}>
                                         <TableCell>Product</TableCell>
-                                        <TableCell align="right">Ordered</TableCell>
-                                        <TableCell align="right">Received</TableCell>
-                                        <TableCell align="right">Unit Price</TableCell>
-                                        <TableCell align="right">Line Total</TableCell>
+                                        <TableCell align="right">
+                                          Ordered
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          Received
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          Unit Price
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          Line Total
+                                        </TableCell>
                                         <TableCell align="right">Tax</TableCell>
-                                        <TableCell align="right">Total</TableCell>
+                                        <TableCell align="right">
+                                          Total
+                                        </TableCell>
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
                                       {po.lines.map((line) => (
-                                        <TableRow key={line.id} sx={tableRowSx()}>
-                                          <TableCell>{line.productName}</TableCell>
-                                          <TableCell align="right" data-label="Ordered" data-span="third">{line.orderQuantity}</TableCell>
-                                          <TableCell align="right" data-label="Received" data-span="third">{line.receivedQuantity}</TableCell>
-                                          <TableCell align="right" data-label="Unit Price" data-span="third">{line.unitPrice.toFixed(2)}</TableCell>
-                                          <TableCell align="right" data-label="Line Total" data-span="third">{line.lineTotal.toFixed(2)}</TableCell>
-                                          <TableCell align="right" data-label="Tax" data-span="third">
+                                        <TableRow
+                                          key={line.id}
+                                          sx={tableRowSx()}
+                                        >
+                                          <TableCell>
+                                            {line.productName}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Ordered"
+                                            data-span="third"
+                                          >
+                                            {line.orderQuantity}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Received"
+                                            data-span="third"
+                                          >
+                                            {line.receivedQuantity}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Unit Price"
+                                            data-span="third"
+                                          >
+                                            {line.unitPrice.toFixed(2)}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Line Total"
+                                            data-span="third"
+                                          >
+                                            {line.lineTotal.toFixed(2)}
+                                          </TableCell>
+                                          <TableCell
+                                            align="right"
+                                            data-label="Tax"
+                                            data-span="third"
+                                          >
                                             {line.taxAmount > 0
                                               ? `${line.taxAmount.toFixed(2)} (${line.taxPercentage}%)`
                                               : "—"}
                                           </TableCell>
-                                          <TableCell align="right" data-label="Total" data-span="third" sx={{ fontWeight: 600 }}>
-                                            {(line.lineTotal + line.taxAmount).toFixed(2)}
+                                          <TableCell
+                                            align="right"
+                                            data-label="Total"
+                                            data-span="third"
+                                            sx={{ fontWeight: 600 }}
+                                          >
+                                            {(
+                                              line.lineTotal + line.taxAmount
+                                            ).toFixed(2)}
                                           </TableCell>
                                         </TableRow>
                                       ))}
@@ -1430,14 +1881,24 @@ export default function ProductionOverview({
                                     mt: 1,
                                   }}
                                 >
-                                  <Typography sx={{ fontSize: 13, color: "#64748B" }}>
-                                    Sub Total {po.subTotal.toFixed(2)} &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
+                                  <Typography
+                                    sx={{ fontSize: 13, color: "#64748B" }}
+                                  >
+                                    Sub Total {po.subTotal.toFixed(2)}{" "}
+                                    &nbsp;·&nbsp; Tax {po.taxAmount.toFixed(2)}
                                     {/* trailing separator would dangle at a line end once Grand Total wraps below */}
-                                    <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                                    <Box
+                                      component="span"
+                                      sx={{
+                                        display: { xs: "none", sm: "inline" },
+                                      }}
+                                    >
                                       &nbsp;·&nbsp;
                                     </Box>{" "}
                                   </Typography>
-                                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                                  <Typography
+                                    sx={{ fontSize: 13, fontWeight: 700 }}
+                                  >
                                     Grand Total {po.grandTotal.toFixed(2)}
                                   </Typography>
                                 </Box>
@@ -1455,7 +1916,9 @@ export default function ProductionOverview({
                 <Box>
                   {record.status === "In Progress" ||
                   record.status === "Completed" ? (
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <Box
+                      sx={{ display: "flex", flexDirection: "column", gap: 3 }}
+                    >
                       {/* Outer container with soft light-blue glow */}
                       <Paper
                         elevation={0}
@@ -1475,7 +1938,10 @@ export default function ProductionOverview({
                         <Box
                           sx={{
                             display: "grid",
-                            gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" },
+                            gridTemplateColumns: {
+                              xs: "repeat(2, minmax(0, 1fr))",
+                              sm: "repeat(3, minmax(0, 1fr))",
+                            },
                             gap: { xs: 1.25, sm: 2 },
                             opacity: 0.78,
                             filter: "contrast(0.95)",
@@ -1490,9 +1956,15 @@ export default function ProductionOverview({
                             label="Production Target ID"
                             value={record.productionTargetId}
                           />
-                          <InfoCard label="Start Date" value={record.startDate} />
+                          <InfoCard
+                            label="Start Date"
+                            value={record.startDate}
+                          />
                           <InfoCard label="End Date" value={record.endDate} />
-                          <InfoCard label="Assigned To" value={record.assignedTo} />
+                          <InfoCard
+                            label="Assigned To"
+                            value={record.assignedTo}
+                          />
                           <InfoCard
                             label="Target Status"
                             valueNode={<StatusChip value={record.status} />}
@@ -1501,24 +1973,55 @@ export default function ProductionOverview({
 
                         {/* Bright, high-contrast, perfectly centered stamp */}
                         <StatusStamp
-                          text={record.status === "Completed" ? "Production Completed" : "Production Started"}
-                          color={record.status === "Completed" ? "#059669" : "#2563eb"}
+                          text={
+                            record.status === "Completed"
+                              ? "Production Completed"
+                              : "Production Started"
+                          }
+                          color={
+                            record.status === "Completed"
+                              ? "#059669"
+                              : "#2563eb"
+                          }
                         />
                       </Paper>
 
                       {(data.mrpDetails?.finishedGoods?.length ?? 0) > 0 && (
                         <Box>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
-                            <Inventory2OutlinedIcon sx={{ color: "#2563eb", fontSize: 19 }} />
-                            <Typography sx={{ fontWeight: 700, fontSize: 15, color: "#0F172A" }}>Finished Goods</Typography>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                              mb: 1.25,
+                            }}
+                          >
+                            <Inventory2OutlinedIcon
+                              sx={{ color: "#2563eb", fontSize: 19 }}
+                            />
+                            <Typography
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: 15,
+                                color: "#0F172A",
+                              }}
+                            >
+                              Finished Goods
+                            </Typography>
                           </Box>
-                          <TableContainer component={Paper} variant="outlined" sx={TABLE_CONTAINER_SX}>
+                          <TableContainer
+                            component={Paper}
+                            variant="outlined"
+                            sx={TABLE_CONTAINER_SX}
+                          >
                             <Table size="small">
                               <TableHead>
                                 <TableRow sx={TABLE_HEAD_ROW_SX}>
                                   <TableCell>Item</TableCell>
                                   <TableCell>UOM</TableCell>
-                                  <TableCell align="right">Target Quantity</TableCell>
+                                  <TableCell align="right">
+                                    Target Quantity
+                                  </TableCell>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
@@ -1526,7 +2029,9 @@ export default function ProductionOverview({
                                   <TableRow key={fg.id} sx={tableRowSx()}>
                                     <TableCell>{fg.itemName}</TableCell>
                                     <TableCell>{fg.uomName}</TableCell>
-                                    <TableCell align="right">{fg.targetQuantity}</TableCell>
+                                    <TableCell align="right">
+                                      {fg.targetQuantity}
+                                    </TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>
@@ -1590,22 +2095,42 @@ export default function ProductionOverview({
               {activeTab === "in_progress" && (
                 <Box>
                   {record.status === "In Progress" ? (
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <Box
+                      sx={{ display: "flex", flexDirection: "column", gap: 3 }}
+                    >
                       <Box
                         sx={{
                           display: "grid",
-                          gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" },
+                          gridTemplateColumns: {
+                            xs: "repeat(2, minmax(0, 1fr))",
+                            sm: "repeat(3, minmax(0, 1fr))",
+                          },
                           gap: { xs: 1.5, sm: 2 },
                         }}
                       >
-                        <InfoCard label="Production Target ID" value={record.productionTargetId} />
+                        <InfoCard
+                          label="Production Target ID"
+                          value={record.productionTargetId}
+                        />
                         <InfoCard label="Start Date" value={record.startDate} />
                         <InfoCard label="End Date" value={record.endDate} />
-                        <InfoCard label="Assigned To" value={record.assignedTo} />
-                        <InfoCard label="Status" valueNode={<StatusChip value={record.status} />} />
+                        <InfoCard
+                          label="Assigned To"
+                          value={record.assignedTo}
+                        />
+                        <InfoCard
+                          label="Status"
+                          valueNode={<StatusChip value={record.status} />}
+                        />
                       </Box>
 
-                      <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "center",
+                          pt: 1,
+                        }}
+                      >
                         <Button
                           variant="contained"
                           color="success"
@@ -1670,31 +2195,68 @@ export default function ProductionOverview({
                             gap: 1,
                           }}
                         >
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1.5,
+                            }}
+                          >
                             <TaskAltIcon sx={{ color: "#059669" }} />
                             <Box>
-                              <Typography sx={{ fontWeight: 700 }}>{entry.consumptionId}</Typography>
-                              <Typography sx={{ fontSize: 12, color: "#64748B" }}>{entry.date}</Typography>
+                              <Typography sx={{ fontWeight: 700 }}>
+                                {entry.consumptionId}
+                              </Typography>
+                              <Typography
+                                sx={{ fontSize: 12, color: "#64748B" }}
+                              >
+                                {entry.date}
+                              </Typography>
                             </Box>
                           </Box>
                           {entry.remarks && (
-                            <Typography sx={{ fontSize: 13, color: "#475569", fontStyle: "italic" }}>
+                            <Typography
+                              sx={{
+                                fontSize: 13,
+                                color: "#475569",
+                                fontStyle: "italic",
+                              }}
+                            >
                               "{entry.remarks}"
                             </Typography>
                           )}
                         </Box>
 
-                        <Box sx={{ p: { xs: 1.25, sm: 2 }, display: "flex", flexDirection: "column", gap: 2.5 }}>
+                        <Box
+                          sx={{
+                            p: { xs: 1.25, sm: 2 },
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 2.5,
+                          }}
+                        >
                           {entry.finishedGoods.length > 0 && (
                             <Box>
-                              <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>Finished Goods</Typography>
-                              <TableContainer component={Paper} variant="outlined" sx={[TABLE_CONTAINER_SX, stackedTableSx]}>
+                              <Typography
+                                sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}
+                              >
+                                Finished Goods
+                              </Typography>
+                              <TableContainer
+                                component={Paper}
+                                variant="outlined"
+                                sx={[TABLE_CONTAINER_SX, stackedTableSx]}
+                              >
                                 <Table size="small">
                                   <TableHead>
                                     <TableRow sx={TABLE_HEAD_ROW_SX}>
                                       <TableCell>Item</TableCell>
-                                      <TableCell align="right">Target</TableCell>
-                                      <TableCell align="right">Produced</TableCell>
+                                      <TableCell align="right">
+                                        Target
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        Produced
+                                      </TableCell>
                                       <TableCell align="right">Scrap</TableCell>
                                       <TableCell>Batch No</TableCell>
                                       <TableCell>Expiry</TableCell>
@@ -1704,11 +2266,33 @@ export default function ProductionOverview({
                                     {entry.finishedGoods.map((fg) => (
                                       <TableRow key={fg.id} sx={tableRowSx()}>
                                         <TableCell>{fg.itemName}</TableCell>
-                                        <TableCell align="right" data-label="Target" data-span="third">{fg.targetQuantity}</TableCell>
-                                        <TableCell align="right" data-label="Produced" data-span="third">{fg.producedQuantity}</TableCell>
-                                        <TableCell align="right" data-label="Scrap" data-span="third">{fg.scrapQuantity}</TableCell>
-                                        <TableCell data-label="Batch No">{fg.batchNo || "—"}</TableCell>
-                                        <TableCell data-label="Expiry">{fg.expiryDate || "—"}</TableCell>
+                                        <TableCell
+                                          align="right"
+                                          data-label="Target"
+                                          data-span="third"
+                                        >
+                                          {fg.targetQuantity}
+                                        </TableCell>
+                                        <TableCell
+                                          align="right"
+                                          data-label="Produced"
+                                          data-span="third"
+                                        >
+                                          {fg.producedQuantity}
+                                        </TableCell>
+                                        <TableCell
+                                          align="right"
+                                          data-label="Scrap"
+                                          data-span="third"
+                                        >
+                                          {fg.scrapQuantity}
+                                        </TableCell>
+                                        <TableCell data-label="Batch No">
+                                          {fg.batchNo || "—"}
+                                        </TableCell>
+                                        <TableCell data-label="Expiry">
+                                          {fg.expiryDate || "—"}
+                                        </TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
@@ -1719,17 +2303,27 @@ export default function ProductionOverview({
 
                           {entry.rawMaterials.length > 0 && (
                             <Box>
-                              <Typography sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}>
+                              <Typography
+                                sx={{ fontWeight: 700, fontSize: 13, mb: 1 }}
+                              >
                                 Raw Materials Consumed
                               </Typography>
-                              <TableContainer component={Paper} variant="outlined" sx={[TABLE_CONTAINER_SX, stackedTableSx]}>
+                              <TableContainer
+                                component={Paper}
+                                variant="outlined"
+                                sx={[TABLE_CONTAINER_SX, stackedTableSx]}
+                              >
                                 <Table size="small">
                                   <TableHead>
                                     <TableRow sx={TABLE_HEAD_ROW_SX}>
                                       <TableCell>Raw Material</TableCell>
                                       <TableCell>UOM</TableCell>
-                                      <TableCell align="right">Allocated</TableCell>
-                                      <TableCell align="right">Consumed</TableCell>
+                                      <TableCell align="right">
+                                        Allocated
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        Consumed
+                                      </TableCell>
                                       <TableCell align="right">Scrap</TableCell>
                                     </TableRow>
                                   </TableHead>
@@ -1737,10 +2331,27 @@ export default function ProductionOverview({
                                     {entry.rawMaterials.map((rm) => (
                                       <TableRow key={rm.id} sx={tableRowSx()}>
                                         <TableCell>{rm.productName}</TableCell>
-                                        <TableCell data-label="UOM">{rm.uom}</TableCell>
-                                        <TableCell align="right" data-label="Allocated">{rm.allocatedQuantity}</TableCell>
-                                        <TableCell align="right" data-label="Consumed">{rm.consumedQuantity}</TableCell>
-                                        <TableCell align="right" data-label="Scrap">{rm.scrapQuantity}</TableCell>
+                                        <TableCell data-label="UOM">
+                                          {rm.uom}
+                                        </TableCell>
+                                        <TableCell
+                                          align="right"
+                                          data-label="Allocated"
+                                        >
+                                          {rm.allocatedQuantity}
+                                        </TableCell>
+                                        <TableCell
+                                          align="right"
+                                          data-label="Consumed"
+                                        >
+                                          {rm.consumedQuantity}
+                                        </TableCell>
+                                        <TableCell
+                                          align="right"
+                                          data-label="Scrap"
+                                        >
+                                          {rm.scrapQuantity}
+                                        </TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
@@ -1867,13 +2478,18 @@ export default function ProductionOverview({
             bgcolor: "#fff",
             // A short prompt: stay a card on phones, but claim the width the
             // default 32px side margins waste.
-            [PHONE]: { m: 2, width: "calc(100% - 32px)", maxHeight: "calc(100% - 32px)" },
+            [PHONE]: {
+              m: 2,
+              width: "calc(100% - 32px)",
+              maxHeight: "calc(100% - 32px)",
+            },
           },
         }}
       >
         <Box
           sx={{
-            background: "linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%)",
+            background:
+              "linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%)",
             color: "#fff",
             px: { xs: 2, sm: 3 },
             py: 2.25,
@@ -1883,7 +2499,14 @@ export default function ProductionOverview({
             gap: 1,
           }}
         >
-          <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1.25, sm: 1.75 }, minWidth: 0 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: { xs: 1.25, sm: 1.75 },
+              minWidth: 0,
+            }}
+          >
             <Box
               sx={{
                 width: 44,
@@ -1902,8 +2525,24 @@ export default function ProductionOverview({
               <WarningAmberRoundedIcon sx={{ fontSize: 26, color: "#fff" }} />
             </Box>
             <Box sx={{ minWidth: 0 }}>
-              <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 1, rowGap: 0.5 }}>
-                <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, fontSize: 18, color: "#fff" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  columnGap: 1,
+                  rowGap: 0.5,
+                }}
+              >
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 800,
+                    lineHeight: 1.2,
+                    fontSize: 18,
+                    color: "#fff",
+                  }}
+                >
                   Stock Still Short
                 </Typography>
                 <Chip
@@ -1919,7 +2558,14 @@ export default function ProductionOverview({
                   }}
                 />
               </Box>
-              <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.88)", fontSize: 12.5, mt: 0.25 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "rgba(255,255,255,0.88)",
+                  fontSize: 12.5,
+                  mt: 0.25,
+                }}
+              >
                 Insufficient raw material inventory in warehouse
               </Typography>
             </Box>
@@ -1950,17 +2596,46 @@ export default function ProductionOverview({
               border: "1px solid #FDE68A",
             }}
           >
-            <InfoOutlinedIcon sx={{ color: "#D97706", fontSize: 20, mt: 0.2, flexShrink: 0 }} />
-            <Typography sx={{ fontSize: 13, color: "#92400E", lineHeight: 1.55, fontWeight: 500 }}>
-              Available stock is not sufficient yet to cover the raw materials below. Please complete the purchase for the pending quantity, then check stock again once received.
+            <InfoOutlinedIcon
+              sx={{ color: "#D97706", fontSize: 20, mt: 0.2, flexShrink: 0 }}
+            />
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: "#92400E",
+                lineHeight: 1.55,
+                fontWeight: 500,
+              }}
+            >
+              Available stock is not sufficient yet to cover the raw materials
+              below. Please complete the purchase for the pending quantity, then
+              check stock again once received.
             </Typography>
           </Box>
 
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25, px: 0.5 }}>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748B" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              mb: 1.25,
+              px: 0.5,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: 11.5,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "#64748B",
+              }}
+            >
               Shortfall Raw Materials ({stockShortItems.length})
             </Typography>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#DC2626" }}>
+            <Typography
+              sx={{ fontSize: 11.5, fontWeight: 600, color: "#DC2626" }}
+            >
               Still Needed
             </Typography>
           </Box>
@@ -2004,7 +2679,14 @@ export default function ProductionOverview({
                   },
                 }}
               >
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.5,
+                    minWidth: 0,
+                  }}
+                >
                   <Box
                     sx={{
                       width: 36,
@@ -2034,9 +2716,17 @@ export default function ProductionOverview({
                     >
                       {item.productName}
                     </Typography>
-                    <Typography sx={{ fontSize: 11.5, color: "#64748B", mt: 0.2 }}>
-                      Required: {item.stockRequired > 0 ? item.stockRequired.toFixed(2) : item.neededQuantity.toFixed(2)} {item.uomName}
-                      {item.stockOnHand > 0 ? ` • On Hand: ${item.stockOnHand.toFixed(2)}` : ""}
+                    <Typography
+                      sx={{ fontSize: 11.5, color: "#64748B", mt: 0.2 }}
+                    >
+                      Required:{" "}
+                      {item.stockRequired > 0
+                        ? item.stockRequired.toFixed(2)
+                        : item.neededQuantity.toFixed(2)}{" "}
+                      {item.uomName}
+                      {item.stockOnHand > 0
+                        ? ` • On Hand: ${item.stockOnHand.toFixed(2)}`
+                        : ""}
                     </Typography>
                   </Box>
                 </Box>
@@ -2053,10 +2743,25 @@ export default function ProductionOverview({
                     textAlign: "right",
                   }}
                 >
-                  <Typography sx={{ fontWeight: 800, fontSize: 13.5, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
+                  <Typography
+                    sx={{
+                      fontWeight: 800,
+                      fontSize: 13.5,
+                      fontVariantNumeric: "tabular-nums",
+                      lineHeight: 1.2,
+                    }}
+                  >
                     {item.neededQuantity.toFixed(2)}
                   </Typography>
-                  <Typography sx={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#DC2626", opacity: 0.85 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      color: "#DC2626",
+                      opacity: 0.85,
+                    }}
+                  >
                     {item.uomName}
                   </Typography>
                 </Box>
@@ -2107,13 +2812,21 @@ export default function ProductionOverview({
           <Button
             onClick={() => {
               setStockStillShortOpen(false);
-              setSelectedNonStockItemIds(stockShortItems.map((item) => item.id));
+              setSelectedNonStockItemIds(
+                stockShortItems.map((item) => item.id),
+              );
               if (activeTab !== "procurement") {
                 setActiveTab("procurement");
               }
             }}
             variant="contained"
-            startIcon={activeTab !== "procurement" ? <ShoppingCartCheckoutIcon sx={{ fontSize: 18 }} /> : <TaskAltIcon sx={{ fontSize: 18 }} />}
+            startIcon={
+              activeTab !== "procurement" ? (
+                <ShoppingCartCheckoutIcon sx={{ fontSize: 18 }} />
+              ) : (
+                <TaskAltIcon sx={{ fontSize: 18 }} />
+              )
+            }
             sx={{
               borderRadius: "10px",
               textTransform: "none",
@@ -2127,7 +2840,9 @@ export default function ProductionOverview({
               },
             }}
           >
-            {activeTab !== "procurement" ? "Go to Procurement" : "Select Shortfall Items"}
+            {activeTab !== "procurement"
+              ? "Go to Procurement"
+              : "Select Shortfall Items"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2147,7 +2862,8 @@ export default function ProductionOverview({
       >
         <Box
           sx={{
-            background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #0ea5e9 100%)",
+            background:
+              "linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #0ea5e9 100%)",
             color: "#fff",
             px: 3,
             pt: 3.5,
@@ -2173,14 +2889,25 @@ export default function ProductionOverview({
           >
             <Inventory2OutlinedIcon sx={{ fontSize: 28 }} />
           </Box>
-          <Typography sx={{ fontWeight: 800, fontSize: 19 }}>All Purchases Received</Typography>
-          <Typography sx={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.5 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: 19 }}>
+            All Purchases Received
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: 13.5,
+              color: "rgba(255,255,255,0.88)",
+              lineHeight: 1.5,
+            }}
+          >
             Every Purchase Order for this Production has now been received.
           </Typography>
         </Box>
         <DialogContent sx={{ px: 3, py: 3, bgcolor: "#F8FAFC" }}>
-          <DialogContentText sx={{ fontSize: 14, color: "#334155", textAlign: "center" }}>
-            Check Stock for reserving raw material for this production, or check back later once you're ready.
+          <DialogContentText
+            sx={{ fontSize: 14, color: "#334155", textAlign: "center" }}
+          >
+            Check Stock for reserving raw material for this production, or check
+            back later once you're ready.
           </DialogContentText>
         </DialogContent>
         <DialogActions
@@ -2202,7 +2929,11 @@ export default function ProductionOverview({
             onClick={handlePostReceiveCheckLater}
             fullWidth
             variant="outlined"
-            sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 600 }}
+            sx={{
+              borderRadius: "10px",
+              textTransform: "none",
+              fontWeight: 600,
+            }}
           >
             Check Later
           </Button>
@@ -2267,6 +2998,12 @@ function BatchAllocationSummary({
   mrpRecord: MrpRow | null;
   finishedGoods: FinishedGoodTargetRow[];
 }) {
+  const [pdfSnackbar, setPdfSnackbar] = useState<{
+    message: string;
+    severity: "success" | "error";
+  } | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
   const groups = useMemo(() => {
     // The Custom API's Batch_NO/Product are Deluge's raw 17-digit record IDs,
     // which silently lose precision crossing the JSON boundary to the
@@ -2275,20 +3012,30 @@ function BatchAllocationSummary({
     // (the Deluge function's own Product_Name lookup) doesn't have that
     // problem, so match/group by name first and only fall back to the ID
     // for anyone still on the older, unpatched Deluge function.
-    function resolveMaterial(line: BatchAllocationLine): RawMaterialNeedRow | undefined {
+    function resolveMaterial(
+      line: BatchAllocationLine,
+    ): RawMaterialNeedRow | undefined {
       return (
         rawMaterials.find(
           (rm) =>
             rm.productName &&
             line.productName &&
-            rm.productName.trim().toLowerCase() === line.productName.trim().toLowerCase()
-        ) || rawMaterials.find((rm) => rm.productId && rm.productId === line.productId)
+            rm.productName.trim().toLowerCase() ===
+              line.productName.trim().toLowerCase(),
+        ) ||
+        rawMaterials.find(
+          (rm) => rm.productId && rm.productId === line.productId,
+        )
       );
     }
 
     const byGroupKey = new Map<
       string,
-      { lines: BatchAllocationLine[]; material?: RawMaterialNeedRow; fallbackName?: string }
+      {
+        lines: BatchAllocationLine[];
+        material?: RawMaterialNeedRow;
+        fallbackName?: string;
+      }
     >();
     allocations.forEach((line) => {
       const material = resolveMaterial(line);
@@ -2298,24 +3045,52 @@ function BatchAllocationSummary({
         material?.productId ||
         line.productId ||
         "unknown";
-      const group = byGroupKey.get(key) || { lines: [], material, fallbackName: line.productName };
+      const group = byGroupKey.get(key) || {
+        lines: [],
+        material,
+        fallbackName: line.productName,
+      };
       group.lines.push(line);
       if (!group.material && material) group.material = material;
       byGroupKey.set(key, group);
     });
-    return Array.from(byGroupKey.entries()).map(([key, group]) => ({ key, ...group }));
+    return Array.from(byGroupKey.entries()).map(([key, group]) => ({
+      key,
+      ...group,
+    }));
   }, [allocations, rawMaterials]);
 
   if (groups.length === 0) return null;
 
   function handleDownloadPdf() {
-    if (!productionTarget) return;
+    if (!productionTarget || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
     // Loaded on demand — jsPDF + autoTable are only needed by the handful
     // of users who actually click this, so keep them out of everyone
     // else's initial bundle (same reasoning as the lazy dialogs above).
-    import("../utils/batchAllocationPdf").then(function (mod) {
-      mod.downloadBatchAllocationPdf({ productionTarget, mrpRecord, groups, finishedGoods });
-    });
+    import("../utils/batchAllocationPdf")
+      .then(function (mod) {
+        mod.downloadBatchAllocationPdf({
+          productionTarget,
+          mrpRecord,
+          groups,
+          finishedGoods,
+        });
+        setPdfSnackbar({
+          message: "Batch allocation PDF is Downloading.",
+          severity: "success",
+        });
+      })
+      .catch(function () {
+        setPdfSnackbar({
+          message:
+            "Couldn't create the batch allocation PDF. Please try again.",
+          severity: "error",
+        });
+      })
+      .finally(function () {
+        setIsDownloadingPdf(false);
+      });
   }
 
   return (
@@ -2336,7 +3111,8 @@ function BatchAllocationSummary({
             width: 36,
             height: 36,
             borderRadius: "11px",
-            background: "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(37,99,235,0.06) 100%)",
+            background:
+              "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(37,99,235,0.06) 100%)",
             color: "#2563eb",
             display: "flex",
             alignItems: "center",
@@ -2349,7 +3125,9 @@ function BatchAllocationSummary({
           <Inventory2OutlinedIcon sx={{ fontSize: 20 }} />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: 15.5, color: "#0F172A" }}>
+          <Typography
+            sx={{ fontWeight: 800, fontSize: 15.5, color: "#0F172A" }}
+          >
             Batch Allocation
           </Typography>
           <Typography sx={{ fontSize: 12, color: "#64748B", fontWeight: 500 }}>
@@ -2360,9 +3138,10 @@ function BatchAllocationSummary({
           <span>
             <IconButton
               onClick={handleDownloadPdf}
-              disabled={!productionTarget}
+              disabled={!productionTarget || isDownloadingPdf}
               size="small"
               aria-label="Download batch allocation PDF"
+              aria-busy={isDownloadingPdf}
               sx={{
                 borderRadius: "10px",
                 color: "#2563eb",
@@ -2373,7 +3152,11 @@ function BatchAllocationSummary({
                 "&:hover": { bgcolor: "rgba(37, 99, 235, 0.16)" },
               }}
             >
-              <DownloadIcon sx={{ fontSize: 19 }} />
+              {isDownloadingPdf ? (
+                <CircularProgress size={19} color="inherit" />
+              ) : (
+                <DownloadIcon sx={{ fontSize: 19 }} />
+              )}
             </IconButton>
           </span>
         </Tooltip>
@@ -2389,6 +3172,13 @@ function BatchAllocationSummary({
           />
         ))}
       </Box>
+
+      <ModernSnackbar
+        open={!!pdfSnackbar}
+        onClose={() => setPdfSnackbar(null)}
+        severity={pdfSnackbar?.severity || "success"}
+        message={pdfSnackbar?.message || ""}
+      />
     </Paper>
   );
 }
@@ -2402,7 +3192,10 @@ function BatchAllocationGroupRow({
   fallbackName?: string;
   lines: BatchAllocationLine[];
 }) {
-  const totalAllocated = lines.reduce((sum, line) => sum + (line.batchQty || 0), 0);
+  const totalAllocated = lines.reduce(
+    (sum, line) => sum + (line.batchQty || 0),
+    0,
+  );
 
   return (
     <Box
@@ -2437,7 +3230,9 @@ function BatchAllocationGroupRow({
           <Typography sx={{ fontWeight: 700, fontSize: 14, color: "#0F172A" }}>
             {material?.productName || fallbackName || "—"}
           </Typography>
-          <Typography sx={{ fontSize: 12, color: "#64748B", mt: 0.25, fontWeight: 500 }}>
+          <Typography
+            sx={{ fontSize: 12, color: "#64748B", mt: 0.25, fontWeight: 500 }}
+          >
             {material?.uom ? `${material.uom} · ` : ""}
             Stock Required: {material ? material.stockRequired : totalAllocated}
           </Typography>
@@ -2455,7 +3250,9 @@ function BatchAllocationGroupRow({
 }
 
 function BatchChip({ line }: { line: BatchAllocationLine }) {
-  const label = line.batchNumber || (line.batchId ? `Batch #${line.batchId.slice(-6)}` : "Batch");
+  const label =
+    line.batchNumber ||
+    (line.batchId ? `Batch #${line.batchId.slice(-6)}` : "Batch");
   return (
     <Box
       sx={{
@@ -2479,16 +3276,30 @@ function BatchChip({ line }: { line: BatchAllocationLine }) {
         },
       }}
     >
-      <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#2563eb", flexShrink: 0, boxShadow: "0 0 4px rgba(37, 99, 235, 0.5)" }} />
+      <Box
+        sx={{
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          bgcolor: "#2563eb",
+          flexShrink: 0,
+          boxShadow: "0 0 4px rgba(37, 99, 235, 0.5)",
+        }}
+      />
       <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
         <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#1D4ED8" }}>
           {label}
-          <Box component="span" sx={{ color: "#0F172A", fontWeight: 600, ml: 0.6 }}>
+          <Box
+            component="span"
+            sx={{ color: "#0F172A", fontWeight: 600, ml: 0.6 }}
+          >
             ({line.batchQty})
           </Box>
         </Typography>
         {line.expiryDate && (
-          <Typography sx={{ fontSize: 10, color: "#64748B", fontWeight: 500 }}>Exp {line.expiryDate}</Typography>
+          <Typography sx={{ fontSize: 10, color: "#64748B", fontWeight: 500 }}>
+            Exp {line.expiryDate}
+          </Typography>
         )}
       </Box>
     </Box>
@@ -2532,11 +3343,27 @@ function InfoCard({
         },
       }}
     >
-      <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#64748B", mb: 0.75, letterSpacing: "0.02em", textTransform: "uppercase" }}>
+      <Typography
+        sx={{
+          fontSize: 11.5,
+          fontWeight: 600,
+          color: "#64748B",
+          mb: 0.75,
+          letterSpacing: "0.02em",
+          textTransform: "uppercase",
+        }}
+      >
         {label}
       </Typography>
       {valueNode || (
-        <Typography sx={{ fontWeight: 800, fontSize: { xs: 14, sm: 15 }, color: "#0F172A", wordBreak: "break-word" }}>
+        <Typography
+          sx={{
+            fontWeight: 800,
+            fontSize: { xs: 14, sm: 15 },
+            color: "#0F172A",
+            wordBreak: "break-word",
+          }}
+        >
           {value || "—"}
         </Typography>
       )}
@@ -2611,11 +3438,15 @@ function CenteredStateCard({
         {icon}
       </Box>
       <Box sx={{ maxWidth: 500 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: 17, color: "#0F172A", mb: 0.75 }}>
+        <Typography
+          sx={{ fontWeight: 800, fontSize: 17, color: "#0F172A", mb: 0.75 }}
+        >
           {title}
         </Typography>
         {description && (
-          <Typography sx={{ fontSize: 13.5, color: "#64748B", lineHeight: 1.6 }}>
+          <Typography
+            sx={{ fontSize: 13.5, color: "#64748B", lineHeight: 1.6 }}
+          >
             {description}
           </Typography>
         )}
@@ -2640,7 +3471,13 @@ function CenteredStateCard({
 // A classic rotated "ink stamp" overlay — sits on top of whatever's behind
 // it (pointer-events disabled). Centered vertically and horizontally over the
 // parent container without being affected by child opacity.
-function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string }) {
+function StatusStamp({
+  text,
+  color = "#2563eb",
+}: {
+  text: string;
+  color?: string;
+}) {
   const isCompleted = color === "#059669" || color === "#10b981";
   return (
     <Box
@@ -2656,7 +3493,8 @@ function StatusStamp({ text, color = "#2563eb" }: { text: string; color?: string
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        animation: "stampPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
+        animation:
+          "stampPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
       }}
     >
       <Box

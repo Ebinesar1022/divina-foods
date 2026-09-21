@@ -433,5 +433,21 @@ export function downloadBatchAllocationPdf(params: {
   }
 
   const safeId = (productionTarget.productionTargetId || "Report").replace(/[^\w-]+/g, "_");
-  doc.save(`Batch_Allocation_${safeId}.pdf`);
+  const filename = `Batch_Allocation_${safeId}.pdf`;
+
+  // `doc.save()` is unreliable in mobile browsers and embedded webviews.
+  // A Blob URL download works on Android; iOS opens the PDF in a separate
+  // tab so the user can save or share it without leaving this application.
+  const pdfUrl = URL.createObjectURL(doc.output("blob"));
+  const link = document.createElement("a");
+  link.href = pdfUrl;
+  link.download = filename;
+  link.target = "_blank";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  // Mobile PDF viewers may start reading the Blob after the click event.
+  window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
 }
