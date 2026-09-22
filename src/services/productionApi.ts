@@ -1247,6 +1247,45 @@ export function syncPurchaseReceiveToBooks(
   });
 }
 
+// Published as "fgTransfer" in Microservices (function: CreateInventoryAdjustment).
+const CREATE_INVENTORY_ADJUSTMENT_API = {
+  api_name: "fgTransfer",
+  workspace_name: "info_divinafoodco",
+  public_key: "sgurApYWw5OZUwdY8KDBxXd8J",
+};
+
+function createInventoryAdjustment(
+  itemBooksId: string,
+  quantityAdjusted: number,
+  reason: string,
+  adjDate: string,
+): Promise<any> {
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: CREATE_INVENTORY_ADJUSTMENT_API.api_name,
+    workspace_name: CREATE_INVENTORY_ADJUSTMENT_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      item_id: itemBooksId,
+      quantity_adjusted: quantityAdjusted,
+      reason: reason,
+      adj_date: adjDate,
+    },
+    public_key: CREATE_INVENTORY_ADJUSTMENT_API.public_key,
+  }).then(function (resp: any) {
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || !result || result.code !== 3000) {
+      return Promise.reject(
+        new Error(
+          (result && result.message) ||
+            "Failed to create inventory adjustment.",
+        ),
+      );
+    }
+    return result;
+  });
+}
+
 // Published as "Check_stock_in_MRP" in Microservices (function: MRP.CheckStock).
 // Re-checks every still-short Raw_Materials row on an MRP against the
 // warehouse's current Available_Stocks, reserves whatever now covers it,
@@ -2301,6 +2340,9 @@ export function prepareConsumptionDraft(
       finishedGoods: finishedGoods.map(function (fg) {
         return {
           itemId: fg.itemId,
+          // Product_Master has no Books item-ID field available to this
+          // lookup yet, so do not substitute its Creator record ID here.
+          booksItemId: "",
           itemName: fg.itemName,
           uom: fg.uomName,
           targetQuantity: fg.targetQuantity,
@@ -2396,6 +2438,37 @@ function updateWarehouseStockForConsumption(
   function updateOrCreateMainWarehouseForFinishedGood(
     fg: (typeof draft.finishedGoods)[number],
   ): Promise<any> {
+    function createInventoryAdjustmentAfterCreatorUpdate(
+      originalResult: any,
+    ): Promise<any> {
+      // The Product_Master lookup does not currently expose the external
+      // Books item ID. Skipping is safer than posting a Creator record ID as
+      // an Inventory item ID; once that field is wired, this follows up every
+      // successful Creator stock write.
+      if (!fg.booksItemId) {
+        console.warn(
+          "Inventory adjustment skipped (Books item ID is not available):",
+          fg.itemId,
+        );
+        return Promise.resolve(originalResult);
+      }
+      return createInventoryAdjustment(
+        fg.booksItemId,
+        fg.producedQuantity,
+        "Production output",
+        formatDateStringForZoho(draft.date),
+      )
+        .catch(function (err) {
+          console.warn(
+            "Inventory adjustment failed (Creator stock still updated):",
+            err,
+          );
+        })
+        .then(function () {
+          return originalResult;
+        });
+    }
+
     const criteria = `Product_Master == ${fg.itemId}`;
     return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
       function (rows) {
@@ -2411,7 +2484,7 @@ function updateWarehouseStockForConsumption(
               Stock_On_Hand: stockOnHand,
               Available_Stocks: stockOnHand,
             },
-          );
+          ).then(createInventoryAdjustmentAfterCreatorUpdate);
         }
         return fetchWarehouseByCode("WH-001").then(function (mainWh) {
           if (!mainWh) return null;
@@ -2421,7 +2494,7 @@ function updateWarehouseStockForConsumption(
             Product_Master: fg.itemId,
             Stock_On_Hand: fg.producedQuantity,
             Available_Stocks: fg.producedQuantity,
-          });
+          }).then(createInventoryAdjustmentAfterCreatorUpdate);
         });
       },
     );

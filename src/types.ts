@@ -207,6 +207,10 @@ export interface ConsumptionEntryRow {
 
 export interface ConsumptionFinishedGoodDraftRow {
   itemId: string;
+  // TODO: Product_Master currently exposes no Zoho Books/Inventory item ID.
+  // Populate this from its eventual Books-sync field before relying on the
+  // production-output inventory adjustment integration in live workflows.
+  booksItemId: string;
   itemName: string;
   uom: string;
   targetQuantity: number;
