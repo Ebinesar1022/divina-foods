@@ -1,0 +1,1 @@
+System.register(["./index-legacy-DOkR3j2l.js"],function(e,r){"use strict";var t,d,a;return{setters:[e=>{t=e.r,d=e.j,a=e.i}],execute:function(){var r={},u=a;Object.defineProperty(r,"__esModule",{value:!0}),e("d",r.default=void 0);var s=u(t()),i=d;e("d",r.default=(0,s.default)((0,i.jsx)("path",{d:"m12 4-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"}),"ArrowForward"))}}});

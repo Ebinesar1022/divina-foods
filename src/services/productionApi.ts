@@ -54,6 +54,7 @@ export const CONFIG = {
   // Confirmed against the app's .ds export (Divina_Foods_3.ds).
   FINISHED_GOODS_REPORT: "Finished_Goods_Report",
   FINISHED_GOODS_FORM: "Finished_Goods",
+  PRODUCT_MASTER_REPORT: "Product_Master_Report",
   BOM_MASTER_REPORT: "BOM_Master_Report",
   BOM_ITEMS_REPORT: "BOM_Items_Report",
   MAIN_WAREHOUSE_STOCK_REPORT: "Main_Warehouse_Stock_Details_Report",
@@ -1260,6 +1261,12 @@ function createInventoryAdjustment(
   reason: string,
   adjDate: string,
 ): Promise<any> {
+  console.info("Creating Inventory adjustment:", {
+    item_id: itemBooksId,
+    quantity_adjusted: quantityAdjusted,
+    reason: reason,
+    adj_date: adjDate,
+  });
   return window.ZOHO.CREATOR.DATA.invokeCustomApi({
     api_name: CREATE_INVENTORY_ADJUSTMENT_API.api_name,
     workspace_name: CREATE_INVENTORY_ADJUSTMENT_API.workspace_name,
@@ -1273,6 +1280,7 @@ function createInventoryAdjustment(
     },
     public_key: CREATE_INVENTORY_ADJUSTMENT_API.public_key,
   }).then(function (resp: any) {
+    console.info("Inventory adjustment response:", resp);
     const result = resp && resp.result;
     if (!resp || resp.code !== 3000 || !result || result.code !== 3000) {
       return Promise.reject(
@@ -1441,16 +1449,34 @@ export function fetchFinishedGoodsForTarget(
   const criteria = `Production_Target_ID == ${productionTargetRecordId}`;
   return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(
     function (rows) {
-      return rows.map(function (r: any) {
-        return {
+      return runSequentially(rows, function (r: any) {
+        const itemId = lookupId(r.Item);
+        // Finished_Goods exposes Item only as a Product_Master lookup, while
+        // the external item ID lives on the linked Product_Master record.
+        return getRecords(
+          CONFIG.PRODUCT_MASTER_REPORT,
+          `ID == ${itemId}`,
+        ).then(function (productRows) {
+          const product = productRows[0];
+          const booksItemId = product ? display(product.Inventory_ID) : "";
+          console.info("Finished-good Inventory ID lookup:", {
+            productMasterId: itemId,
+            productMasterFound: !!product,
+            inventoryIdRaw: product && product.Inventory_ID,
+            inventoryId: booksItemId,
+            productMasterRecord: product,
+          });
+          return {
           id: r.ID,
           productionTargetRecordId: lookupId(r.Production_Target_ID),
-          itemId: lookupId(r.Item),
+          itemId: itemId,
+          booksItemId: booksItemId,
           itemName: display(r.Item),
           uomId: lookupId(r.UOM),
           uomName: display(r.UOM),
           targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
-        };
+          };
+        });
       });
     },
   );
@@ -1985,6 +2011,9 @@ export function fetchFinishedGoodsForMrp(
               productionTargetRecordId ||
               "",
             itemId: lookupId(r.Item),
+            // This MRP-only fallback does not feed a Consumption Entry;
+            // fetchFinishedGoodsForTarget resolves Inventory_ID when it does.
+            booksItemId: "",
             itemName: display(r.Item),
             uomId: lookupId(r.UOM),
             uomName: display(r.UOM),
@@ -2340,9 +2369,7 @@ export function prepareConsumptionDraft(
       finishedGoods: finishedGoods.map(function (fg) {
         return {
           itemId: fg.itemId,
-          // Product_Master has no Books item-ID field available to this
-          // lookup yet, so do not substitute its Creator record ID here.
-          booksItemId: "",
+          booksItemId: fg.booksItemId,
           itemName: fg.itemName,
           uom: fg.uomName,
           targetQuantity: fg.targetQuantity,
