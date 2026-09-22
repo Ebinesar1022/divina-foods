@@ -1,1 +1,0 @@
-import{r,j as t,i as a}from"./index-B9B30YLF.js";var e={},u=a;Object.defineProperty(e,"__esModule",{value:!0});var v=e.default=void 0,o=u(r()),s=t;v=e.default=(0,o.default)((0,s.jsx)("path",{d:"M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4"}),"Restaurant");export{v as d};
