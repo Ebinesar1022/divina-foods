@@ -1,1 +1,4 @@
 node_modules
+overview_z/
+*.zip
+ZET-debug.log
