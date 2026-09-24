@@ -1294,6 +1294,53 @@ function createInventoryAdjustment(
   });
 }
 
+// Published as "fgScrapTransfer" in Microservices
+// (function: CreateInventoryAdjustmentScrap).
+const CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API = {
+  api_name: "fgScrapTransfer",
+  workspace_name: "info_divinafoodco",
+  public_key: "Ovj4ZUgZ2CZMufd4OVujhS06a",
+};
+
+function createFinishedGoodScrapInventoryAdjustment(
+  itemBooksId: string,
+  quantityAdjusted: number,
+  reason: string,
+  adjDate: string,
+): Promise<any> {
+  console.info("Creating finished-good scrap Inventory adjustment:", {
+    item_id: itemBooksId,
+    quantity_adjusted: quantityAdjusted,
+    reason: reason,
+    adj_date: adjDate,
+  });
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API.api_name,
+    workspace_name: CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      item_id: itemBooksId,
+      quantity_adjusted: quantityAdjusted,
+      reason: reason,
+      adj_date: adjDate,
+    },
+    public_key: CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API.public_key,
+  }).then(function (resp: any) {
+    console.info("Finished-good scrap Inventory adjustment response:", resp);
+    const result = resp && resp.result;
+    if (!resp || resp.code !== 3000 || !result || result.code !== 3000) {
+      return Promise.reject(
+        new Error(
+          (result && result.message) ||
+            "Failed to create finished-good scrap inventory adjustment.",
+        ),
+      );
+    }
+    return result;
+  });
+}
+
 // Published as "Check_stock_in_MRP" in Microservices (function: MRP.CheckStock).
 // Re-checks every still-short Raw_Materials row on an MRP against the
 // warehouse's current Available_Stocks, reserves whatever now covers it,
@@ -2560,6 +2607,38 @@ function updateWarehouseStockForConsumption(
     );
   }
 
+  function updateOrCreateScrapWarehouseForFinishedGood(
+    fg: (typeof draft.finishedGoods)[number],
+  ): Promise<any> {
+    if (!(fg.scrapQuantity > 0)) return Promise.resolve(null);
+    return updateOrCreateScrapWarehouse(fg.itemId, fg.scrapQuantity).then(
+      function (originalResult) {
+        if (!fg.booksItemId) {
+          console.warn(
+            "Finished-good scrap Inventory adjustment skipped (Books item ID is not available):",
+            fg.itemId,
+          );
+          return originalResult;
+        }
+        return createFinishedGoodScrapInventoryAdjustment(
+          fg.booksItemId,
+          fg.scrapQuantity,
+          "Production scrap",
+          formatDateStringForZoho(draft.date),
+        )
+          .catch(function (err) {
+            console.warn(
+              "Finished-good scrap Inventory adjustment failed (Creator scrap stock still updated):",
+              err,
+            );
+          })
+          .then(function () {
+            return originalResult;
+          });
+      },
+    );
+  }
+
   function releaseMainWarehouseForRawMaterial(
     rm: (typeof draft.rawMaterials)[number],
   ): Promise<any> {
@@ -2689,7 +2768,7 @@ function updateWarehouseStockForConsumption(
           return updateOrCreateBatchDetailsForFinishedGood(fg);
         })
         .then(function () {
-          return updateOrCreateScrapWarehouse(fg.itemId, fg.scrapQuantity);
+          return updateOrCreateScrapWarehouseForFinishedGood(fg);
         });
     },
   )
