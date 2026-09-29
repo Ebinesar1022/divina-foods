@@ -312,6 +312,13 @@ export interface MrpDetailData {
   finishedGoods: FinishedGoodTargetRow[];
   rawMaterials: RawMaterialNeedRow[];
   hasShortfall: boolean;
+  // Each finished good's BOM lines (per 1 unit), keyed by
+  // FinishedGoodTargetRow.id. Raw_Materials is stored aggregated per MRP with
+  // no finished-good link, so this is what lets the views show the
+  // requirement and batch allocation per finished good. Missing/empty means
+  // the per-finished-good view isn't available (BOM fetch failed) and the
+  // views fall back to the combined table.
+  bomByFinishedGood?: Record<string, BomItemRow[]>;
 }
 
 // ───────────── Start Production ─────────────

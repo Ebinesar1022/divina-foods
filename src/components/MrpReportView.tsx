@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Alert,
   Box,
@@ -19,7 +20,13 @@ import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import StatusChip from "./StatusChip";
 import FoodProductionLoader from "./FoodProductionLoader";
 import { CAN_HOVER, PHONE, stackedTableSx } from "./common/responsive";
-import type { MrpDetailData, MrpRow, ProductionTargetRow } from "../types";
+import { buildFinishedGoodSections } from "../utils/finishedGoodBreakdown";
+import type {
+  MrpDetailData,
+  MrpRow,
+  ProductionTargetRow,
+  RawMaterialNeedRow,
+} from "../types";
 
 interface MrpReportViewProps {
   mrpRecord: MrpRow;
@@ -40,6 +47,27 @@ export default function MrpReportView({
     mrpDetails?.hasShortfall ??
     (rawMaterials.some((r) => r.status === "Needs Purchase") ||
       productionTarget.status === "Waiting for Stock");
+
+  // One section per finished good (its own requirement + share of the stock),
+  // or null when the BOMs aren't available / don't match what the MRP stored —
+  // then the combined table is shown instead.
+  const bomByFinishedGood = mrpDetails?.bomByFinishedGood;
+  const fgSections = useMemo(
+    () => buildFinishedGoodSections(finishedGoods, bomByFinishedGood, rawMaterials),
+    [finishedGoods, bomByFinishedGood, rawMaterials],
+  );
+  const hasSharedMaterial = useMemo(() => {
+    if (!fgSections) return false;
+    const seen = new Set<string>();
+    for (const section of fgSections) {
+      for (const m of section.materials) {
+        const key = m.productId || m.productName;
+        if (seen.has(key)) return true;
+        seen.add(key);
+      }
+    }
+    return false;
+  }, [fgSections]);
 
   const totalRawItems = rawMaterials.length;
   const needsPurchaseCount = rawMaterials.filter((r) => r.status === "Needs Purchase").length;
@@ -344,109 +372,51 @@ export default function MrpReportView({
               )}
             </Box>
 
-            <TableContainer
-              component={Paper}
-              variant="outlined"
-              sx={[
-                {
-                  borderRadius: "12px",
-                  borderColor: "rgba(148,163,184,0.25)",
-                  overflowX: "auto",
-                  WebkitOverflowScrolling: "touch",
-                },
-                // 7 columns: each raw material becomes a labelled card on phones.
-                stackedTableSx,
-              ]}
-            >
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: "rgba(241,245,249,0.55)" }}>
-                    <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
-                      Product Name
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>UOM</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
-                      Stock On Hand
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
-                      Stock Required
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
-                      Allocate Qty
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
-                      Needed Qty
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rawMaterials.length > 0 ? (
-                    rawMaterials.map((rm, idx) => {
-                      const isShortfall = rm.status === "Needs Purchase";
-                      return (
-                        <TableRow
-                          key={rm.productId || idx}
-                          sx={{
-                            bgcolor: isShortfall ? "rgba(254, 242, 242, 0.4)" : undefined,
-                            "&:last-child td, &:last-child th": { border: 0 },
-                            "&:hover": {
-                              bgcolor: isShortfall ? "rgba(254, 242, 242, 0.7)" : "#F8FAFC",
-                            },
-                            // As a phone card the row keeps its "short on stock" tint
-                            // ("&&" outranks the stacked-card white).
-                            ...(isShortfall
-                              ? {
-                                  [PHONE]: {
-                                    "&&": { bgcolor: "#FEF2F2", borderColor: "rgba(239, 68, 68, 0.28)" },
-                                  },
-                                }
-                              : {}),
-                          }}
-                        >
-                          <TableCell sx={{ fontWeight: 600, color: "#1E293B" }}>
-                            {rm.productName}
-                          </TableCell>
-                          <TableCell data-label="UOM" sx={{ color: "#64748B" }}>{rm.uom}</TableCell>
-                          <TableCell data-label="Stock On Hand" align="right" sx={{ color: "#334155" }}>
-                            {rm.stockOnHand.toFixed(2)}
-                          </TableCell>
-                          <TableCell data-label="Stock Required" align="right" sx={{ fontWeight: 600, color: "#1E293B" }}>
-                            {rm.stockRequired.toFixed(2)}
-                          </TableCell>
-                          <TableCell
-                            data-label="Allocate Qty"
-                            align="right"
-                            sx={{ color: rm.allocateQuantity > 0 ? "#059669" : "#64748B" }}
-                          >
-                            {rm.allocateQuantity.toFixed(2)}
-                          </TableCell>
-                          <TableCell
-                            data-label="Needed Qty"
-                            align="right"
-                            sx={{
-                              fontWeight: rm.neededQuantity > 0 ? 700 : 400,
-                              color: rm.neededQuantity > 0 ? "#DC2626" : "#64748B",
-                            }}
-                          >
-                            {rm.neededQuantity.toFixed(2)}
-                          </TableCell>
-                          <TableCell data-label="Status">
-                            <StatusChip value={rm.status} />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 3, color: "#94A3B8" }}>
-                        No raw materials calculation found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            {fgSections ? (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+                {fgSections.map((section) => (
+                  <Box key={section.finishedGood.id}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 1,
+                        mb: 1,
+                      }}
+                    >
+                      <Inventory2OutlinedIcon sx={{ color: "#1D4ED8", fontSize: 18 }} />
+                      <Typography sx={{ fontWeight: 700, color: "#0F172A", fontSize: 14.5 }}>
+                        {section.finishedGood.itemName}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          bgcolor: "#EFF6FF",
+                          color: "#2563eb",
+                          px: 1,
+                          py: 0.2,
+                          borderRadius: "6px",
+                        }}
+                      >
+                        Target: {section.finishedGood.targetQuantity}
+                        {section.finishedGood.uomName ? ` ${section.finishedGood.uomName}` : ""}
+                      </Typography>
+                    </Box>
+                    <RawMaterialsTable rows={section.materials} />
+                  </Box>
+                ))}
+                {hasSharedMaterial && (
+                  <Typography sx={{ fontSize: 12, color: "#64748B", fontWeight: 500 }}>
+                    Raw materials used by more than one finished good are allocated in the
+                    order listed above.
+                  </Typography>
+                )}
+              </Box>
+            ) : (
+              <RawMaterialsTable rows={rawMaterials} />
+            )}
           </Box>
         </>
       )}
@@ -511,3 +481,111 @@ function MetricCard({
   );
 }
 
+
+function RawMaterialsTable({ rows }: { rows: RawMaterialNeedRow[] }) {
+  return (
+      <TableContainer
+        component={Paper}
+        variant="outlined"
+        sx={[
+          {
+            borderRadius: "12px",
+            borderColor: "rgba(148,163,184,0.25)",
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+          },
+          // 7 columns: each raw material becomes a labelled card on phones.
+          stackedTableSx,
+        ]}
+      >
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: "rgba(241,245,249,0.55)" }}>
+              <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
+                Product Name
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>UOM</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
+                Stock On Hand
+              </TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
+                Stock Required
+              </TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
+                Allocate Qty
+              </TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>
+                Needed Qty
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, color: "#475569", py: 1.2 }}>Status</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.length > 0 ? (
+              rows.map((rm, idx) => {
+                const isShortfall = rm.status === "Needs Purchase";
+                return (
+                  <TableRow
+                    key={rm.productId || idx}
+                    sx={{
+                      bgcolor: isShortfall ? "rgba(254, 242, 242, 0.4)" : undefined,
+                      "&:last-child td, &:last-child th": { border: 0 },
+                      "&:hover": {
+                        bgcolor: isShortfall ? "rgba(254, 242, 242, 0.7)" : "#F8FAFC",
+                      },
+                      // As a phone card the row keeps its "short on stock" tint
+                      // ("&&" outranks the stacked-card white).
+                      ...(isShortfall
+                        ? {
+                            [PHONE]: {
+                              "&&": { bgcolor: "#FEF2F2", borderColor: "rgba(239, 68, 68, 0.28)" },
+                            },
+                          }
+                        : {}),
+                    }}
+                  >
+                    <TableCell sx={{ fontWeight: 600, color: "#1E293B" }}>
+                      {rm.productName}
+                    </TableCell>
+                    <TableCell data-label="UOM" sx={{ color: "#64748B" }}>{rm.uom}</TableCell>
+                    <TableCell data-label="Stock On Hand" align="right" sx={{ color: "#334155" }}>
+                      {rm.stockOnHand.toFixed(2)}
+                    </TableCell>
+                    <TableCell data-label="Stock Required" align="right" sx={{ fontWeight: 600, color: "#1E293B" }}>
+                      {rm.stockRequired.toFixed(2)}
+                    </TableCell>
+                    <TableCell
+                      data-label="Allocate Qty"
+                      align="right"
+                      sx={{ color: rm.allocateQuantity > 0 ? "#059669" : "#64748B" }}
+                    >
+                      {rm.allocateQuantity.toFixed(2)}
+                    </TableCell>
+                    <TableCell
+                      data-label="Needed Qty"
+                      align="right"
+                      sx={{
+                        fontWeight: rm.neededQuantity > 0 ? 700 : 400,
+                        color: rm.neededQuantity > 0 ? "#DC2626" : "#64748B",
+                      }}
+                    >
+                      {rm.neededQuantity.toFixed(2)}
+                    </TableCell>
+                    <TableCell data-label="Status">
+                      <StatusChip value={rm.status} />
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ py: 3, color: "#94A3B8" }}>
+                  No raw materials calculation found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+  );
+}

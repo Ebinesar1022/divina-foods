@@ -80,8 +80,13 @@ import {
   stageIndex,
   stageKeyFromStatus,
 } from "../config/stages.config";
+import {
+  buildFinishedGoodSections,
+  splitBatchAllocationsByFinishedGood,
+} from "../utils/finishedGoodBreakdown";
 import type {
   BatchAllocationLine,
+  BomItemRow,
   ConsumptionEntryDraft,
   ConsumptionEntryRow,
   CreatePoDraft,
@@ -2051,6 +2056,7 @@ export default function ProductionOverview({
                           productionTarget={data.record}
                           mrpRecord={data.mrpRecord}
                           finishedGoods={data.mrpDetails?.finishedGoods || []}
+                          bomByFinishedGood={data.mrpDetails?.bomByFinishedGood}
                         />
                       )}
                     </Box>
@@ -2995,12 +3001,14 @@ function BatchAllocationSummary({
   productionTarget,
   mrpRecord,
   finishedGoods,
+  bomByFinishedGood,
 }: {
   allocations: BatchAllocationLine[];
   rawMaterials: RawMaterialNeedRow[];
   productionTarget: ProductionTargetRow | null;
   mrpRecord: MrpRow | null;
   finishedGoods: FinishedGoodTargetRow[];
+  bomByFinishedGood?: Record<string, BomItemRow[]>;
 }) {
   const [pdfSnackbar, setPdfSnackbar] = useState<{
     message: string;
@@ -3065,6 +3073,21 @@ function BatchAllocationSummary({
     }));
   }, [allocations, rawMaterials]);
 
+  // The same batches, handed out per finished good (each one's own BOM
+  // requirement, earliest expiry first) — what staff actually pick against.
+  // null when the BOMs aren't available or don't match what the MRP stored;
+  // then the combined per-material view is shown instead.
+  const fgBatchSections = useMemo(() => {
+    const sections = buildFinishedGoodSections(
+      finishedGoods,
+      bomByFinishedGood,
+      rawMaterials,
+    );
+    return sections
+      ? splitBatchAllocationsByFinishedGood(sections, groups)
+      : null;
+  }, [finishedGoods, bomByFinishedGood, rawMaterials, groups]);
+
   if (groups.length === 0) return null;
 
   function handleDownloadPdf() {
@@ -3080,6 +3103,7 @@ function BatchAllocationSummary({
           mrpRecord,
           groups,
           finishedGoods,
+          finishedGoodSections: fgBatchSections ?? undefined,
         });
 
         const uploaded = uploadBatchAllocationPdf(
@@ -3230,16 +3254,69 @@ function BatchAllocationSummary({
         </Tooltip>
       </Box>
 
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-        {groups.map((group) => (
-          <BatchAllocationGroupRow
-            key={group.key}
-            material={group.material}
-            fallbackName={group.fallbackName}
-            lines={group.lines}
-          />
-        ))}
-      </Box>
+      {fgBatchSections ? (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+          {fgBatchSections.map((section) => (
+            <Box key={section.finishedGood.id}>
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 1,
+                  mb: 1.25,
+                }}
+              >
+                <Inventory2OutlinedIcon
+                  sx={{ color: "#1D4ED8", fontSize: 18 }}
+                />
+                <Typography
+                  sx={{ fontWeight: 800, fontSize: 14.5, color: "#0F172A" }}
+                >
+                  {section.finishedGood.itemName}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    bgcolor: "#EFF6FF",
+                    color: "#2563eb",
+                    px: 1,
+                    py: 0.2,
+                    borderRadius: "6px",
+                  }}
+                >
+                  Target: {section.finishedGood.targetQuantity}
+                  {section.finishedGood.uomName
+                    ? ` ${section.finishedGood.uomName}`
+                    : ""}
+                </Typography>
+              </Box>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                {section.groups.map((group) => (
+                  <BatchAllocationGroupRow
+                    key={group.key}
+                    material={group.material}
+                    fallbackName={group.fallbackName}
+                    lines={group.lines}
+                  />
+                ))}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      ) : (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          {groups.map((group) => (
+            <BatchAllocationGroupRow
+              key={group.key}
+              material={group.material}
+              fallbackName={group.fallbackName}
+              lines={group.lines}
+            />
+          ))}
+        </Box>
+      )}
 
       <ModernSnackbar
         open={!!pdfSnackbar}
@@ -3310,8 +3387,13 @@ function BatchAllocationGroupRow({
       </Box>
 
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+        {lines.length === 0 && (
+          <Typography sx={{ fontSize: 12, color: "#94A3B8", fontWeight: 500 }}>
+            No batch allocated
+          </Typography>
+        )}
         {lines.map((line, idx) => (
-          <BatchChip key={line.batchId || idx} line={line} />
+          <BatchChip key={`${line.batchId}-${idx}`} line={line} />
         ))}
       </Box>
     </Box>

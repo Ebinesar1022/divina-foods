@@ -1559,6 +1559,84 @@ function fetchBomItemsForProduct(itemId: string): Promise<BomItemRow[]> {
   );
 }
 
+// Every finished good's BOM lines in two requests total (one BOM_Master read,
+// one BOM_Items read — OR'd criteria, same trick as fetchStockOnHandBatch)
+// instead of fetchBomItemsForProduct's two per finished good. Keyed by the
+// Finished_Goods row's own ID, so two rows for the same item each still get
+// their lines. Best-effort: the per-finished-good breakdown is a display
+// nicety, so a failed read resolves to {} and the views fall back to the
+// combined table rather than failing the whole overview load.
+function fetchBomItemsForFinishedGoods(
+  finishedGoods: FinishedGoodTargetRow[],
+): Promise<Record<string, BomItemRow[]>> {
+  const itemIds = Array.from(
+    new Set(
+      finishedGoods
+        .map(function (fg) {
+          return fg.itemId;
+        })
+        .filter(Boolean),
+    ),
+  );
+  if (!itemIds.length) return Promise.resolve({});
+
+  return getRecords(
+    CONFIG.BOM_MASTER_REPORT,
+    itemIds
+      .map(function (id) {
+        return `Product == ${id}`;
+      })
+      .join(" || "),
+  )
+    .then(function (bomRows) {
+      // fetchBomItemsForProduct uses the first BOM when a product has several.
+      const bomIdByItem: Record<string, string> = {};
+      bomRows.forEach(function (b: any) {
+        const itemId = lookupId(b.Product);
+        if (itemId && !bomIdByItem[itemId]) bomIdByItem[itemId] = display(b.ID);
+      });
+      const bomIds = Array.from(new Set(Object.values(bomIdByItem)));
+      if (!bomIds.length) return {};
+
+      return getRecords(
+        CONFIG.BOM_ITEMS_REPORT,
+        bomIds
+          .map(function (id) {
+            return `BOM_ID == ${id}`;
+          })
+          .join(" || "),
+      ).then(function (itemRows) {
+        const itemsByBom: Record<string, BomItemRow[]> = {};
+        itemRows.forEach(function (r: any) {
+          const bomId = lookupId(r.BOM_ID) || display(r.BOM_ID);
+          if (!bomId) return;
+          (itemsByBom[bomId] = itemsByBom[bomId] || []).push({
+            bomId: bomId,
+            productId: lookupId(r.Product),
+            productName: display(r.Product),
+            quantityRequired: parseFloat(display(r.Quantity_Required)) || 0,
+            uomId: lookupId(r.UOM),
+            uomName: display(r.UOM),
+          });
+        });
+
+        const byFinishedGood: Record<string, BomItemRow[]> = {};
+        finishedGoods.forEach(function (fg) {
+          const items = itemsByBom[bomIdByItem[fg.itemId]];
+          if (items) byFinishedGood[fg.id] = items;
+        });
+        return byFinishedGood;
+      });
+    })
+    .catch(function (err) {
+      console.warn(
+        "Couldn't load finished-good BOMs; showing combined raw materials:",
+        err,
+      );
+      return {} as Record<string, BomItemRow[]>;
+    });
+}
+
 // Available_Stocks is the source of truth for current stock — sum it across
 // every Main_Warehouse_Stock_Details row for a raw material (normally just
 // one, since there's a single Main Warehouse). Batched across every raw
@@ -2122,12 +2200,17 @@ export function fetchMrpDetails(
       const hasShortfall = rawMaterials.some(function (rm) {
         return rm.status === "Needs Purchase";
       });
-      return {
-        mrpRecord: mrpRecord,
-        finishedGoods: finishedGoods,
-        rawMaterials: rawMaterials,
-        hasShortfall: hasShortfall,
-      };
+      return fetchBomItemsForFinishedGoods(finishedGoods).then(function (
+        bomByFinishedGood,
+      ) {
+        return {
+          mrpRecord: mrpRecord,
+          finishedGoods: finishedGoods,
+          rawMaterials: rawMaterials,
+          hasShortfall: hasShortfall,
+          bomByFinishedGood: bomByFinishedGood,
+        };
+      });
     }
 
     // Fallback: If Raw_Materials_Report has no rows returned (e.g. mock data or unindexed),
