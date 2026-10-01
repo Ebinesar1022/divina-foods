@@ -478,14 +478,22 @@ export default function ProductionOverview({
     setPoCommitting(true);
     setPoCommitError("");
     const productionTargetRecordId = data.record.id;
-    Promise.all([
-      startProduction(productionTargetRecordId, {
-        startDate,
-        endDate,
-        assignedToId,
-      }),
-      allocateAndCommitBatch(productionTargetRecordId),
-    ])
+    // Sequenced, not Promise.all: AllocateAndCommitBatch (a Deluge custom
+    // function) touches this same Production_Target_Report record while
+    // doing its Reserved_Stock → Committed_Stocks transition. Firing it
+    // alongside the direct startProduction field update raced the two
+    // writers against the same row and made the update lose ~half the time
+    // with "Failed to update data" (3001) — succeeding only on a retry once
+    // the race window had passed. Awaiting startProduction first removes the
+    // concurrent writer.
+    startProduction(productionTargetRecordId, {
+      startDate,
+      endDate,
+      assignedToId,
+    })
+      .then(function () {
+        return allocateAndCommitBatch(productionTargetRecordId);
+      })
       .then(function () {
         // Read the FEFO_Batch_Allocation record AllocateAndCommitBatch just
         // wrote, rather than trying to parse its own response — that's also
