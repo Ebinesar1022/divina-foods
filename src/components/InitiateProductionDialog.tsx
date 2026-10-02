@@ -27,9 +27,11 @@ interface InitiateProductionDialogProps {
   startDate: string; // "YYYY-MM-DD", for the native date input
   endDate: string; // "YYYY-MM-DD", optional
   assignedToId: string;
+  notes: string;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
   onAssignedToChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -44,9 +46,11 @@ export default function InitiateProductionDialog({
   startDate,
   endDate,
   assignedToId,
+  notes,
   onStartDateChange,
   onEndDateChange,
   onAssignedToChange,
+  onNotesChange,
   onCancel,
   onConfirm,
 }: InitiateProductionDialogProps) {
@@ -159,6 +163,17 @@ export default function InitiateProductionDialog({
             </MenuItem>
           ))}
         </TextField>
+
+        <TextField
+          label="Notes"
+          fullWidth
+          multiline
+          minRows={2}
+          value={notes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          disabled={committing}
+          sx={{ mt: 2, bgcolor: "#fff", "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
+        />
 
         {commitError && (
           <Alert severity="error" sx={{ borderRadius: "12px", mt: 2 }}>
