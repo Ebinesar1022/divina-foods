@@ -480,15 +480,15 @@ export default function ProductionOverview({
     setPoCommitting(true);
     setPoCommitError("");
     const productionTargetRecordId = data.record.id;
-    Promise.all([
-      startProduction(productionTargetRecordId, {
-        startDate,
-        endDate,
-        assignedToId,
-        notes: productionNotes,
-      }),
-      allocateAndCommitBatch(productionTargetRecordId),
-    ])
+    startProduction(productionTargetRecordId, {
+      startDate,
+      endDate,
+      assignedToId,
+      notes: productionNotes,
+    })
+      .then(function () {
+        return allocateAndCommitBatch(productionTargetRecordId);
+      })
       .then(function () {
         // Read the FEFO_Batch_Allocation record AllocateAndCommitBatch just
         // wrote, rather than trying to parse its own response — that's also
