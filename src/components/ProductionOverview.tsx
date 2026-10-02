@@ -250,6 +250,7 @@ export default function ProductionOverview({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
+  const [productionNotes, setProductionNotes] = useState("");
   const poCommittingRef = useRef(false);
   // Which batch(es) each raw material was drawn from, per the last
   // AllocateAndCommitBatch call — only lives in this component's state
@@ -452,6 +453,7 @@ export default function ProductionOverview({
     setStartDate(parseZohoDateToIso(target.startDate) || todayIsoDate());
     setEndDate(parseZohoDateToIso(target.endDate));
     setAssignedToId(target.assignedToId || "");
+    setProductionNotes(target.notes || "");
     fetchEmployees().then(function (empList) {
       setEmployees(empList);
       if (!target.assignedToId && target.assignedTo) {
@@ -483,6 +485,7 @@ export default function ProductionOverview({
         startDate,
         endDate,
         assignedToId,
+        notes: productionNotes,
       }),
       allocateAndCommitBatch(productionTargetRecordId),
     ])
@@ -2422,9 +2425,11 @@ export default function ProductionOverview({
             startDate={startDate}
             endDate={endDate}
             assignedToId={assignedToId}
+            notes={productionNotes}
             onStartDateChange={setStartDate}
             onEndDateChange={setEndDate}
             onAssignedToChange={setAssignedToId}
+            onNotesChange={setProductionNotes}
             onCancel={handleCancelPoDraft}
             onConfirm={handleConfirmInitiateProduction}
           />

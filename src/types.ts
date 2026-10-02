@@ -332,6 +332,7 @@ export interface StartProductionDetails {
   startDate: string; // "YYYY-MM-DD" from a native <input type="date">
   endDate?: string; // "YYYY-MM-DD", or "" if not set
   assignedToId?: string; // Employee record ID, or "" if not set
+  notes?: string; // Production_Targets.Notes, editable from the dialog
 }
 
 // One batch a raw material's need was drawn from, per the

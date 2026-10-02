@@ -2278,6 +2278,9 @@ export function startProduction(
   if (details.assignedToId) {
     payload.Assigned_To = details.assignedToId;
   }
+  if (details.notes !== undefined) {
+    payload.Notes = details.notes;
+  }
 
   return updateRecord(
     CONFIG.PRODUCTION_TARGET_REPORT,
