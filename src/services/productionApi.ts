@@ -1299,7 +1299,7 @@ function createInventoryAdjustment(
 const CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API = {
   api_name: "fgScrapTransfer",
   workspace_name: "info_divinafoodco",
-  public_key: "Ovj4ZUgZ2CZMufd4OVujhS06a",
+  public_key: "Ovj4ZUgZ2CZMUfd4OVujhS06a",
 };
 
 function createFinishedGoodScrapInventoryAdjustment(
