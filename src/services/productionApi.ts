@@ -1342,6 +1342,72 @@ function createFinishedGoodScrapInventoryAdjustment(
   });
 }
 
+// Published as "consumptionforraw" in Microservices
+// (function: updateWarehouse.createInventoryAdjustmentForConsumption).
+// Posts every raw-material line of a Consumption Entry to Books in one
+// shot: Allocated_Quantity decreases Production Warehouse, Scrap_Quantity
+// increases Scrap Warehouse. This used to only run as a native Creator
+// "on submit" workflow on Consumption_Entry — which never fires for
+// records the widget creates via the SDK — so it has to be called
+// explicitly from here instead.
+const CREATE_CONSUMPTION_INVENTORY_ADJUSTMENT_API = {
+  api_name: "consumptionforraw",
+  workspace_name: "info_divinafoodco",
+  public_key: "zSugPAUg93MUHamzXhn9Y3vbX",
+};
+
+function createInventoryAdjustmentForRawMaterialConsumption(
+  consumptionId: string,
+): Promise<any> {
+  console.info(
+    "Posting raw-material consumption/scrap to Books:",
+    consumptionId,
+  );
+  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+    api_name: CREATE_CONSUMPTION_INVENTORY_ADJUSTMENT_API.api_name,
+    workspace_name: CREATE_CONSUMPTION_INVENTORY_ADJUSTMENT_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      consumption_id: consumptionId,
+    },
+    public_key: CREATE_CONSUMPTION_INVENTORY_ADJUSTMENT_API.public_key,
+  }).then(function (resp: any) {
+    console.info("Raw-material consumption Books response:", resp);
+    const result = resp && resp.result;
+    if (!result) {
+      return Promise.reject(
+        new Error("No response from consumptionforraw Custom API."),
+      );
+    }
+    if (result.status === "skipped") {
+      // Nothing had a valid Books item_id / positive quantity to post —
+      // not a failure, just nothing to do for this entry.
+      return result;
+    }
+    // The Deluge function catches its own Books call failures internally
+    // and always resolves with status "done" — a per-line failure (e.g.
+    // insufficient stock) only shows up buried inside bookResponse, so it
+    // has to be checked explicitly or it silently disappears.
+    const bookResponse = result.bookResponse || {};
+    const failures: string[] = [];
+    ["consumed", "scrap"].forEach(function (key) {
+      const sub = bookResponse[key];
+      if (sub && sub.code) {
+        failures.push(key + ": " + (sub.message || "unknown error"));
+      }
+    });
+    if (failures.length > 0) {
+      return Promise.reject(
+        new Error(
+          "Books raw-material adjustment failed — " + failures.join("; "),
+        ),
+      );
+    }
+    return result;
+  });
+}
+
 // Published as "Check_stock_in_MRP" in Microservices (function: MRP.CheckStock).
 // Re-checks every still-short Raw_Materials row on an MRP against the
 // warehouse's current Available_Stocks, reserves whatever now covers it,
@@ -2946,6 +3012,16 @@ export function commitConsumptionEntry(
             Consumed_Quantity: rm.consumedQuantity,
             Scrap_Quantity: rm.scrapQuantity,
           });
+        });
+      })
+      .then(function () {
+        return createInventoryAdjustmentForRawMaterialConsumption(
+          entryId,
+        ).catch(function (err: any) {
+          console.warn(
+            "Books raw-material consumption sync failed (Consumption Entry still recorded in Creator):",
+            err,
+          );
         });
       })
       .then(function () {
