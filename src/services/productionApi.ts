@@ -393,7 +393,9 @@ function creatorServiceOrigin(): string {
   const match = window.location.search.match(/[?&]serviceOrigin=([^&]+)/);
   if (match) {
     const origin = decodeURIComponent(match[1]).replace(/\/+$/, "");
-    if (/^https:\/\/[\w-]+(\.[\w-]+)*\.zoho\.[a-z]+(\.[a-z]+)?$/i.test(origin)) {
+    if (
+      /^https:\/\/[\w-]+(\.[\w-]+)*\.zoho\.[a-z]+(\.[a-z]+)?$/i.test(origin)
+    ) {
       return origin;
     }
   }
@@ -521,8 +523,7 @@ function navigateTopOrSelf(url: string): void {
 // a string it rejects with "Improper Configuration..!!" without navigating.
 export function navigateParentTo(url: string): void {
   try {
-    const util =
-      window.ZOHO && window.ZOHO.CREATOR && window.ZOHO.CREATOR.UTIL;
+    const util = window.ZOHO && window.ZOHO.CREATOR && window.ZOHO.CREATOR.UTIL;
     if (util && typeof util.navigateParentURL === "function") {
       const nav = util.navigateParentURL({
         action: "open",
@@ -1299,7 +1300,7 @@ function createInventoryAdjustment(
 const CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API = {
   api_name: "fgScrapTransfer",
   workspace_name: "info_divinafoodco",
-  public_key: "Ovj4ZUgZ2CZMufd4OVujhS06a",
+  public_key: "Ovj4ZUgZ2CZMUfd4OVujhS06a",
 };
 
 function createFinishedGoodScrapInventoryAdjustment(
@@ -1500,30 +1501,29 @@ export function fetchFinishedGoodsForTarget(
         const itemId = lookupId(r.Item);
         // Finished_Goods exposes Item only as a Product_Master lookup, while
         // the external item ID lives on the linked Product_Master record.
-        return getRecords(
-          CONFIG.PRODUCT_MASTER_REPORT,
-          `ID == ${itemId}`,
-        ).then(function (productRows) {
-          const product = productRows[0];
-          const booksItemId = product ? display(product.Inventory_ID) : "";
-          console.info("Finished-good Inventory ID lookup:", {
-            productMasterId: itemId,
-            productMasterFound: !!product,
-            inventoryIdRaw: product && product.Inventory_ID,
-            inventoryId: booksItemId,
-            productMasterRecord: product,
-          });
-          return {
-          id: r.ID,
-          productionTargetRecordId: lookupId(r.Production_Target_ID),
-          itemId: itemId,
-          booksItemId: booksItemId,
-          itemName: display(r.Item),
-          uomId: lookupId(r.UOM),
-          uomName: display(r.UOM),
-          targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
-          };
-        });
+        return getRecords(CONFIG.PRODUCT_MASTER_REPORT, `ID == ${itemId}`).then(
+          function (productRows) {
+            const product = productRows[0];
+            const booksItemId = product ? display(product.Inventory_ID) : "";
+            console.info("Finished-good Inventory ID lookup:", {
+              productMasterId: itemId,
+              productMasterFound: !!product,
+              inventoryIdRaw: product && product.Inventory_ID,
+              inventoryId: booksItemId,
+              productMasterRecord: product,
+            });
+            return {
+              id: r.ID,
+              productionTargetRecordId: lookupId(r.Production_Target_ID),
+              itemId: itemId,
+              booksItemId: booksItemId,
+              itemName: display(r.Item),
+              uomId: lookupId(r.UOM),
+              uomName: display(r.UOM),
+              targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
+            };
+          },
+        );
       });
     },
   );
@@ -2200,17 +2200,17 @@ export function fetchMrpDetails(
       const hasShortfall = rawMaterials.some(function (rm) {
         return rm.status === "Needs Purchase";
       });
-      return fetchBomItemsForFinishedGoods(finishedGoods).then(function (
-        bomByFinishedGood,
-      ) {
-        return {
-          mrpRecord: mrpRecord,
-          finishedGoods: finishedGoods,
-          rawMaterials: rawMaterials,
-          hasShortfall: hasShortfall,
-          bomByFinishedGood: bomByFinishedGood,
-        };
-      });
+      return fetchBomItemsForFinishedGoods(finishedGoods).then(
+        function (bomByFinishedGood) {
+          return {
+            mrpRecord: mrpRecord,
+            finishedGoods: finishedGoods,
+            rawMaterials: rawMaterials,
+            hasShortfall: hasShortfall,
+            bomByFinishedGood: bomByFinishedGood,
+          };
+        },
+      );
     }
 
     // Fallback: If Raw_Materials_Report has no rows returned (e.g. mock data or unindexed),
@@ -2910,6 +2910,7 @@ export function commitConsumptionEntry(
     Production_Target: draft.productionTargetRecordId,
     Date_field: formatDateStringForZoho(draft.date),
     Remarks: draft.remarks,
+    Books_Sync_Status: "Pending",
   }).then(function (entryRecord) {
     const entryId: string = display(entryRecord.ID);
 
