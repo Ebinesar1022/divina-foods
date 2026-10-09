@@ -105,6 +105,21 @@ export const CONFIG = {
   CONSUMPTION_ITEMS_FORM: "Consumption_Items",
   CONSUMPTION_ITEMS_REPORT: "Consumption_Items_Report",
 
+  // Combined header + lines save. The Field Link Name of each subform field
+  // on the parent form (Form builder → click the subform → Field Link Name).
+  // When one is set, that subform's rows are sent inside the header's own
+  // addRecords payload — one request for the header and all its lines,
+  // like the POS widget's Product_Details — instead of one request per
+  // line. Left blank, each line is written as its own row in the subform's
+  // form (the old way). ⚠️ Only fill these in after checking the name in
+  // Creator: a wrong name can save the header without its lines.
+  CONSUMPTION_FINISHED_GOODS_SUBFORM: "", // on Consumption_Entry → Finished_Goods_Cunsumptions
+  CONSUMPTION_RAW_MATERIALS_SUBFORM: "", // on Consumption_Entry → Consumption_Items
+  MRP_FINISHED_GOODS_SUBFORM: "", // on Material_Requirement_Planning → Finished_Goods
+  MRP_RAW_MATERIALS_SUBFORM: "", // on Material_Requirement_Planning → Raw_Materials
+  PO_LINE_ITEMS_SUBFORM: "", // on Purchase_Order → PO_Line_Items
+  RECEIVE_ITEMS_SUBFORM: "", // on Purchase_Receive → Receive_Items
+
   // Warehouse stock ledgers touched by completing production — confirmed
   // against the app's .ds export. All three are plain Creator forms (no
   // external Zoho Inventory connection involved), unlike the separate
@@ -200,13 +215,94 @@ function formatEmployeeName(nameField: any): string {
     .trim();
 }
 
+// ───────────── Request queue ─────────────
+// Creator caps how many API calls one session can have in flight at once;
+// past that cap a call fails with code 2955 ("You have reached the maximum
+// number of API calls that can be simultaneously initiated at a time").
+// Every SDK call below goes through this queue, which keeps at most
+// MAX_IN_FLIGHT running and starts the next one as soon as a slot frees up,
+// so independent requests can be fired together (Promise.all) without
+// tripping the cap. It's the same limiter as the POS widget's ZQ helper.
+// A call that still comes back 2955 was never started on the server, so
+// it's safe to retry it after a short pause.
+const MAX_IN_FLIGHT = 4;
+const CAP_RETRIES = 3;
+let inFlight = 0;
+const queued: Array<() => void> = [];
+
+function startQueued(): void {
+  while (inFlight < MAX_IN_FLIGHT && queued.length) {
+    queued.shift()!();
+  }
+}
+
+function isCapReached(value: any): boolean {
+  if (!value) return false;
+  if (value.code === 2955 || value.code === "2955") return true;
+  const text =
+    typeof value === "string" ? value : value.description || value.message;
+  return /\b2955\b|maximum number of API calls/i.test(String(text || ""));
+}
+
+function callWithCapRetry<T>(
+  call: () => Promise<T>,
+  attempt: number,
+): Promise<T> {
+  function retry(): Promise<T> {
+    return new Promise<void>(function (resolve) {
+      setTimeout(resolve, 400 * (attempt + 1));
+    }).then(function () {
+      return callWithCapRetry(call, attempt + 1);
+    });
+  }
+  return Promise.resolve()
+    .then(call)
+    .then(
+      function (resp) {
+        return attempt < CAP_RETRIES && isCapReached(resp) ? retry() : resp;
+      },
+      function (err) {
+        if (attempt < CAP_RETRIES && isCapReached(err)) return retry();
+        throw err;
+      },
+    );
+}
+
+function zohoCall<T>(call: () => Promise<T>): Promise<T> {
+  return new Promise<T>(function (resolve, reject) {
+    queued.push(function () {
+      inFlight++;
+      callWithCapRetry(call, 0)
+        .then(resolve, reject)
+        .then(function () {
+          inFlight--;
+          startQueued();
+        });
+    });
+    startQueued();
+  });
+}
+
+// window.ZOHO.CREATOR.DATA.<method>(params), through the queue above.
+function zohoData(method: string, params: Record<string, any>): Promise<any> {
+  return zohoCall(function () {
+    return window.ZOHO.CREATOR.DATA[method](params);
+  });
+}
+
+// Runs `task` for every item at once; the request queue above keeps the
+// number of calls actually in flight under Creator's cap.
+function runAll<T, R>(items: T[], task: (item: T) => Promise<R>): Promise<R[]> {
+  return Promise.all(items.map(task));
+}
+
 // Generic fetch — every read on this page goes through this one function.
 function getRecords(
   reportName: string,
   criteria?: string,
   maxRecords = 200,
 ): Promise<any[]> {
-  return window.ZOHO.CREATOR.DATA.getRecords({
+  return zohoData("getRecords", {
     app_name: CONFIG.APP_NAME,
     report_name: reportName,
     criteria: criteria || "",
@@ -230,6 +326,171 @@ function getRecords(
     });
 }
 
+// `field == value` — quoted for a text field, bare for a lookup/ID.
+function equalsCriteria(field: string, value: string, quoted: boolean): string {
+  return quoted ? `${field} == "${value}"` : `${field} == ${value}`;
+}
+
+// Batched lookup: every row of `reportName` whose `field` matches any of
+// `ids`, via OR'd criteria (`F == 1 || F == 2 || …`) — one request per chunk
+// instead of one per ID. Chunked so the criteria string stays short, and
+// read with the 1000-row page size since one call now covers many parents'
+// children. Pass `quoted` for a text field (e.g. Batch_Number).
+const BATCH_CHUNK = 25;
+function getRecordsByIds(
+  reportName: string,
+  field: string,
+  ids: string[],
+  quoted = false,
+): Promise<any[]> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (!unique.length) return Promise.resolve([]);
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += BATCH_CHUNK) {
+    chunks.push(unique.slice(i, i + BATCH_CHUNK));
+  }
+  return runAll(chunks, function (chunk) {
+    const criteria = chunk
+      .map(function (id) {
+        return equalsCriteria(field, id, quoted);
+      })
+      .join(" || ");
+    return getRecords(reportName, criteria, 1000);
+  }).then(function (pages) {
+    return ([] as any[]).concat(...pages);
+  });
+}
+
+// The first row for each key — one batched read (getRecordsByIds), then any
+// key that read didn't come back with is re-checked on its own with the
+// plain single-key criteria. The batched read alone is never taken to mean
+// "no row": an earlier batched version of the MRP stock reservation was
+// reverted because rows went unmatched, and a missed row here would create
+// a duplicate stock row (or skip a release) instead of updating the real one.
+// Keys are matched with `keyOf`, so a row is only ever used for its own key.
+function fetchFirstRowByKey(
+  reportName: string,
+  field: string,
+  keys: string[],
+  keyOf: (row: any) => string,
+  quoted = false,
+): Promise<Map<string, any>> {
+  const unique = Array.from(new Set(keys.filter(Boolean)));
+  return getRecordsByIds(reportName, field, unique, quoted).then(
+    function (rows) {
+      const found = new Map<string, any>();
+      rows.forEach(function (row) {
+        const key = keyOf(row);
+        if (key && !found.has(key)) found.set(key, row);
+      });
+      const missing = unique.filter(function (key) {
+        return !found.has(key);
+      });
+      return runAll(missing, function (key) {
+        return getRecords(reportName, equalsCriteria(field, key, quoted)).then(
+          function (single) {
+            if (single.length) found.set(key, single[0]);
+          },
+        );
+      }).then(function () {
+        return found;
+      });
+    },
+  );
+}
+
+function productOf(row: any): string {
+  return lookupId(row.Product_Master);
+}
+
+// ───────────── In-memory stock edits ─────────────
+// A save that touches many stock rows reads them all up front, applies every
+// line's change to these in-memory edits — in the same order the old
+// read-then-write-per-line code applied them, so a row hit by two lines ends
+// up with both changes — and then writes each row once.
+interface StockEdit {
+  row: any | null; // the row as read; null for a row this save creates
+  create: Record<string, any> | null; // fixed fields of a new row
+  changes: Record<string, number>;
+  remove: boolean;
+}
+
+function existingStockEdit(row: any): StockEdit {
+  return { row: row, create: null, changes: {}, remove: false };
+}
+
+function newStockEdit(create: Record<string, any>): StockEdit {
+  return { row: null, create: create, changes: {}, remove: false };
+}
+
+function stockQty(edit: StockEdit, field: string): number {
+  if (Object.prototype.hasOwnProperty.call(edit.changes, field)) {
+    return edit.changes[field];
+  }
+  return parseFloat(display(edit.row && edit.row[field])) || 0;
+}
+
+function setStockQty(edit: StockEdit, field: string, value: number): void {
+  edit.changes[field] = roundQty(value);
+}
+
+// The edit for `key`, starting one from `row` the first time the key is hit.
+// Returns null when there's no row and `create` is null (nothing to edit).
+function stockEditFor(
+  edits: Map<string, StockEdit>,
+  key: string,
+  row: any | undefined,
+  create: (() => Record<string, any> | null) | null,
+): StockEdit | null {
+  let edit = edits.get(key) || null;
+  if (!edit) {
+    if (row) edit = existingStockEdit(row);
+    else {
+      const fields = create && create();
+      if (fields) edit = newStockEdit(fields);
+    }
+    if (edit) edits.set(key, edit);
+  }
+  return edit;
+}
+
+// Writes one edited row: a delete, an update of just the changed fields, or
+// a create.
+function writeStockEdit(
+  edit: StockEdit,
+  reportName: string,
+  formName: string,
+): Promise<any> {
+  if (edit.row) {
+    if (edit.remove) return deleteRecord(reportName, display(edit.row.ID));
+    if (!Object.keys(edit.changes).length) return Promise.resolve(null);
+    return updateRecord(reportName, display(edit.row.ID), edit.changes);
+  }
+  return addRecord(formName, { ...edit.create, ...edit.changes });
+}
+
+function writeStockEdits(
+  edits: Map<string, StockEdit>,
+  reportName: string,
+  formName: string,
+): Map<string, Promise<any>> {
+  const writes = new Map<string, Promise<any>>();
+  edits.forEach(function (edit, key) {
+    writes.set(key, writeStockEdit(edit, reportName, formName));
+  });
+  return writes;
+}
+
+function groupBy(rows: any[], key: (row: any) => string): Record<string, any[]> {
+  const out: Record<string, any[]> = {};
+  rows.forEach(function (row) {
+    const k = key(row);
+    if (!k) return;
+    (out[k] = out[k] || []).push(row);
+  });
+  return out;
+}
+
 // Zoho Creator enforces a low cap on simultaneous in-flight API calls per
 // session — firing a get/update for every line of a multi-line record
 // (several finished goods, several raw materials, each needing 2-3 lookups
@@ -237,6 +498,9 @@ function getRecords(
 // comes back `{ code: 2955, description: "You have reached the maximum
 // number of API calls that can be simultaneously initiated at a time." }`.
 // Chains each item's work with .then() instead, one request at a time.
+// Every call now also goes through the request queue (zohoCall), so new
+// code fires independent requests with runAll instead; this stays for the
+// PO / receive line rows, which are written in the order they were entered.
 function runSequentially<T, R>(
   items: T[],
   task: (item: T) => Promise<R>,
@@ -258,7 +522,7 @@ function runSequentially<T, R>(
 // Generic create — every write this widget does (MRP header, Finished_Goods
 // links, Raw_Materials rows) goes through this one function.
 function addRecord(formName: string, data: Record<string, any>): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.addRecords({
+  return zohoData("addRecords", {
     app_name: CONFIG.APP_NAME,
     form_name: formName,
     payload: {
@@ -289,7 +553,7 @@ function updateRecord(
   recordId: string,
   data: Record<string, any>,
 ): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.updateRecordById({
+  return zohoData("updateRecordById", {
     app_name: CONFIG.APP_NAME,
     report_name: reportName,
     id: recordId,
@@ -314,7 +578,7 @@ function updateRecord(
 // emptied it out, mirroring the native workflow's own
 // "delete from Batch_Details[...]" step.
 function deleteRecord(reportName: string, recordId: string): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.deleteRecordById({
+  return zohoData("deleteRecordById", {
     app_name: CONFIG.APP_NAME,
     report_name: reportName,
     id: recordId,
@@ -842,7 +1106,25 @@ export function commitCreatePo(
   );
   const grandTotal = roundMoney(subTotal + taxTotal);
 
-  return addRecord(CONFIG.PURCHASE_ORDER_FORM, {
+  const lineRows = computedLines.map(function (entry) {
+    const line = entry.line;
+    const row: Record<string, any> = {
+      Product: line.productId,
+      UOM: line.uomId,
+      Needed_Quantity: line.neededQuantity,
+      Order_Qty: line.orderQuantity,
+      Unit_Price: roundMoney(line.unitPrice),
+      Line_Total: entry.lineTotal,
+      Tax_Percentage: roundQty(line.taxPercentage),
+      Tax_Amount: entry.taxAmount,
+    };
+    if (line.taxTypeId) row.Tax_Type = line.taxTypeId;
+    return row;
+  });
+  // With the subform's link name set in CONFIG, the lines go inline in the
+  // header's own payload — one request, lines kept in entry order.
+  const subform = CONFIG.PO_LINE_ITEMS_SUBFORM;
+  const header: Record<string, any> = {
     PO_Number: draft.poNumber,
     PO_Date: formatDateStringForZoho(draft.poDate),
     MRP_ID: draft.mrpRecordId,
@@ -850,70 +1132,73 @@ export function commitCreatePo(
     Payment_Terms: draft.paymentTermsId,
     Expected_Delivery_Date: formatDateStringForZoho(draft.expectedDeliveryDate),
     Status: "Not Received",
-  }).then(function (poRecord) {
-    const poRecordId: string = display(poRecord.ID);
-    if (!poRecordId) {
-      // Guards against ever silently writing PO_Line_Items rows with a
-      // blank PO_Number lookup — better to fail the whole commit loudly
-      // here than leave orphaned lines nothing in the UI can find later.
-      return Promise.reject(
-        new Error(
-          "Purchase Order was created but its record ID couldn't be resolved — no line items were written.",
-        ),
-      );
-    }
+  };
+  if (subform && lineRows.length) header[subform] = lineRows;
 
-    return runSequentially(computedLines, function (entry) {
-      const line = entry.line;
-      const payload: Record<string, any> = {
-        PO_Number: poRecordId,
-        Product: line.productId,
-        UOM: line.uomId,
-        Needed_Quantity: line.neededQuantity,
-        Order_Qty: line.orderQuantity,
-        Unit_Price: roundMoney(line.unitPrice),
-        Line_Total: entry.lineTotal,
-        Tax_Percentage: roundQty(line.taxPercentage),
-        Tax_Amount: entry.taxAmount,
-      };
-      if (line.taxTypeId) payload.Tax_Type = line.taxTypeId;
-      return addRecord(CONFIG.PO_LINE_ITEMS_FORM, payload);
-    })
-      .then(function () {
-        return runSequentially(draft.lines, function (line) {
-          return updateRecord(
-            CONFIG.NON_STOCK_ITEMS_REPORT,
-            line.nonStockItemId,
-            {
-              Status: "PO Created",
+  return addRecord(CONFIG.PURCHASE_ORDER_FORM, header).then(
+    function (poRecord) {
+      const poRecordId: string = display(poRecord.ID);
+      if (!poRecordId) {
+        // Guards against ever silently writing PO_Line_Items rows with a
+        // blank PO_Number lookup — better to fail the whole commit loudly
+        // here than leave orphaned lines nothing in the UI can find later.
+        return Promise.reject(
+          new Error(
+            "Purchase Order was created but its record ID couldn't be resolved — no line items were written.",
+          ),
+        );
+      }
+
+      // Separate line rows stay one at a time, so they're created in the
+      // order they were entered — that's the order Books shows them in.
+      const linesPromise = subform
+        ? Promise.resolve([])
+        : runSequentially(lineRows, function (row) {
+            return addRecord(CONFIG.PO_LINE_ITEMS_FORM, {
+              PO_Number: poRecordId,
+              ...row,
+            });
+          });
+      return linesPromise
+        .then(function () {
+          // The Non_Stock_Items status flips and the header totals are
+          // independent of each other, so they're written together.
+          return Promise.all([
+            runAll(draft.lines, function (line) {
+              return updateRecord(
+                CONFIG.NON_STOCK_ITEMS_REPORT,
+                line.nonStockItemId,
+                {
+                  Status: "PO Created",
+                },
+              );
+            }),
+            updateRecord(CONFIG.PURCHASE_ORDER_REPORT, poRecordId, {
+              Sub_Total: subTotal,
+              Tax_Amount: taxTotal,
+              Grand_Total: grandTotal,
+            }),
+          ]);
+        })
+        .then(function () {
+          return bumpPoSequence(draft.sequenceRowId, draft.sequencePurchaseNo);
+        })
+        .then(function () {
+          // Books sync is best-effort (a failure is only logged) and the
+          // Creator records are complete by now, so the save doesn't wait for
+          // it — it finishes in the background.
+          syncPurchaseOrderToBooks(poRecordId, draft.supplierId).catch(
+            function (err: any) {
+              console.warn(
+                "Books PO sync failed (Purchase Order still created in Creator):",
+                err,
+              );
             },
           );
+          return { poRecordId: poRecordId, poNumber: draft.poNumber };
         });
-      })
-      .then(function () {
-        return updateRecord(CONFIG.PURCHASE_ORDER_REPORT, poRecordId, {
-          Sub_Total: subTotal,
-          Tax_Amount: taxTotal,
-          Grand_Total: grandTotal,
-        });
-      })
-      .then(function () {
-        return bumpPoSequence(draft.sequenceRowId, draft.sequencePurchaseNo);
-      })
-      .then(function () {
-        const result = { poRecordId: poRecordId, poNumber: draft.poNumber };
-        return syncPurchaseOrderToBooks(poRecordId, draft.supplierId)
-          .catch(function (err: any) {
-            console.warn(
-              "Books PO sync failed (Purchase Order still created in Creator):",
-              err,
-            );
-          })
-          .then(function () {
-            return result;
-          });
-      });
-  });
+    },
+  );
 }
 
 // ───────────── Read Purchase Orders (+ line items) for an MRP ─────────────
@@ -945,12 +1230,20 @@ export function fetchPurchaseOrdersForMrp(
   const criteria = `MRP_ID == ${mrpRecordId}`;
   return getRecords(CONFIG.PURCHASE_ORDER_REPORT, criteria).then(
     function (rows) {
-      return runSequentially(rows, function (r: any) {
-        const poId = display(r.ID);
-        return getRecords(
-          CONFIG.PO_LINE_ITEMS_REPORT,
-          `PO_Number == ${poId}`,
-        ).then(function (lineRows) {
+      // Every PO's lines in one batched read, grouped back by PO.
+      return getRecordsByIds(
+        CONFIG.PO_LINE_ITEMS_REPORT,
+        "PO_Number",
+        rows.map(function (r: any) {
+          return display(r.ID);
+        }),
+      ).then(function (allLines) {
+        const linesByPo = groupBy(allLines, function (line: any) {
+          return lookupId(line.PO_Number);
+        });
+        return rows.map(function (r: any) {
+          const poId = display(r.ID);
+          const lineRows = linesByPo[poId] || [];
           const lines: PoLineRow[] = lineRows.map(function (line: any) {
             return {
               id: display(line.ID),
@@ -980,7 +1273,7 @@ export function fetchPurchaseOrdersForMrp(
             lines: lines,
           };
         });
-      }).then(function (details) {
+      }).then(function (details: PurchaseOrderDetail[]) {
         return details.sort(function (a, b) {
           return a.poDate < b.poDate ? 1 : -1;
         });
@@ -1072,58 +1365,78 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
   const selectedLines = draft.lines.filter(
     (line) => line.receivableQuantity > 0,
   );
-  return runSequentially(selectedLines, function (line) {
+  // UOM lookups are cached per UOM text, so lines sharing a UOM share one
+  // read; they run alongside the header write unless the lines go inline.
+  const rowsPromise = runAll(selectedLines, function (line) {
     return resolveUomMasterId(line.uomName).then(function (uomMasterId) {
-      return { ...line, uomId: uomMasterId };
+      return {
+        Product_Name: line.productId,
+        UOM: uomMasterId,
+        Ordered_Qty: line.orderedQuantity,
+        Received_Qty: line.receivedQuantitySoFar,
+        Receivable_Qty: line.receivableQuantity,
+        Pending_Qty: roundQty(line.pendingQuantity - line.receivableQuantity),
+        // Both mandatory on Receive_Items now — ProcessPurchaseReceive
+        // (UpdatePR) reads them straight off each line to create/update
+        // the matching Batch_Details row for whatever just arrived.
+        Batch_No: line.batchNo,
+        Expiry_Date: formatDateStringForZoho(line.expiryDate),
+      } as Record<string, any>;
     });
-  }).then(function (linesWithUom) {
-    return addRecord(CONFIG.PURCHASE_RECEIVE_FORM, {
-      Receive_No: draft.receiveNo,
-      Purchase_Order_No: draft.purchaseOrderRecordId,
-      Receive_Date: formatDateStringForZoho(draft.receiveDate),
-      Supplier: draft.supplierId,
-      Warehouse: draft.warehouseId,
-    }).then(function (receiveRecord) {
-      const receiveRecordId: string = display(receiveRecord.ID);
+  });
+  // With the subform's link name set in CONFIG, the lines go inline in the
+  // header's own payload — one request, lines kept in entry order.
+  const subform = CONFIG.RECEIVE_ITEMS_SUBFORM;
+  const header: Record<string, any> = {
+    Receive_No: draft.receiveNo,
+    Purchase_Order_No: draft.purchaseOrderRecordId,
+    Receive_Date: formatDateStringForZoho(draft.receiveDate),
+    Supplier: draft.supplierId,
+    Warehouse: draft.warehouseId,
+  };
+  const headerPromise = subform
+    ? rowsPromise.then(function (rows) {
+        if (rows.length) header[subform] = rows;
+        return addRecord(CONFIG.PURCHASE_RECEIVE_FORM, header);
+      })
+    : addRecord(CONFIG.PURCHASE_RECEIVE_FORM, header);
 
-      return runSequentially(linesWithUom, function (line) {
-        return addRecord(CONFIG.RECEIVE_ITEMS_FORM, {
-          Receive_No: receiveRecordId,
-          Product_Name: line.productId,
-          UOM: line.uomId,
-          Ordered_Qty: line.orderedQuantity,
-          Received_Qty: line.receivedQuantitySoFar,
-          Receivable_Qty: line.receivableQuantity,
-          Pending_Qty: roundQty(line.pendingQuantity - line.receivableQuantity),
-          // Both mandatory on Receive_Items now — ProcessPurchaseReceive
-          // (UpdatePR) reads them straight off each line to create/update
-          // the matching Batch_Details row for whatever just arrived.
-          Batch_No: line.batchNo,
-          Expiry_Date: formatDateStringForZoho(line.expiryDate),
+  return headerPromise.then(function (receiveRecord) {
+    const receiveRecordId: string = display(receiveRecord.ID);
+
+    return rowsPromise
+      .then(function (rows) {
+        if (subform) return [];
+        // One at a time, so they're created in the order they were
+        // entered — that's the order Books shows them in.
+        return runSequentially(rows, function (row) {
+          return addRecord(CONFIG.RECEIVE_ITEMS_FORM, {
+            Receive_No: receiveRecordId,
+            ...row,
+          });
         });
       })
-        .then(function () {
-          return bumpReceiveSequence(
-            draft.sequenceRowId,
-            draft.sequenceReceiveNo,
-          );
-        })
-        .then(function () {
-          return processPurchaseReceive(receiveRecordId);
-        })
-        .then(function (result) {
-          return syncPurchaseReceiveToBooks(receiveRecordId, draft.supplierId)
-            .catch(function (err: any) {
-              console.warn(
-                "Books PR sync failed (Purchase Receive still recorded in Creator):",
-                err,
-              );
-            })
-            .then(function () {
-              return result;
-            });
-        });
-    });
+      .then(function () {
+        return bumpReceiveSequence(
+          draft.sequenceRowId,
+          draft.sequenceReceiveNo,
+        );
+      })
+      .then(function () {
+        return processPurchaseReceive(receiveRecordId);
+      })
+      .then(function (result) {
+        // Best-effort, like the PO sync — finishes in the background.
+        syncPurchaseReceiveToBooks(receiveRecordId, draft.supplierId).catch(
+          function (err: any) {
+            console.warn(
+              "Books PR sync failed (Purchase Receive still recorded in Creator):",
+              err,
+            );
+          },
+        );
+        return result;
+      });
   });
 }
 
@@ -1142,7 +1455,7 @@ function processPurchaseReceive(receiveRecordId: string): Promise<any> {
       ),
     );
   }
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: PROCESS_PURCHASE_RECEIVE_API.api_name,
     workspace_name: PROCESS_PURCHASE_RECEIVE_API.workspace_name,
     http_method: "POST",
@@ -1175,6 +1488,8 @@ function processPurchaseReceive(receiveRecordId: string): Promise<any> {
 // callers just get the record they asked for either way. Errors are logged
 // so they're visible without blocking the user on an integration that's
 // still being hardened (tax fields, purchasereceives payload format, etc.).
+// The saves start the sync once the Creator records are complete and return
+// without waiting for it.
 
 // Published as "syncPO" in Microservices (function: PO.SyncCreatorToBooks).
 const SYNC_PO_TO_BOOKS_API = {
@@ -1187,7 +1502,7 @@ export function syncPurchaseOrderToBooks(
   purchaseOrderRecordId: string,
   supplierRecordId: string,
 ): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: SYNC_PO_TO_BOOKS_API.api_name,
     workspace_name: SYNC_PO_TO_BOOKS_API.workspace_name,
     http_method: "POST",
@@ -1225,7 +1540,7 @@ export function syncPurchaseReceiveToBooks(
   receiveRecordId: string,
   supplierRecordId: string,
 ): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: SYNC_PR_TO_BOOKS_API.api_name,
     workspace_name: SYNC_PR_TO_BOOKS_API.workspace_name,
     http_method: "POST",
@@ -1268,7 +1583,7 @@ function createInventoryAdjustment(
     reason: reason,
     adj_date: adjDate,
   });
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: CREATE_INVENTORY_ADJUSTMENT_API.api_name,
     workspace_name: CREATE_INVENTORY_ADJUSTMENT_API.workspace_name,
     http_method: "POST",
@@ -1315,7 +1630,7 @@ function createFinishedGoodScrapInventoryAdjustment(
     reason: reason,
     adj_date: adjDate,
   });
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API.api_name,
     workspace_name: CREATE_FINISHED_GOOD_SCRAP_ADJUSTMENT_API.workspace_name,
     http_method: "POST",
@@ -1363,7 +1678,7 @@ function createInventoryAdjustmentForRawMaterialConsumption(
     "Posting raw-material consumption/scrap to Books:",
     consumptionId,
   );
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: CREATE_CONSUMPTION_INVENTORY_ADJUSTMENT_API.api_name,
     workspace_name: CREATE_CONSUMPTION_INVENTORY_ADJUSTMENT_API.workspace_name,
     http_method: "POST",
@@ -1420,7 +1735,7 @@ const CHECK_STOCK_API = {
 };
 
 export function checkStockForMrp(mrpRecordId: string): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: CHECK_STOCK_API.api_name,
     workspace_name: CHECK_STOCK_API.workspace_name,
     http_method: "POST",
@@ -1486,21 +1801,31 @@ export function fetchConsumptionEntries(
   const criteria = `Production_Target == ${productionTargetRecordId}`;
   return getRecords(CONFIG.CONSUMPTION_ENTRY_REPORT, criteria)
     .then(function (rows) {
-      // Sequential (not Promise.all) — see runSequentially's comment:
-      // enough entries fired at once trips Creator's cap on simultaneous
-      // in-flight API calls (code 2955).
-      return runSequentially(rows, function (r: any) {
-        const entryId = display(r.ID);
-        return Promise.all([
-          getRecords(
-            CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT,
-            `Consumption_Entry == ${entryId}`,
-          ),
-          getRecords(
-            CONFIG.CONSUMPTION_ITEMS_REPORT,
-            `Consumption_ID == ${entryId}`,
-          ),
-        ]).then(function (sub) {
+      // Both subform grids for every entry in two batched reads (one per
+      // grid) instead of two per entry, then grouped back by entry. Read
+      // one after the other to stay under Creator's concurrent-call cap.
+      const entryIds = rows.map(function (r: any) {
+        return display(r.ID);
+      });
+      return getRecordsByIds(
+        CONFIG.FINISHED_GOODS_CONSUMPTIONS_REPORT,
+        "Consumption_Entry",
+        entryIds,
+      ).then(function (allFinishedGoods) {
+        return getRecordsByIds(
+          CONFIG.CONSUMPTION_ITEMS_REPORT,
+          "Consumption_ID",
+          entryIds,
+        ).then(function (allItems) {
+          const fgByEntry = groupBy(allFinishedGoods, function (fg: any) {
+            return lookupId(fg.Consumption_Entry);
+          });
+          const itemsByEntry = groupBy(allItems, function (rm: any) {
+            return lookupId(rm.Consumption_ID);
+          });
+          return rows.map(function (r: any) {
+          const entryId = display(r.ID);
+          const sub = [fgByEntry[entryId] || [], itemsByEntry[entryId] || []];
           const finishedGoods = sub[0].map(function (fg: any) {
             return {
               id: display(fg.ID),
@@ -1535,10 +1860,11 @@ export function fetchConsumptionEntries(
             finishedGoods: finishedGoods,
             rawMaterials: rawMaterials,
           };
+          });
         });
       });
     })
-    .then(function (entries) {
+    .then(function (entries: ConsumptionEntryRow[]) {
       return entries.sort(function (a, b) {
         return a.date < b.date ? 1 : -1;
       });
@@ -1563,64 +1889,35 @@ export function fetchFinishedGoodsForTarget(
   const criteria = `Production_Target_ID == ${productionTargetRecordId}`;
   return getRecords(CONFIG.FINISHED_GOODS_REPORT, criteria).then(
     function (rows) {
-      return runSequentially(rows, function (r: any) {
-        const itemId = lookupId(r.Item);
-        // Finished_Goods exposes Item only as a Product_Master lookup, while
-        // the external item ID lives on the linked Product_Master record.
-        return getRecords(CONFIG.PRODUCT_MASTER_REPORT, `ID == ${itemId}`).then(
-          function (productRows) {
-            const product = productRows[0];
-            const booksItemId = product ? display(product.Inventory_ID) : "";
-            console.info("Finished-good Inventory ID lookup:", {
-              productMasterId: itemId,
-              productMasterFound: !!product,
-              inventoryIdRaw: product && product.Inventory_ID,
-              inventoryId: booksItemId,
-              productMasterRecord: product,
-            });
-            return {
-              id: r.ID,
-              productionTargetRecordId: lookupId(r.Production_Target_ID),
-              itemId: itemId,
-              booksItemId: booksItemId,
-              itemName: display(r.Item),
-              uomId: lookupId(r.UOM),
-              uomName: display(r.UOM),
-              targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
-            };
-          },
-        );
+      // Finished_Goods exposes Item only as a Product_Master lookup, while
+      // the external item ID lives on the linked Product_Master record —
+      // read every finished good's product in one batched request.
+      return getRecordsByIds(
+        CONFIG.PRODUCT_MASTER_REPORT,
+        "ID",
+        rows.map(function (r: any) {
+          return lookupId(r.Item);
+        }),
+      ).then(function (products) {
+        const productById: Record<string, any> = {};
+        products.forEach(function (p: any) {
+          productById[display(p.ID)] = p;
+        });
+        return rows.map(function (r: any) {
+          const itemId = lookupId(r.Item);
+          const product = productById[itemId];
+          return {
+            id: r.ID,
+            productionTargetRecordId: lookupId(r.Production_Target_ID),
+            itemId: itemId,
+            booksItemId: product ? display(product.Inventory_ID) : "",
+            itemName: display(r.Item),
+            uomId: lookupId(r.UOM),
+            uomName: display(r.UOM),
+            targetQuantity: parseFloat(display(r.Target_Quantity)) || 0,
+          };
+        });
       });
-    },
-  );
-}
-
-// A finished good's BOM_Master row has a single BOM_Items grid — look up the
-// BOM by its Product (the finished good), then read that BOM's items.
-function fetchBomItemsForProduct(itemId: string): Promise<BomItemRow[]> {
-  if (!itemId) return Promise.resolve([]);
-
-  const bomCriteria = `Product == ${itemId}`;
-  return getRecords(CONFIG.BOM_MASTER_REPORT, bomCriteria).then(
-    function (bomRows) {
-      if (!bomRows.length) return [];
-      const bomId = bomRows[0].ID;
-
-      const itemsCriteria = `BOM_ID == ${bomId}`;
-      return getRecords(CONFIG.BOM_ITEMS_REPORT, itemsCriteria).then(
-        function (itemRows) {
-          return itemRows.map(function (r: any) {
-            return {
-              bomId: display(bomId),
-              productId: lookupId(r.Product),
-              productName: display(r.Product),
-              quantityRequired: parseFloat(display(r.Quantity_Required)) || 0,
-              uomId: lookupId(r.UOM),
-              uomName: display(r.UOM),
-            };
-          });
-        },
-      );
     },
   );
 }
@@ -1633,6 +1930,20 @@ function fetchBomItemsForProduct(itemId: string): Promise<BomItemRow[]> {
 // nicety, so a failed read resolves to {} and the views fall back to the
 // combined table rather than failing the whole overview load.
 function fetchBomItemsForFinishedGoods(
+  finishedGoods: FinishedGoodTargetRow[],
+): Promise<Record<string, BomItemRow[]>> {
+  return loadBomItemsByFinishedGood(finishedGoods).catch(function (err) {
+    console.warn(
+      "Couldn't load finished-good BOMs; showing combined raw materials:",
+      err,
+    );
+    return {} as Record<string, BomItemRow[]>;
+  });
+}
+
+// Same batched read, but failures propagate — for MRP creation, where a
+// silently empty BOM would plan zero raw materials.
+function loadBomItemsByFinishedGood(
   finishedGoods: FinishedGoodTargetRow[],
 ): Promise<Record<string, BomItemRow[]>> {
   const itemIds = Array.from(
@@ -1693,13 +2004,6 @@ function fetchBomItemsForFinishedGoods(
         });
         return byFinishedGood;
       });
-    })
-    .catch(function (err) {
-      console.warn(
-        "Couldn't load finished-good BOMs; showing combined raw materials:",
-        err,
-      );
-      return {} as Record<string, BomItemRow[]>;
     });
 }
 
@@ -1745,12 +2049,11 @@ function fetchStockOnHandBatch(
 function computeRawMaterialNeeds(
   finishedGoods: FinishedGoodTargetRow[],
 ): Promise<RawMaterialNeedRow[]> {
-  // Sequential (not Promise.all) — see runSequentially's comment: enough
-  // finished goods/raw materials fired at once trips Creator's cap on
-  // simultaneous in-flight API calls (code 2955).
-  return runSequentially(finishedGoods, function (fg) {
-    return fetchBomItemsForProduct(fg.itemId).then(function (bomItems) {
-      return bomItems.map(function (item) {
+  // Every finished good's BOM in two batched reads (BOM_Master, then
+  // BOM_Items) instead of two per finished good.
+  return loadBomItemsByFinishedGood(finishedGoods).then(function (bomByFg) {
+    return finishedGoods.map(function (fg) {
+      return (bomByFg[fg.id] || []).map(function (item) {
         return {
           productId: item.productId,
           productName: item.productName,
@@ -1854,12 +2157,61 @@ function bumpMrpSequence(
 // only carry the UOM as plain text (same as the native "Generate MRP ID"
 // workflow's own get_line.UOM) — resolve it the same way that workflow
 // does: match UOM_Master's own UOM text field.
+// Master rows (UOMs, warehouses) don't change during a session, so each
+// lookup is read once and reused — saves a request per line on every
+// receive / MRP commit. A failed or empty lookup isn't cached, so it's
+// retried next time.
+const masterCache: Record<string, Promise<any>> = {};
+function cachedMaster<T>(
+  key: string,
+  load: () => Promise<T>,
+  keep: (value: T) => boolean = function () {
+    return true;
+  },
+): Promise<T> {
+  if (!masterCache[key]) {
+    masterCache[key] = load().then(
+      function (value) {
+        if (!keep(value)) delete masterCache[key];
+        return value;
+      },
+      function (err) {
+        delete masterCache[key];
+        throw err;
+      },
+    );
+  }
+  return masterCache[key];
+}
+
 function resolveUomMasterId(uomText: string): Promise<string> {
   if (!uomText) return Promise.resolve("");
-  return getRecords(CONFIG.UOM_MASTER_REPORT, `UOM == "${uomText}"`).then(
-    function (rows) {
-      return rows.length ? display(rows[0].ID) : "";
+  return cachedMaster<string>(
+    "uom:" + uomText,
+    function () {
+      return getRecords(CONFIG.UOM_MASTER_REPORT, `UOM == "${uomText}"`).then(
+        function (rows) {
+          return rows.length ? display(rows[0].ID) : "";
+        },
+      );
     },
+    Boolean,
+  );
+}
+
+// The "Main Warehouse" row, read once for both its record ID and its code.
+function fetchMainWarehouseRow(): Promise<any | null> {
+  return cachedMaster<any | null>(
+    "warehouse:main",
+    function () {
+      return getRecords(
+        CONFIG.WAREHOUSE_REPORT,
+        `Warehouse_Name == "Main Warehouse"`,
+      ).then(function (rows) {
+        return rows.length ? rows[0] : null;
+      });
+    },
+    Boolean,
   );
 }
 
@@ -1867,14 +2219,13 @@ function resolveUomMasterId(uomText: string): Promise<string> {
 // just resolve that one Warehouse_Master row's own record ID, which is what
 // gets written into MRP.Warehouse (a lookup to Warehouse_Master).
 function fetchDefaultWarehouseId(): Promise<string> {
-  const criteria = `Warehouse_Name == "Main Warehouse"`;
-  return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
-    if (!rows.length) {
+  return fetchMainWarehouseRow().then(function (row) {
+    if (!row) {
       return Promise.reject(
         new Error('Could not find a "Main Warehouse" row in Warehouse_Master.'),
       );
     }
-    return display(rows[0].ID);
+    return display(row.ID);
   });
 }
 
@@ -1885,10 +2236,8 @@ function fetchDefaultWarehouseId(): Promise<string> {
 // (Warehouse) and a denormalized code (Warehouse_Code), matching the native
 // MRP "on add success" workflow's own insert shape.
 function fetchDefaultWarehouseCode(): Promise<string> {
-  const criteria = `Warehouse_Name == "Main Warehouse"`;
-  return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
-    if (!rows.length) return "";
-    return display(rows[0].Warehouse_ID);
+  return fetchMainWarehouseRow().then(function (row) {
+    return row ? display(row.Warehouse_ID) : "";
   });
 }
 
@@ -1902,11 +2251,17 @@ function fetchDefaultWarehouseCode(): Promise<string> {
 function fetchWarehouseByCode(
   code: string,
 ): Promise<{ id: string; code: string } | null> {
-  const criteria = `Warehouse_ID == "${code}"`;
-  return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
-    if (!rows.length) return null;
-    return { id: display(rows[0].ID), code: display(rows[0].Warehouse_ID) };
-  });
+  return cachedMaster<{ id: string; code: string } | null>(
+    "warehouse:" + code,
+    function () {
+      const criteria = `Warehouse_ID == "${code}"`;
+      return getRecords(CONFIG.WAREHOUSE_REPORT, criteria).then(function (rows) {
+        if (!rows.length) return null;
+        return { id: display(rows[0].ID), code: display(rows[0].Warehouse_ID) };
+      });
+    },
+    Boolean,
+  );
 }
 
 function formatDateForZoho(date: Date): string {
@@ -2030,46 +2385,57 @@ export function prepareMrpDraft(
 // against Main Warehouse stock even though its Raw_Materials rows look
 // correct.
 //
-// Reverted the batched OR'd-criteria existence check (12 -> 7 calls) back to
-// one getRecords per raw material — the batched read wasn't reliably
-// finding/matching rows via this SDK's criteria handling, so reservations
-// were silently not landing. Back to a plain per-item check-then-write,
-// which is confirmed to actually reserve stock correctly, at the cost of
-// more round trips (12 calls for 6 raw materials instead of 7).
-//
-// Sequential (not Promise.all) — see runSequentially's comment: Creator's
-// cap on simultaneous in-flight API calls (code 2955).
+// The rows are read in one batched request with a per-product re-check for
+// any the batch didn't return (see fetchFirstRowByKey) — an earlier batched
+// version was reverted because rows went unmatched and reservations
+// silently didn't land; the re-check makes a missed row cost one extra read
+// instead of a lost reservation. Every reservation is then applied in memory
+// and each row written once, several at a time (see StockEdit).
 function reserveMainWarehouseStockForMrp(draft: MrpDraft): Promise<void> {
-  return runSequentially(draft.rawMaterials, function (rm) {
-    const criteria = `Product_Master == ${rm.productId}`;
-    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
-      function (rows) {
-        if (rows.length > 0) {
-          const row = rows[0];
-          const reservedStock = roundQty(
-            (parseFloat(display(row.Reserved_Stock)) || 0) +
-              rm.allocateQuantity,
-          );
-          const stockOnHand = parseFloat(display(row.Stock_On_Hand)) || 0;
-          return updateRecord(
-            CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
-            display(row.ID),
-            {
-              Reserved_Stock: reservedStock,
-              Available_Stocks: roundQty(stockOnHand - reservedStock),
-            },
-          );
-        }
-        return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
-          Warehouse_Code: draft.warehouseCode,
-          Warehouse: draft.warehouseId,
-          Product_Master: rm.productId,
-          Reserved_Stock: rm.allocateQuantity,
-        });
-      },
+  return fetchFirstRowByKey(
+    CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
+    "Product_Master",
+    draft.rawMaterials.map(function (rm) {
+      return rm.productId;
+    }),
+    productOf,
+  ).then(function (rows) {
+    const edits = new Map<string, StockEdit>();
+    draft.rawMaterials.forEach(function (rm) {
+      const edit = stockEditFor(
+        edits,
+        rm.productId,
+        rows.get(rm.productId),
+        function () {
+          return {
+            Warehouse_Code: draft.warehouseCode,
+            Warehouse: draft.warehouseId,
+            Product_Master: rm.productId,
+          };
+        },
+      )!;
+      // A new row gets Reserved_Stock only, matching the native insert.
+      if (!edit.row && !Object.keys(edit.changes).length) {
+        setStockQty(edit, "Reserved_Stock", rm.allocateQuantity);
+        return;
+      }
+      const reservedStock =
+        stockQty(edit, "Reserved_Stock") + rm.allocateQuantity;
+      setStockQty(edit, "Reserved_Stock", reservedStock);
+      setStockQty(
+        edit,
+        "Available_Stocks",
+        stockQty(edit, "Stock_On_Hand") - stockQty(edit, "Reserved_Stock"),
+      );
+    });
+    const writes = writeStockEdits(
+      edits,
+      CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
+      CONFIG.MAIN_WAREHOUSE_STOCK_FORM,
     );
-  }).then(function () {
-    return undefined;
+    return Promise.all(Array.from(writes.values())).then(function () {
+      return undefined;
+    });
   });
 }
 
@@ -2090,77 +2456,106 @@ export function commitMrpDraft(
     ? "Waiting for Stock"
     : "Released";
 
-  return addRecord(CONFIG.MRP_FORM, {
+  const fgSubform = CONFIG.MRP_FINISHED_GOODS_SUBFORM;
+  const rmSubform = CONFIG.MRP_RAW_MATERIALS_SUBFORM;
+  // Mirrors the native "Generate MRP ID" workflow: it creates fresh
+  // Finished_Goods rows scoped to the MRP (Item/UOM/Target_Quantity
+  // copied over, MRP_ID set), rather than re-linking the rows already
+  // attached to the Production Target — those stay exactly as they
+  // were, under Production_Target_ID only.
+  const finishedGoodRows = draft.finishedGoods.map(function (fg) {
+    return {
+      Item: fg.itemId,
+      UOM: fg.uomId,
+      Target_Quantity: fg.targetQuantity,
+    };
+  });
+  const rawMaterialRows = draft.rawMaterials.map(function (rm) {
+    return {
+      Product_Name: rm.productId,
+      UOM: rm.uom,
+      Stock_On_hand: rm.stockOnHand,
+      Stock_Required: rm.stockRequired,
+      Allocate_Quantity: rm.allocateQuantity,
+      Needed_Quantity: rm.neededQuantity,
+      Status: rm.status,
+    };
+  });
+  // With a subform's link name set in CONFIG, its rows go inline in the
+  // header's own payload (one request); otherwise each is its own row.
+  const header: Record<string, any> = {
     MRP_ID: draft.mrpId,
     Production_Target: draft.productionTargetRecordId,
     Warehouse: draft.warehouseId,
     MRP_Date: draft.mrpDate,
     Notes: notes,
     Status: "False",
-  }).then(function (mrpRecord) {
+  };
+  if (fgSubform && finishedGoodRows.length)
+    header[fgSubform] = finishedGoodRows;
+  if (rmSubform && rawMaterialRows.length) header[rmSubform] = rawMaterialRows;
+
+  return addRecord(CONFIG.MRP_FORM, header).then(function (mrpRecord) {
     const mrpRecordId: string = display(mrpRecord.ID);
 
-    // Mirrors the native "Generate MRP ID" workflow: it creates fresh
-    // Finished_Goods rows scoped to the MRP (Item/UOM/Target_Quantity
-    // copied over, MRP_ID set), rather than re-linking the rows already
-    // attached to the Production Target — those stay exactly as they
-    // were, under Production_Target_ID only.
-    //
-    // Sequential (not Promise.all) — see runSequentially's comment: enough
-    // finished goods/raw materials fired at once trips Creator's cap on
+    // Fired together — the request queue keeps them under Creator's cap on
     // simultaneous in-flight API calls (code 2955).
-    return runSequentially(draft.finishedGoods, function (fg) {
-      return addRecord(CONFIG.FINISHED_GOODS_FORM, {
-        MRP_ID: mrpRecordId,
-        Item: fg.itemId,
-        UOM: fg.uomId,
-        Target_Quantity: fg.targetQuantity,
+    const lineWrites = (
+      fgSubform
+        ? []
+        : finishedGoodRows.map(function (row) {
+            return addRecord(CONFIG.FINISHED_GOODS_FORM, {
+              MRP_ID: mrpRecordId,
+              ...row,
+            });
+          })
+    ).concat(
+      rmSubform
+        ? []
+        : rawMaterialRows.map(function (row) {
+            return addRecord(CONFIG.RAW_MATERIALS_FORM, {
+              MRP_ID: mrpRecordId,
+              ...row,
+            });
+          }),
+    );
+    // Mirrors the native "Generate MRP ID" form's own "on add, on
+    // success" workflow, which creates a Non_Stock_Items row for every
+    // raw material line with Needed_Quantity > 0 — this is what backs
+    // the "Required Materials" custom action on the MRP list
+    // (opens Non_Stock_Items_Report?MRP_ID=...). That workflow doesn't
+    // fire for MRPs created via the JS SDK's addRecords, same reason as
+    // every other "on add" workflow replicated in this file, so without
+    // this an MRP created through the widget shows "No Data Available"
+    // there even though its Raw_Materials/procurement status are fine.
+    function writeNonStockItems(): Promise<any[]> {
+      const shortfallRawMaterials = draft.rawMaterials.filter(function (rm) {
+        return rm.neededQuantity > 0;
       });
-    })
-      .then(function () {
-        return runSequentially(draft.rawMaterials, function (rm) {
-          return addRecord(CONFIG.RAW_MATERIALS_FORM, {
+      return runAll(shortfallRawMaterials, function (rm) {
+        return resolveUomMasterId(rm.uom).then(function (uomMasterId) {
+          return addRecord(CONFIG.NON_STOCK_ITEMS_FORM, {
             MRP_ID: mrpRecordId,
-            Product_Name: rm.productId,
-            UOM: rm.uom,
-            Stock_On_hand: rm.stockOnHand,
+            Product: rm.productId,
+            UOM: uomMasterId,
+            Stock_On_Hand: rm.stockOnHand,
             Stock_Required: rm.stockRequired,
             Allocate_Quantity: rm.allocateQuantity,
             Needed_Quantity: rm.neededQuantity,
-            Status: rm.status,
+            Status: "Needs Purchase",
           });
         });
-      })
+      });
+    }
+
+    // The stock reservation and Non_Stock_Items touch different forms, so
+    // they run together once the MRP's own lines are in.
+    return Promise.all(lineWrites)
       .then(function () {
-        return reserveMainWarehouseStockForMrp(draft);
-      })
-      .then(function () {
-        // Mirrors the native "Generate MRP ID" form's own "on add, on
-        // success" workflow, which creates a Non_Stock_Items row for every
-        // raw material line with Needed_Quantity > 0 — this is what backs
-        // the "Required Materials" custom action on the MRP list
-        // (opens Non_Stock_Items_Report?MRP_ID=...). That workflow doesn't
-        // fire for MRPs created via the JS SDK's addRecords, same reason as
-        // every other "on add" workflow replicated in this file, so without
-        // this an MRP created through the widget shows "No Data Available"
-        // there even though its Raw_Materials/procurement status are fine.
-        const shortfallRawMaterials = draft.rawMaterials.filter(function (rm) {
-          return rm.neededQuantity > 0;
-        });
-        return runSequentially(shortfallRawMaterials, function (rm) {
-          return resolveUomMasterId(rm.uom).then(function (uomMasterId) {
-            return addRecord(CONFIG.NON_STOCK_ITEMS_FORM, {
-              MRP_ID: mrpRecordId,
-              Product: rm.productId,
-              UOM: uomMasterId,
-              Stock_On_Hand: rm.stockOnHand,
-              Stock_Required: rm.stockRequired,
-              Allocate_Quantity: rm.allocateQuantity,
-              Needed_Quantity: rm.neededQuantity,
-              Status: "Needs Purchase",
-            });
-          });
-        });
+        return Promise.all([
+          reserveMainWarehouseStockForMrp(draft),
+          writeNonStockItems(),
+        ]);
       })
       .then(function () {
         return updateRecord(
@@ -2370,7 +2765,7 @@ const ALLOCATE_STOCK_API = {
 export function allocateStockOnProductionStart(
   productionTargetRecordId: string,
 ): Promise<any> {
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: ALLOCATE_STOCK_API.api_name,
     workspace_name: ALLOCATE_STOCK_API.workspace_name,
     http_method: "POST",
@@ -2433,7 +2828,7 @@ const ALLOCATE_AND_COMMIT_BATCH_API = {
 export function allocateAndCommitBatch(
   productionTargetRecordId: string,
 ): Promise<void> {
-  return window.ZOHO.CREATOR.DATA.invokeCustomApi({
+  return zohoData("invokeCustomApi", {
     api_name: ALLOCATE_AND_COMMIT_BATCH_API.api_name,
     workspace_name: ALLOCATE_AND_COMMIT_BATCH_API.workspace_name,
     http_method: "POST",
@@ -2510,7 +2905,7 @@ export function fetchBatchAllocationsForProductionTarget(
 // prepareConsumptionDraft/commitConsumptionEntry replicate them here.
 //
 // The downstream Scrap/Main/Production warehouse stock bookkeeping (see
-// updateWarehouseStockForConsumption below) is replicated client-side too —
+// applyConsumptionStock below) is replicated client-side too —
 // it used to go through an "UpdateWarehouse" Custom API/Deluge function, but
 // that repeatedly failed to actually persist the Scrap Warehouse updates
 // despite returning a clean success response, so it's now done directly
@@ -2609,12 +3004,11 @@ export function prepareConsumptionDraft(
 // getRecords/addRecord/updateRecord calls from here, where it's directly
 // inspectable and debuggable.
 //
-// Every step is independent (its own existence check, no step gated behind
-// an unrelated one) and runs sequentially, not in parallel — see
-// runSequentially's comment on Creator's cap on simultaneous in-flight API
-// calls (code 2955). This costs more round trips than the single Custom API
-// call did, but each one is a plain, ordinary Data API call with nothing
-// hidden in Deluge to go wrong.
+// It used to read and write each line's rows one request at a time (about
+// 6 requests per raw material, all sequential — 30 s+ for a 10-line run);
+// now the rows are read in a few batched requests, every change is worked
+// out in memory, and each row is written once, several writes in flight at
+// a time (see loadConsumptionStock / applyConsumptionStock).
 const BATCH_NUMBER_PREFIX = "BFG-";
 const BATCH_NUMBER_DIGITS = 6;
 
@@ -2658,406 +3052,561 @@ export function generateNextBatchNumber(): Promise<string> {
   );
 }
 
-function updateWarehouseStockForConsumption(
+// Everything the consumption save's stock bookkeeping reads, fetched in a
+// handful of batched requests (one per ledger) instead of one per line.
+interface ConsumptionStockRows {
+  main: Map<string, any>; // Main_Warehouse_Stock_Details row by product
+  production: Map<string, any>; // Production_Stock_Details row by product
+  scrap: Map<string, any>; // Scrap_Warehouse_Stock_Details row by product
+  fgBatches: Map<string, any>; // Batch_Details row by Batch_Number
+  rmBatches: Map<string, any>; // Batch_Details row by record ID
+  allocations: BatchAllocationLine[];
+  mainWarehouse: { id: string; code: string } | null;
+  scrapWarehouse: { id: string; code: string } | null;
+}
+
+function loadConsumptionStock(
   draft: ConsumptionEntryDraft,
+): Promise<ConsumptionStockRows> {
+  const finishedGoods = draft.finishedGoods.filter(function (fg) {
+    return !!fg.itemId;
+  });
+  const rawMaterials = draft.rawMaterials.filter(function (rm) {
+    return !!rm.productId;
+  });
+  const scrapProductIds = finishedGoods
+    .filter(function (fg) {
+      return fg.scrapQuantity > 0;
+    })
+    .map(function (fg) {
+      return fg.itemId;
+    })
+    .concat(
+      rawMaterials
+        .filter(function (rm) {
+          return rm.scrapQuantity > 0;
+        })
+        .map(function (rm) {
+          return rm.productId;
+        }),
+    );
+
+  const mainPromise = fetchFirstRowByKey(
+    CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
+    "Product_Master",
+    finishedGoods
+      .map(function (fg) {
+        return fg.itemId;
+      })
+      .concat(
+        rawMaterials.map(function (rm) {
+          return rm.productId;
+        }),
+      ),
+    productOf,
+  );
+  const productionPromise = fetchFirstRowByKey(
+    CONFIG.PRODUCTION_STOCK_REPORT,
+    "Product_Master",
+    rawMaterials.map(function (rm) {
+      return rm.productId;
+    }),
+    productOf,
+  );
+  const scrapPromise = fetchFirstRowByKey(
+    CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT,
+    "Product_Master",
+    scrapProductIds,
+    productOf,
+  );
+  const fgBatchesPromise = fetchFirstRowByKey(
+    CONFIG.BATCH_DETAILS_REPORT,
+    "Batch_Number",
+    finishedGoods.map(function (fg) {
+      return fg.batchNo;
+    }),
+    function (row) {
+      return display(row.Batch_Number);
+    },
+    true,
+  );
+  // The FEFO pick from Start Production, then the Batch_Details rows it
+  // drew from for this run's raw materials.
+  const rawMaterialIds = new Set(
+    rawMaterials.map(function (rm) {
+      return rm.productId;
+    }),
+  );
+  const allocationsPromise = rawMaterials.length
+    ? fetchBatchAllocationsForProductionTarget(draft.productionTargetRecordId)
+    : Promise.resolve([] as BatchAllocationLine[]);
+  const rmBatchesPromise = allocationsPromise.then(function (allocations) {
+    return fetchFirstRowByKey(
+      CONFIG.BATCH_DETAILS_REPORT,
+      "ID",
+      allocations
+        .filter(function (line) {
+          return rawMaterialIds.has(line.productId) && !!line.batchId;
+        })
+        .map(function (line) {
+          return line.batchId;
+        }),
+      function (row) {
+        return display(row.ID);
+      },
+    );
+  });
+
+  // A finished good with no Main Warehouse row yet (or a scrapped product
+  // with no Scrap Warehouse row) gets a new row, which needs the warehouse.
+  const mainWarehousePromise = mainPromise.then(function (main) {
+    const needed = finishedGoods.some(function (fg) {
+      return !main.has(fg.itemId);
+    });
+    return needed ? fetchWarehouseByCode("WH-001") : null;
+  });
+  const scrapWarehousePromise = scrapPromise.then(function (scrap) {
+    const needed = scrapProductIds.some(function (id) {
+      return !scrap.has(id);
+    });
+    return needed ? fetchWarehouseByCode("WH-003") : null;
+  });
+
+  return Promise.all([
+    mainPromise,
+    productionPromise,
+    scrapPromise,
+    fgBatchesPromise,
+    rmBatchesPromise,
+    allocationsPromise,
+    mainWarehousePromise,
+    scrapWarehousePromise,
+  ]).then(function (r) {
+    return {
+      main: r[0],
+      production: r[1],
+      scrap: r[2],
+      fgBatches: r[3],
+      rmBatches: r[4],
+      allocations: r[5],
+      mainWarehouse: r[6],
+      scrapWarehouse: r[7],
+    };
+  });
+}
+
+// Replicates the "on add, on success" warehouse bookkeeping, field for
+// field, against the rows loadConsumptionStock read:
+//  - each finished good adds its Produced_Quantity to its Main Warehouse
+//    row (created if missing) and to its own Batch_Details row (looked up
+//    by Batch_Number, created if missing), then posts a Books inventory
+//    adjustment;
+//  - each raw material releases its allocated quantity from its Main
+//    Warehouse and Production Warehouse rows and from the Batch_Details rows
+//    the FEFO pick drew it from, deleting a batch once it's used up;
+//  - scrap on either goes to the Scrap Warehouse row (created if missing),
+//    plus a Books adjustment for finished-good scrap.
+// All changes are applied in memory in that order (see StockEdit), then each
+// touched row is written once, with the writes running together through
+// the request queue.
+function applyConsumptionStock(
+  draft: ConsumptionEntryDraft,
+  stock: ConsumptionStockRows,
 ): Promise<void> {
-  function updateOrCreateMainWarehouseForFinishedGood(
-    fg: (typeof draft.finishedGoods)[number],
-  ): Promise<any> {
-    function createInventoryAdjustmentAfterCreatorUpdate(
-      originalResult: any,
-    ): Promise<any> {
-      // The Product_Master lookup does not currently expose the external
-      // Books item ID. Skipping is safer than posting a Creator record ID as
-      // an Inventory item ID; once that field is wired, this follows up every
-      // successful Creator stock write.
+  const finishedGoods = draft.finishedGoods.filter(function (fg) {
+    return !!fg.itemId;
+  });
+  const rawMaterials = draft.rawMaterials.filter(function (rm) {
+    return !!rm.productId;
+  });
+  const adjustmentDate = formatDateStringForZoho(draft.date);
+
+  const mainEdits = new Map<string, StockEdit>();
+  const productionEdits = new Map<string, StockEdit>();
+  const scrapEdits = new Map<string, StockEdit>();
+  // Batch_Details edits by record ID ("new:<Batch_Number>" for a new row),
+  // plus the finished goods' own batches by Batch_Number.
+  const batchEdits = new Map<string, StockEdit>();
+  const fgBatchEdits = new Map<string, StockEdit>();
+  // Finished goods whose Main Warehouse row is written (the Books
+  // adjustment follows that write).
+  const stockedFinishedGoods: typeof finishedGoods = [];
+
+  function addScrap(productId: string, scrapQuantity: number): void {
+    if (!(scrapQuantity > 0)) return;
+    const edit = stockEditFor(
+      scrapEdits,
+      productId,
+      stock.scrap.get(productId),
+      function () {
+        const scrapWh = stock.scrapWarehouse;
+        return scrapWh
+          ? {
+              Warehouse_Code: scrapWh.code,
+              Warehouse: scrapWh.id,
+              Product_Master: productId,
+            }
+          : null;
+      },
+    );
+    if (!edit) return;
+    setStockQty(
+      edit,
+      "Scrap_Quantity",
+      stockQty(edit, "Scrap_Quantity") + scrapQuantity,
+    );
+  }
+
+  finishedGoods.forEach(function (fg) {
+    const main = stockEditFor(
+      mainEdits,
+      fg.itemId,
+      stock.main.get(fg.itemId),
+      function () {
+        const mainWh = stock.mainWarehouse;
+        return mainWh
+          ? {
+              Warehouse_Code: mainWh.code,
+              Warehouse: mainWh.id,
+              Product_Master: fg.itemId,
+            }
+          : null;
+      },
+    );
+    if (main) {
+      const stockOnHand = stockQty(main, "Stock_On_Hand") + fg.producedQuantity;
+      setStockQty(main, "Stock_On_Hand", stockOnHand);
+      setStockQty(main, "Available_Stocks", stockOnHand);
+      stockedFinishedGoods.push(fg);
+    }
+
+    if (fg.batchNo) {
+      let batch = fgBatchEdits.get(fg.batchNo);
+      if (batch) {
+        setStockQty(
+          batch,
+          "Stock_On_Hand",
+          stockQty(batch, "Stock_On_Hand") + fg.producedQuantity,
+        );
+      } else {
+        const row = stock.fgBatches.get(fg.batchNo);
+        if (row) {
+          batch = stockEditFor(batchEdits, display(row.ID), row, null)!;
+          setStockQty(
+            batch,
+            "Stock_On_Hand",
+            stockQty(batch, "Stock_On_Hand") + fg.producedQuantity,
+          );
+        } else {
+          batch = newStockEdit({
+            Product_Master: fg.itemId,
+            Batch_Number: fg.batchNo,
+            Manufacturing_Date: formatDateStringForZoho(fg.manufacturingDate),
+            Expiry_Date: formatDateStringForZoho(fg.expiryDate),
+          });
+          setStockQty(batch, "Stock_On_Hand", fg.producedQuantity);
+          setStockQty(batch, "Available_Stocks", fg.producedQuantity);
+          batchEdits.set("new:" + fg.batchNo, batch);
+        }
+        fgBatchEdits.set(fg.batchNo, batch);
+      }
+    }
+
+    addScrap(fg.itemId, fg.scrapQuantity);
+  });
+
+  rawMaterials.forEach(function (rm) {
+    const main = stockEditFor(
+      mainEdits,
+      rm.productId,
+      stock.main.get(rm.productId),
+      null,
+    );
+    if (main) {
+      setStockQty(
+        main,
+        "Committed_Stocks",
+        stockQty(main, "Committed_Stocks") - rm.allocatedQuantity,
+      );
+      setStockQty(
+        main,
+        "Stock_On_Hand",
+        stockQty(main, "Stock_On_Hand") - rm.allocatedQuantity,
+      );
+    }
+
+    const production = stockEditFor(
+      productionEdits,
+      rm.productId,
+      stock.production.get(rm.productId),
+      null,
+    );
+    if (production) {
+      setStockQty(
+        production,
+        "Committed_Stocks",
+        stockQty(production, "Committed_Stocks") - rm.allocatedQuantity,
+      );
+    }
+
+    // Releases each batch FEFO picked for this raw material, and deletes it
+    // once used up (Stock_On_Hand - Committed_Stocks <= 0) — the native
+    // workflow's "if Available_Stocks == 0, delete" check, computed here.
+    stock.allocations
+      .filter(function (line) {
+        return line.productId === rm.productId && !!line.batchId;
+      })
+      .forEach(function (line) {
+        const row = stock.rmBatches.get(line.batchId);
+        if (!row) return;
+        const batch = stockEditFor(batchEdits, display(row.ID), row, null)!;
+        if (batch.remove) return;
+        const committedStocks = roundQty(
+          stockQty(batch, "Committed_Stocks") - line.batchQty,
+        );
+        const stockOnHand = roundQty(
+          stockQty(batch, "Stock_On_Hand") - line.batchQty,
+        );
+        if (roundQty(stockOnHand - committedStocks) <= 0) {
+          batch.remove = true;
+          return;
+        }
+        setStockQty(batch, "Committed_Stocks", committedStocks);
+        setStockQty(batch, "Stock_On_Hand", stockOnHand);
+      });
+
+    addScrap(rm.productId, rm.scrapQuantity);
+  });
+
+  const mainWrites = writeStockEdits(
+    mainEdits,
+    CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
+    CONFIG.MAIN_WAREHOUSE_STOCK_FORM,
+  );
+  const scrapWrites = writeStockEdits(
+    scrapEdits,
+    CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT,
+    CONFIG.SCRAP_WAREHOUSE_STOCK_FORM,
+  );
+  const productionWrites = writeStockEdits(
+    productionEdits,
+    CONFIG.PRODUCTION_STOCK_REPORT,
+    "",
+  );
+  const batchWrites = writeStockEdits(
+    batchEdits,
+    CONFIG.BATCH_DETAILS_REPORT,
+    CONFIG.BATCH_DETAILS_FORM,
+  );
+
+  // Books inventory adjustments follow their Creator stock write.
+  // The Product_Master lookup does not always expose the external Books
+  // item ID; skipping is safer than posting a Creator record ID as an
+  // Inventory item ID.
+  const outputAdjustments = stockedFinishedGoods.map(function (fg) {
+    return mainWrites.get(fg.itemId)!.then(function () {
       if (!fg.booksItemId) {
         console.warn(
           "Inventory adjustment skipped (Books item ID is not available):",
           fg.itemId,
         );
-        return Promise.resolve(originalResult);
+        return null;
       }
       return createInventoryAdjustment(
         fg.booksItemId,
         fg.producedQuantity,
         "Production output",
-        formatDateStringForZoho(draft.date),
-      )
-        .catch(function (err) {
-          console.warn(
-            "Inventory adjustment failed (Creator stock still updated):",
-            err,
-          );
-        })
-        .then(function () {
-          return originalResult;
-        });
-    }
-
-    const criteria = `Product_Master == ${fg.itemId}`;
-    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
-      function (rows) {
-        if (rows.length > 0) {
-          const row = rows[0];
-          const stockOnHand = roundQty(
-            (parseFloat(display(row.Stock_On_Hand)) || 0) + fg.producedQuantity,
-          );
-          return updateRecord(
-            CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
-            display(row.ID),
-            {
-              Stock_On_Hand: stockOnHand,
-              Available_Stocks: stockOnHand,
-            },
-          ).then(createInventoryAdjustmentAfterCreatorUpdate);
-        }
-        return fetchWarehouseByCode("WH-001").then(function (mainWh) {
-          if (!mainWh) return null;
-          return addRecord(CONFIG.MAIN_WAREHOUSE_STOCK_FORM, {
-            Warehouse_Code: mainWh.code,
-            Warehouse: mainWh.id,
-            Product_Master: fg.itemId,
-            Stock_On_Hand: fg.producedQuantity,
-            Available_Stocks: fg.producedQuantity,
-          }).then(createInventoryAdjustmentAfterCreatorUpdate);
-        });
-      },
-    );
-  }
-
-  function updateOrCreateScrapWarehouse(
-    productId: string,
-    scrapQuantity: number,
-  ): Promise<any> {
-    if (!(scrapQuantity > 0)) return Promise.resolve(null);
-    const criteria = `Product_Master == ${productId}`;
-    return getRecords(CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT, criteria).then(
-      function (rows) {
-        if (rows.length > 0) {
-          const row = rows[0];
-          return updateRecord(
-            CONFIG.SCRAP_WAREHOUSE_STOCK_REPORT,
-            display(row.ID),
-            {
-              Scrap_Quantity: roundQty(
-                (parseFloat(display(row.Scrap_Quantity)) || 0) + scrapQuantity,
-              ),
-            },
-          );
-        }
-        return fetchWarehouseByCode("WH-003").then(function (scrapWh) {
-          if (!scrapWh) return null;
-          return addRecord(CONFIG.SCRAP_WAREHOUSE_STOCK_FORM, {
-            Warehouse_Code: scrapWh.code,
-            Warehouse: scrapWh.id,
-            Product_Master: productId,
-            Scrap_Quantity: scrapQuantity,
-          });
-        });
-      },
-    );
-  }
-
-  function updateOrCreateScrapWarehouseForFinishedGood(
-    fg: (typeof draft.finishedGoods)[number],
-  ): Promise<any> {
-    if (!(fg.scrapQuantity > 0)) return Promise.resolve(null);
-    return updateOrCreateScrapWarehouse(fg.itemId, fg.scrapQuantity).then(
-      function (originalResult) {
+        adjustmentDate,
+      ).catch(function (err) {
+        console.warn(
+          "Inventory adjustment failed (Creator stock still updated):",
+          err,
+        );
+      });
+    });
+  });
+  const scrapAdjustments = finishedGoods
+    .filter(function (fg) {
+      return fg.scrapQuantity > 0;
+    })
+    .map(function (fg) {
+      const write = scrapWrites.get(fg.itemId) || Promise.resolve(null);
+      return write.then(function () {
         if (!fg.booksItemId) {
           console.warn(
             "Finished-good scrap Inventory adjustment skipped (Books item ID is not available):",
             fg.itemId,
           );
-          return originalResult;
+          return null;
         }
         return createFinishedGoodScrapInventoryAdjustment(
           fg.booksItemId,
           fg.scrapQuantity,
           "Production scrap",
-          formatDateStringForZoho(draft.date),
-        )
-          .catch(function (err) {
-            console.warn(
-              "Finished-good scrap Inventory adjustment failed (Creator scrap stock still updated):",
-              err,
-            );
-          })
-          .then(function () {
-            return originalResult;
-          });
-      },
-    );
-  }
-
-  function releaseMainWarehouseForRawMaterial(
-    rm: (typeof draft.rawMaterials)[number],
-  ): Promise<any> {
-    const criteria = `Product_Master == ${rm.productId}`;
-    return getRecords(CONFIG.MAIN_WAREHOUSE_STOCK_REPORT, criteria).then(
-      function (rows) {
-        if (!rows.length) return null;
-        const row = rows[0];
-        return updateRecord(
-          CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
-          display(row.ID),
-          {
-            Committed_Stocks: roundQty(
-              (parseFloat(display(row.Committed_Stocks)) || 0) -
-                rm.allocatedQuantity,
-            ),
-            Stock_On_Hand: roundQty(
-              (parseFloat(display(row.Stock_On_Hand)) || 0) -
-                rm.allocatedQuantity,
-            ),
-          },
-        );
-      },
-    );
-  }
-
-  function releaseProductionWarehouseForRawMaterial(
-    rm: (typeof draft.rawMaterials)[number],
-  ): Promise<any> {
-    const criteria = `Product_Master == ${rm.productId}`;
-    return getRecords(CONFIG.PRODUCTION_STOCK_REPORT, criteria).then(
-      function (rows) {
-        if (!rows.length) return null;
-        const row = rows[0];
-        return updateRecord(CONFIG.PRODUCTION_STOCK_REPORT, display(row.ID), {
-          Committed_Stocks: roundQty(
-            (parseFloat(display(row.Committed_Stocks)) || 0) -
-              rm.allocatedQuantity,
-          ),
-        });
-      },
-    );
-  }
-
-  // Per-batch tracking, per the native workflow: a finished good's own
-  // Batch_Details row is looked up by Batch_Number (not scoped to a
-  // product — batch numbers are treated as unique on their own), updated if
-  // found, or created fresh if this is the first time that batch number has
-  // ever been logged.
-  function updateOrCreateBatchDetailsForFinishedGood(
-    fg: (typeof draft.finishedGoods)[number],
-  ): Promise<any> {
-    if (!fg.batchNo) return Promise.resolve(null);
-    const criteria = `Batch_Number == "${fg.batchNo}"`;
-    return getRecords(CONFIG.BATCH_DETAILS_REPORT, criteria).then(
-      function (rows) {
-        if (rows.length > 0) {
-          const row = rows[0];
-          return updateRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID), {
-            Stock_On_Hand: roundQty(
-              (parseFloat(display(row.Stock_On_Hand)) || 0) +
-                fg.producedQuantity,
-            ),
-          });
-        }
-        return addRecord(CONFIG.BATCH_DETAILS_FORM, {
-          Product_Master: fg.itemId,
-          Batch_Number: fg.batchNo,
-          Manufacturing_Date: formatDateStringForZoho(fg.manufacturingDate),
-          Expiry_Date: formatDateStringForZoho(fg.expiryDate),
-          Stock_On_Hand: fg.producedQuantity,
-          Available_Stocks: fg.producedQuantity,
-        });
-      },
-    );
-  }
-
-  // Per-batch release for raw materials, per the native workflow: finds
-  // whichever specific batch(es) FEFO_Batch_Allocation picked for this raw
-  // material back at Start Production, releases that batch's own
-  // Committed_Stocks/Stock_On_Hand by the allocated amount, and deletes the
-  // batch once it's fully used up (Stock_On_Hand - Committed_Stocks <= 0) --
-  // same as the native workflow's own "if Available_Stocks == 0, delete"
-  // check, just computed here since a plain getRecords/updateRecord round
-  // trip doesn't have Deluge's in-session recalculated field to read back.
-  // Runs alongside (not instead of) the warehouse-total release above, per
-  // an explicit choice to keep both in sync rather than only one of them.
-  function releaseBatchDetailsForRawMaterial(
-    batchAllocationLines: BatchAllocationLine[],
-    rm: (typeof draft.rawMaterials)[number],
-  ): Promise<any> {
-    const matchingLines = batchAllocationLines.filter(function (line) {
-      return line.productId === rm.productId && !!line.batchId;
-    });
-    return runSequentially(matchingLines, function (line) {
-      return getRecords(
-        CONFIG.BATCH_DETAILS_REPORT,
-        `ID == ${line.batchId}`,
-      ).then(function (rows) {
-        if (!rows.length) return null;
-        const row = rows[0];
-        const committedStocks = roundQty(
-          (parseFloat(display(row.Committed_Stocks)) || 0) - line.batchQty,
-        );
-        const stockOnHand = roundQty(
-          (parseFloat(display(row.Stock_On_Hand)) || 0) - line.batchQty,
-        );
-        const availableStocks = roundQty(stockOnHand - committedStocks);
-        if (availableStocks <= 0) {
-          return deleteRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID));
-        }
-        return updateRecord(CONFIG.BATCH_DETAILS_REPORT, display(row.ID), {
-          Committed_Stocks: committedStocks,
-          Stock_On_Hand: stockOnHand,
+          adjustmentDate,
+        ).catch(function (err) {
+          console.warn(
+            "Finished-good scrap Inventory adjustment failed (Creator scrap stock still updated):",
+            err,
+          );
         });
       });
     });
-  }
 
-  return runSequentially(
-    draft.finishedGoods.filter(function (fg) {
-      return !!fg.itemId;
-    }),
-    function (fg) {
-      return updateOrCreateMainWarehouseForFinishedGood(fg)
-        .then(function () {
-          return updateOrCreateBatchDetailsForFinishedGood(fg);
-        })
-        .then(function () {
-          return updateOrCreateScrapWarehouseForFinishedGood(fg);
-        });
-    },
-  )
-    .then(function () {
-      // Fetched once up front (not per raw material) — the same FEFO pick
-      // covers every raw material on this production target, so this is a
-      // single read reused across the whole loop below.
-      return fetchBatchAllocationsForProductionTarget(
-        draft.productionTargetRecordId,
-      );
-    })
-    .then(function (batchAllocationLines) {
-      return runSequentially(
-        draft.rawMaterials.filter(function (rm) {
-          return !!rm.productId;
-        }),
-        function (rm) {
-          return releaseMainWarehouseForRawMaterial(rm)
-            .then(function () {
-              return releaseProductionWarehouseForRawMaterial(rm);
-            })
-            .then(function () {
-              return releaseBatchDetailsForRawMaterial(
-                batchAllocationLines,
-                rm,
-              );
-            })
-            .then(function () {
-              return updateOrCreateScrapWarehouse(
-                rm.productId,
-                rm.scrapQuantity,
-              );
-            });
-        },
-      );
-    })
-    .then(function () {
-      return undefined;
-    });
+  return Promise.all(
+    ([] as Promise<any>[]).concat(
+      Array.from(mainWrites.values()),
+      Array.from(scrapWrites.values()),
+      Array.from(productionWrites.values()),
+      Array.from(batchWrites.values()),
+      outputAdjustments,
+      scrapAdjustments,
+    ),
+  ).then(function () {
+    return undefined;
+  });
 }
 
-// Writes a confirmed draft: the Consumption_Entry header, its two subform
-// rows (Finished_Goods_Cunsumptions, Consumption_Items), flips the
+// Child-row payloads for a Consumption_Entry. Each goes either inline in
+// the header's own subform field (one request for everything, when the
+// subform's link name is set in CONFIG) or as its own row in the subform's
+// form, linked back to the header.
+function consumptionFinishedGoodRow(
+  fg: ConsumptionEntryDraft["finishedGoods"][number],
+): Record<string, any> {
+  // Batch_No, MFD_Date and Expiry_Date are all mandatory on this form now
+  // (MFD_Date and Expiry_Date are "must have" fields) — the dialog's
+  // canSubmit already blocks the commit until every line has all three,
+  // so these are sent unconditionally rather than only-if-present.
+  return {
+    Finished_Good: fg.itemId,
+    Target_Quantity: fg.targetQuantity,
+    Produced_Quantity: fg.producedQuantity,
+    Scrap_Quantity: fg.scrapQuantity,
+    Batch_No: fg.batchNo,
+    MFD_Date: formatDateStringForZoho(fg.manufacturingDate),
+    Expiry_Date: formatDateStringForZoho(fg.expiryDate),
+  };
+}
+
+function consumptionRawMaterialRow(
+  rm: ConsumptionEntryDraft["rawMaterials"][number],
+): Record<string, any> {
+  return {
+    Raw_Material: rm.productId,
+    UOM: rm.uom,
+    Allocated_Quantity: rm.allocatedQuantity,
+    Consumed_Quantity: rm.consumedQuantity,
+    Scrap_Quantity: rm.scrapQuantity,
+  };
+}
+
+// Writes a confirmed draft: the Consumption_Entry header and its two subform
+// grids (Finished_Goods_Cunsumptions, Consumption_Items), flips the
 // Production Target to "Completed" (mirroring the native form's on-success
-// workflow), bumps the Sequence_Master counter, and updates warehouse stock
-// (see updateWarehouseStockForConsumption) — only after everything else has
+// workflow), updates warehouse stock (see applyConsumptionStock), and bumps
+// the Sequence_Master counter last — only after everything else has
 // succeeded, so a failed/partial commit doesn't burn a sequence number.
+//
+// The stock rows are read while the entry is being written (reads change
+// nothing), and the stock writes still only start once the entry and the
+// status update have succeeded.
 export function commitConsumptionEntry(
   draft: ConsumptionEntryDraft,
 ): Promise<ConsumptionEntryRow> {
-  return addRecord(CONFIG.CONSUMPTION_ENTRY_FORM, {
+  const stockPromise = loadConsumptionStock(draft);
+  // Handled below; this only stops an "unhandled rejection" warning when the
+  // header write fails first and the stock rows are never used.
+  stockPromise.catch(function () {});
+
+  const fgSubform = CONFIG.CONSUMPTION_FINISHED_GOODS_SUBFORM;
+  const rmSubform = CONFIG.CONSUMPTION_RAW_MATERIALS_SUBFORM;
+  const header: Record<string, any> = {
     Consumption_ID: draft.consumptionId,
     Production_Target: draft.productionTargetRecordId,
     Date_field: formatDateStringForZoho(draft.date),
     Remarks: draft.remarks,
     Books_Sync_Status: "Pending",
-  }).then(function (entryRecord) {
-    const entryId: string = display(entryRecord.ID);
+  };
+  if (fgSubform && draft.finishedGoods.length) {
+    header[fgSubform] = draft.finishedGoods.map(consumptionFinishedGoodRow);
+  }
+  if (rmSubform && draft.rawMaterials.length) {
+    header[rmSubform] = draft.rawMaterials.map(consumptionRawMaterialRow);
+  }
 
-    // Every step below is chained sequentially (not fired in parallel via
-    // Promise.all) — see runSequentially's comment: a multi-line entry
-    // (several finished goods + several raw materials, each needing its own
-    // insert/lookup/update calls) fired all at once trips Zoho Creator's cap
-    // on simultaneous in-flight API calls (code 2955).
-    return runSequentially(draft.finishedGoods, function (fg) {
-      // Batch_No, MFD_Date and Expiry_Date are all mandatory on this form now
-      // (MFD_Date and Expiry_Date are "must have" fields) — the dialog's
-      // canSubmit already blocks the commit until every line has all three,
-      // so these are sent unconditionally rather than only-if-present.
-      const payload: Record<string, any> = {
-        Consumption_Entry: entryId,
-        Finished_Good: fg.itemId,
-        Target_Quantity: fg.targetQuantity,
-        Produced_Quantity: fg.producedQuantity,
-        Scrap_Quantity: fg.scrapQuantity,
-        Batch_No: fg.batchNo,
-        MFD_Date: formatDateStringForZoho(fg.manufacturingDate),
-        Expiry_Date: formatDateStringForZoho(fg.expiryDate),
-      };
-      return addRecord(CONFIG.FINISHED_GOODS_CONSUMPTIONS_FORM, payload);
-    })
-      .then(function () {
-        return runSequentially(draft.rawMaterials, function (rm) {
-          return addRecord(CONFIG.CONSUMPTION_ITEMS_FORM, {
-            Consumption_ID: entryId,
-            Raw_Material: rm.productId,
-            UOM: rm.uom,
-            Allocated_Quantity: rm.allocatedQuantity,
-            Consumed_Quantity: rm.consumedQuantity,
-            Scrap_Quantity: rm.scrapQuantity,
+  return addRecord(CONFIG.CONSUMPTION_ENTRY_FORM, header).then(
+    function (entryRecord) {
+      const entryId: string = display(entryRecord.ID);
+
+      const finishedGoodRows = fgSubform
+        ? []
+        : draft.finishedGoods.map(function (fg) {
+            return addRecord(CONFIG.FINISHED_GOODS_CONSUMPTIONS_FORM, {
+              Consumption_Entry: entryId,
+              ...consumptionFinishedGoodRow(fg),
+            });
           });
-        });
-      })
-      .then(function () {
-        return createInventoryAdjustmentForRawMaterialConsumption(
-          entryId,
-        ).catch(function (err: any) {
-          console.warn(
-            "Books raw-material consumption sync failed (Consumption Entry still recorded in Creator):",
-            err,
+      const rawMaterialRows = rmSubform
+        ? []
+        : draft.rawMaterials.map(function (rm) {
+            return addRecord(CONFIG.CONSUMPTION_ITEMS_FORM, {
+              Consumption_ID: entryId,
+              ...consumptionRawMaterialRow(rm),
+            });
+          });
+
+      return Promise.all(finishedGoodRows.concat(rawMaterialRows))
+        .then(function () {
+          // Posts the raw-material consumption/scrap to Books. Best-effort (a
+          // failure is only logged) and it only reads this entry's own lines,
+          // which are all saved by now — so it runs in the background while
+          // the save carries on instead of holding it up.
+          createInventoryAdjustmentForRawMaterialConsumption(entryId).catch(
+            function (err: any) {
+              console.warn(
+                "Books raw-material consumption sync failed (Consumption Entry still recorded in Creator):",
+                err,
+              );
+            },
           );
+          return updateRecord(
+            CONFIG.PRODUCTION_TARGET_REPORT,
+            draft.productionTargetRecordId,
+            {
+              Status: "Completed" as ProductionTargetStatus,
+            },
+          );
+        })
+        .then(function () {
+          return stockPromise;
+        })
+        .then(function (stock) {
+          return applyConsumptionStock(draft, stock);
+        })
+        .then(function () {
+          return bumpConsumptionSequence(
+            draft.sequenceRowId,
+            draft.sequenceConsumptionNo,
+          );
+        })
+        .then(function () {
+          return {
+            id: entryId,
+            consumptionId: draft.consumptionId,
+            productionTargetId: draft.productionTargetId,
+            date: formatDateStringForZoho(draft.date),
+            remarks: draft.remarks,
+            finishedGoods: draft.finishedGoods.map(function (fg) {
+              return { id: "", ...fg };
+            }),
+            rawMaterials: draft.rawMaterials.map(function (rm) {
+              return { id: "", ...rm };
+            }),
+          };
         });
-      })
-      .then(function () {
-        return updateRecord(
-          CONFIG.PRODUCTION_TARGET_REPORT,
-          draft.productionTargetRecordId,
-          {
-            Status: "Completed" as ProductionTargetStatus,
-          },
-        );
-      })
-      .then(function () {
-        return updateWarehouseStockForConsumption(draft);
-      })
-      .then(function () {
-        return bumpConsumptionSequence(
-          draft.sequenceRowId,
-          draft.sequenceConsumptionNo,
-        );
-      })
-      .then(function () {
-        return {
-          id: entryId,
-          consumptionId: draft.consumptionId,
-          productionTargetId: draft.productionTargetId,
-          date: formatDateStringForZoho(draft.date),
-          remarks: draft.remarks,
-          finishedGoods: draft.finishedGoods.map(function (fg) {
-            return { id: "", ...fg };
-          }),
-          rawMaterials: draft.rawMaterials.map(function (rm) {
-            return { id: "", ...rm };
-          }),
-        };
-      });
-  });
+    },
+  );
 }
 
 // Fetch everything the Production Overview page needs
