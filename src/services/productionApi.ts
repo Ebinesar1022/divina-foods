@@ -770,11 +770,39 @@ function bumpPoSequence(
   });
 }
 
+// Batch-fetches Product_Master.Purchase_Price for a set of product record
+// IDs — used to prefill a PO line's Unit Price so the user doesn't have to
+// look it up and retype it every time (still fully editable afterward).
+function fetchPurchasePricesBatch(
+  productIds: string[],
+): Promise<Record<string, number>> {
+  const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
+  if (!uniqueIds.length) return Promise.resolve({});
+
+  const criteria = uniqueIds
+    .map(function (id) {
+      return `ID == ${id}`;
+    })
+    .join(" || ");
+
+  return getRecords(CONFIG.PRODUCT_MASTER_REPORT, criteria).then(
+    function (rows) {
+      const prices: Record<string, number> = {};
+      rows.forEach(function (r: any) {
+        prices[display(r.ID)] = parseFloat(display(r.Purchase_Price)) || 0;
+      });
+      return prices;
+    },
+  );
+}
+
 // Computes the draft; writes nothing to Zoho. selectedItems are the
 // Non_Stock_Items rows the user checked in the Procurement tab — Order
-// Quantity defaults to Needed Quantity (editable), Unit Price starts at 0
-// (must have a value before submit, mirroring the native form's own
-// "must have Unit_Price" rule).
+// Quantity defaults to Needed Quantity (editable), Unit Price is prefilled
+// from the raw material's Product_Master.Purchase_Price when set (0 if
+// that's empty, same as before — must have a value before submit, mirroring
+// the native form's own "must have Unit_Price" rule). Always editable
+// either way.
 export function prepareCreatePoDraft(
   mrpRecordId: string,
   selectedItems: NonStockItemRow[],
@@ -784,7 +812,16 @@ export function prepareCreatePoDraft(
       new Error("Select at least one item to create a Purchase Order."),
     );
   }
-  return fetchSequenceMasterRow().then(function (sequenceRow) {
+  return Promise.all([
+    fetchSequenceMasterRow(),
+    fetchPurchasePricesBatch(
+      selectedItems.map(function (item) {
+        return item.productId;
+      }),
+    ),
+  ]).then(function (results) {
+    const sequenceRow = results[0];
+    const purchasePrices = results[1];
     return {
       poNumber: generatePoNumber(sequenceRow),
       poDate: new Date().toISOString().slice(0, 10),
@@ -801,7 +838,7 @@ export function prepareCreatePoDraft(
           uomName: item.uomName,
           neededQuantity: item.neededQuantity,
           orderQuantity: item.neededQuantity,
-          unitPrice: 0,
+          unitPrice: purchasePrices[item.productId] || 0,
           taxTypeId: "",
           taxPercentage: 0,
         };
