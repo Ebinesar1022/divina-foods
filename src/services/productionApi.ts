@@ -1613,12 +1613,18 @@ function createInventoryAdjustment(
   quantityAdjusted: number,
   reason: string,
   adjDate: string,
+  batchNumber: string,
+  manufactureDate: string,
+  expiryDate: string,
 ): Promise<any> {
   console.info("Creating Inventory adjustment:", {
     item_id: itemBooksId,
     quantity_adjusted: quantityAdjusted,
     reason: reason,
     adj_date: adjDate,
+    batch_number: batchNumber,
+    manufacture_date: manufactureDate,
+    expiry_date: expiryDate,
   });
   return zohoData("invokeCustomApi", {
     api_name: CREATE_INVENTORY_ADJUSTMENT_API.api_name,
@@ -1630,6 +1636,9 @@ function createInventoryAdjustment(
       quantity_adjusted: quantityAdjusted,
       reason: reason,
       adj_date: adjDate,
+      batch_number: batchNumber,
+      manufacture_date: manufactureDate,
+      expiry_date: expiryDate,
     },
     public_key: CREATE_INVENTORY_ADJUSTMENT_API.public_key,
   }).then(function (resp: any) {
@@ -3454,6 +3463,9 @@ function applyConsumptionStock(
         fg.producedQuantity,
         "Production output",
         adjustmentDate,
+        fg.batchNo,
+        formatDateStringForZoho(fg.manufacturingDate),
+        formatDateStringForZoho(fg.expiryDate),
       ).catch(function (err) {
         console.warn(
           "Inventory adjustment failed (Creator stock still updated):",
