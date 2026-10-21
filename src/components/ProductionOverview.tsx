@@ -1651,23 +1651,45 @@ export default function ProductionOverview({
                     />
                   ) : (
                     // Status is neither "Waiting for Stock" nor "Completed" —
-                    // materials cleared procurement. Show a completion banner
-                    // and, if POs were raised as part of fulfilling the shortfall,
-                    // render them beneath so users can review what was ordered.
+                    // Check Stock has released the target once the shortfall
+                    // PO was raised, which can happen before it's actually
+                    // received. Trusting record.status alone here claimed
+                    // "Procurement Complete" while a PO below still showed
+                    // "Not Received" — so this re-derives the real state from
+                    // procurementRecords (same reasoning as derivePoStatus:
+                    // don't trust a stored status field when the underlying
+                    // line data is right there to check).
                     <Box
                       sx={{ display: "flex", flexDirection: "column", gap: 3 }}
                     >
-                      <CenteredStateCard
-                        icon={<CheckCircleOutlineIcon sx={{ fontSize: 28 }} />}
-                        iconBg="#ECFDF5"
-                        iconColor="#059669"
-                        title="Procurement Complete"
-                        description={
-                          procurementRecords.length > 0
-                            ? "All Purchase Orders have been received. Head to Initiate Production to start the run."
-                            : "All raw materials are available. Head to the Initiate Production tab to start the run."
-                        }
-                      />
+                      {procurementRecords.length > 0 &&
+                      !procurementRecords.every(
+                        (po) => po.status === "Received",
+                      ) ? (
+                        <CenteredStateCard
+                          icon={
+                            <LocalShippingIcon sx={{ fontSize: 28 }} />
+                          }
+                          iconBg="#FEF3C7"
+                          iconColor="#D97706"
+                          title="Awaiting Receipt"
+                          description="Purchase Orders have been raised — Initiate Production unlocks once every order below is fully received."
+                        />
+                      ) : (
+                        <CenteredStateCard
+                          icon={
+                            <CheckCircleOutlineIcon sx={{ fontSize: 28 }} />
+                          }
+                          iconBg="#ECFDF5"
+                          iconColor="#059669"
+                          title="Procurement Complete"
+                          description={
+                            procurementRecords.length > 0
+                              ? "All Purchase Orders have been received. Head to Initiate Production to start the run."
+                              : "All raw materials are available. Head to the Initiate Production tab to start the run."
+                          }
+                        />
+                      )}
 
                       {procurementRecords.length > 0 && (
                         <Box>
