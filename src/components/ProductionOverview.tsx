@@ -67,6 +67,7 @@ import {
   prepareReceivePoDraft,
   startProduction,
   allocateAndCommitBatch,
+  triggerTransferOrderForProduction,
   fetchBatchAllocationsForProductionTarget,
   describeError,
   goBackToProductionTargets,
@@ -490,6 +491,18 @@ export default function ProductionOverview({
         return allocateAndCommitBatch(productionTargetRecordId);
       })
       .then(function () {
+        // Best-effort, like the other Books-sync calls — doesn't block
+        // Start Production from completing, just finishes in the
+        // background. Fires the Main -> Production Transfer Order for the
+        // FEFO allocation AllocateAndCommitBatch just persisted.
+        triggerTransferOrderForProduction(productionTargetRecordId).catch(
+          function (err: any) {
+            console.warn(
+              "Transfer Order creation failed (Creator allocation still committed):",
+              err,
+            );
+          },
+        );
         // Read the FEFO_Batch_Allocation record AllocateAndCommitBatch just
         // wrote, rather than trying to parse its own response — that's also
         // what makes this breakdown survive a page reload later.

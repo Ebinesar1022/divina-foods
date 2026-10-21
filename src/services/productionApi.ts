@@ -2900,6 +2900,84 @@ export function allocateAndCommitBatch(
   });
 }
 
+// Published as "fefotransfer" in Microservices
+// (function: updateWarehouse.createTransferOrderForProduction). Fires the
+// Main -> Production Transfer Order in Books for a FEFO allocation. This
+// used to only run as a native Creator "on submit" workflow on
+// FEFO_Batch_Allocation — which never fires for records the widget creates
+// via the SDK — so it has to be called explicitly from here instead, right
+// after AllocateAndCommitBatch persists the FEFO_Batch_Allocation header.
+const CREATE_TRANSFER_ORDER_API = {
+  api_name: "fefotransfer",
+  workspace_name: "info_divinafoodco",
+  public_key: "wam7EN6CgBO1z7OY6b9w4XWJW",
+};
+
+function createTransferOrderForProduction(fefoId: string): Promise<any> {
+  console.info("Creating Transfer Order for FEFO allocation:", fefoId);
+  return zohoData("invokeCustomApi", {
+    api_name: CREATE_TRANSFER_ORDER_API.api_name,
+    workspace_name: CREATE_TRANSFER_ORDER_API.workspace_name,
+    http_method: "POST",
+    content_type: "application/json",
+    payload: {
+      fefo_id: fefoId,
+    },
+    public_key: CREATE_TRANSFER_ORDER_API.public_key,
+  }).then(function (resp: any) {
+    console.info("Transfer Order response:", resp);
+    const result = resp && resp.result;
+    // The Deluge function's own "status" is "done" (success), "skipped"
+    // (no batches needed a Transfer Order — not an error) or "failed".
+    if (!resp || resp.code !== 3000 || !result || result.status === "failed") {
+      return Promise.reject(
+        new Error(
+          (result && result.message) || "Failed to create Transfer Order.",
+        ),
+      );
+    }
+    return result;
+  });
+}
+
+// Reads back just the FEFO_Batch_Allocation header ID AllocateAndCommitBatch
+// persisted for this production target — same lookup
+// fetchBatchAllocationsForProductionTarget does internally (see below),
+// split out so the Transfer Order call can fire as soon as the header
+// exists, without waiting on the full Batch_Allocation line read.
+function fetchLatestFefoBatchAllocationId(
+  productionTargetRecordId: string,
+): Promise<string | null> {
+  const criteria = `Production_Targets == ${productionTargetRecordId}`;
+  return getRecords(CONFIG.FEFO_BATCH_ALLOCATION_REPORT, criteria).then(
+    function (headerRows) {
+      if (!headerRows || !headerRows.length) return null;
+      // Most recently created header, same tie-break as the function below.
+      return headerRows[headerRows.length - 1].ID;
+    },
+  );
+}
+
+// Best-effort, like the other Books-sync calls this widget makes directly
+// (syncPurchaseOrderToBooks etc.) — a Transfer Order failure never blocks
+// Start Production from completing; it's just logged.
+export function triggerTransferOrderForProduction(
+  productionTargetRecordId: string,
+): Promise<void> {
+  return fetchLatestFefoBatchAllocationId(productionTargetRecordId).then(
+    function (fefoId) {
+      if (!fefoId) {
+        console.warn(
+          "Transfer Order skipped (no FEFO_Batch_Allocation header found):",
+          productionTargetRecordId,
+        );
+        return;
+      }
+      return createTransferOrderForProduction(fefoId).then(function () {});
+    },
+  );
+}
+
 // Reads back the FEFO_Batch_Allocation record (+ its Batch_Allocation grid)
 // that AllocateAndCommitBatch persists for a production target — same
 // two-step header-then-lines pattern as fetchPurchaseOrders/PO_Line_Items.
