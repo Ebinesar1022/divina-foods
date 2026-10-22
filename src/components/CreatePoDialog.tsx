@@ -100,7 +100,9 @@ export default function CreatePoDialog({
     !!draft.paymentTermsId &&
     !!draft.expectedDeliveryDate &&
     !deliveryBeforePo &&
-    draft.lines.every((l) => l.orderQuantity > 0 && l.orderQuantity >= l.neededQuantity && l.unitPrice > 0);
+    draft.lines.every(
+      (l) => l.orderQuantity > 0 && l.orderQuantity >= l.neededQuantity && l.unitPrice > 0 && !!l.taxTypeId,
+    );
 
   return (
     <Dialog
@@ -316,9 +318,6 @@ export default function CreatePoDialog({
                             onChange={(e) => updateLine(index, { taxTypeId: e.target.value })}
                             sx={{ bgcolor: "#fff", borderRadius: "8px" }}
                           >
-                            <MenuItem value="">
-                              <em>No Tax</em>
-                            </MenuItem>
                             {taxTypes.map((t) => (
                               <MenuItem key={t.id} value={t.id}>
                                 {t.name} ({t.rate}%)
