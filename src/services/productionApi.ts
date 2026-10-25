@@ -1367,6 +1367,8 @@ export function prepareReceivePoDraft(
     return {
       receiveNo: generateReceiveNo(sequenceRow),
       receiveDate: new Date().toISOString().slice(0, 10),
+      invoiceNo: "",
+      invoiceDate: "",
       purchaseOrderRecordId: po.id,
       supplierId: po.supplierId,
       warehouseId: warehouseId,
@@ -1461,6 +1463,8 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
     Total_Received_Quantity: totalReceivedQuantity,
     Total_Pending_Quantity: totalPendingQuantity,
   };
+  if (draft.invoiceNo) header.Invoice_No = draft.invoiceNo;
+  if (draft.invoiceDate) header.Invoice_Date = formatDateStringForZoho(draft.invoiceDate);
   const headerPromise = subform
     ? rowsPromise.then(function (rows) {
         if (rows.length) header[subform] = rows;

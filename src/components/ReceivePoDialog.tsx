@@ -188,6 +188,24 @@ export default function ReceivePoDialog({
                 inputProps={{ max: today }}
                 sx={{ bgcolor: "#fff", borderRadius: "10px" }}
               />
+              <TextField
+                label="Invoice No"
+                fullWidth
+                value={draft.invoiceNo}
+                onChange={(e) => onDraftChange({ ...draft, invoiceNo: e.target.value })}
+                disabled={committing}
+                sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+              />
+              <TextField
+                label="Invoice Date"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={draft.invoiceDate}
+                onChange={(e) => onDraftChange({ ...draft, invoiceDate: e.target.value })}
+                disabled={committing}
+                sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+              />
             </Box>
 
             <Typography sx={{ fontWeight: 700, mb: 1 }}>Items to Receive</Typography>

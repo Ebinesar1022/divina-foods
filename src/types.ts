@@ -146,6 +146,8 @@ export interface ReceiveLineDraftRow {
 export interface ReceivePoDraft {
   receiveNo: string;
   receiveDate: string; // "YYYY-MM-DD"
+  invoiceNo: string;
+  invoiceDate: string; // "YYYY-MM-DD", optional
   purchaseOrderRecordId: string;
   supplierId: string;
   warehouseId: string;
