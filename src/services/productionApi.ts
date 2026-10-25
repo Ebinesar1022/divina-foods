@@ -119,7 +119,12 @@ export const CONFIG = {
   MRP_FINISHED_GOODS_SUBFORM: "", // on Material_Requirement_Planning → Finished_Goods
   MRP_RAW_MATERIALS_SUBFORM: "", // on Material_Requirement_Planning → Raw_Materials
   PO_LINE_ITEMS_SUBFORM: "", // on Purchase_Order → PO_Line_Items
-  RECEIVE_ITEMS_SUBFORM: "", // on Purchase_Receive → Receive_Items
+  // Confirmed against the form's own metadata (getFormMetadata on
+  // Purchase_Receive): the subform's link name is "Receive_Items" — same
+  // as the standalone report it also writes to. Setting this here switches
+  // commitReceivePo onto the inline path below: the header and its lines
+  // go in a single addRecords call instead of one call per row.
+  RECEIVE_ITEMS_SUBFORM: "Receive_Items",
 
   // Warehouse stock ledgers touched by completing production — confirmed
   // against the app's .ds export. All three are plain Creator forms (no
@@ -1424,6 +1429,30 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
       } as Record<string, any>;
     });
   });
+  // Header-level rollups across the lines actually being received this
+  // round — nothing computes these natively for a widget-created record
+  // (same story as every other total on this page), so they're summed
+  // here before the write. Total_Quantity is each line's full Ordered_Qty;
+  // Total_Received_Quantity is the running total as of this receipt
+  // (already-received + what's being received now); Total_Pending_Quantity
+  // is what's left after it — so Total_Quantity always equals
+  // Total_Received_Quantity + Total_Pending_Quantity.
+  const totalQuantity = roundQty(
+    selectedLines.reduce(function (sum, line) {
+      return sum + line.orderedQuantity;
+    }, 0),
+  );
+  const totalReceivedQuantity = roundQty(
+    selectedLines.reduce(function (sum, line) {
+      return sum + line.receivedQuantitySoFar + line.receivableQuantity;
+    }, 0),
+  );
+  const totalPendingQuantity = roundQty(
+    selectedLines.reduce(function (sum, line) {
+      return sum + (line.pendingQuantity - line.receivableQuantity);
+    }, 0),
+  );
+
   // With the subform's link name set in CONFIG, the lines go inline in the
   // header's own payload — one request, lines kept in entry order.
   const subform = CONFIG.RECEIVE_ITEMS_SUBFORM;
@@ -1433,6 +1462,9 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
     Receive_Date: formatDateStringForZoho(draft.receiveDate),
     Supplier: draft.supplierId,
     Warehouse: draft.warehouseId,
+    Total_Quantity: totalQuantity,
+    Total_Received_Quantity: totalReceivedQuantity,
+    Total_Pending_Quantity: totalPendingQuantity,
   };
   const headerPromise = subform
     ? rowsPromise.then(function (rows) {
