@@ -1434,17 +1434,24 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
   // (already-received + what's being received now); Total_Pending_Quantity
   // is what's left after it — so Total_Quantity always equals
   // Total_Received_Quantity + Total_Pending_Quantity.
-  const totalQuantity = roundQty(
+  //
+  // These three fields are Creator NUMBER fields (whole numbers only,
+  // confirmed against the form's own metadata) — unlike every per-line
+  // quantity field on Receive_Items, which is DECIMAL. roundQty's usual
+  // 4-decimal rounding still produces a fraction (e.g. 11.5), which the
+  // field rejects outright ("Enter a valid number") and fails the whole
+  // write — so these three are rounded to the nearest whole number instead.
+  const totalQuantity = Math.round(
     selectedLines.reduce(function (sum, line) {
       return sum + line.orderedQuantity;
     }, 0),
   );
-  const totalReceivedQuantity = roundQty(
+  const totalReceivedQuantity = Math.round(
     selectedLines.reduce(function (sum, line) {
       return sum + line.receivedQuantitySoFar + line.receivableQuantity;
     }, 0),
   );
-  const totalPendingQuantity = roundQty(
+  const totalPendingQuantity = Math.round(
     selectedLines.reduce(function (sum, line) {
       return sum + (line.pendingQuantity - line.receivableQuantity);
     }, 0),
