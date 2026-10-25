@@ -27,7 +27,6 @@ import type {
   ProductionTargetStatus,
   PurchaseOrderDetail,
   RawMaterialNeedRow,
-  ReceiveLineDraftRow,
   ReceivePoDraft,
   StartProductionDetails,
   SupplierOption,
@@ -1393,15 +1392,11 @@ export function prepareReceivePoDraft(
   });
 }
 
-// Writes a confirmed draft: the Purchase_Receive header, its Receive_Items
-// rows, bumps the sequence, then calls the "ProcessPurchaseReceive" Custom
-// API — mirroring the native "Update Received Qty to PO" / "Refresh MRP
-// After PR" workflows (bumping PO_Line_Items.Received_Qty, warehouse
-// Stock_On_Hand, re-allocating the MRP's Raw_Materials, and rolling the PO/
-// MRP/Production Target statuses up) — all of that is genuinely
-// interdependent multi-record math, so it runs server-side in one call
-// rather than being replicated client-side (same reasoning as
-// allocate_Stock_On_Production_Start and UpdateWarehouse).
+// Writes a confirmed draft: the Purchase_Receive header and its
+// Receive_Items rows in one request, then bumps the sequence. Deliberately
+// stops there — PO_Line_Items.Received_Qty, warehouse/batch stock, and the
+// PO's own Status are left to the Purchase_Receive form's native On Success
+// handler, which already does that bookkeeping.
 export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
   // Only the lines the user actually selected/left quantity on go to the
   // server — a line left at 0 wasn't received this round, so it shouldn't
@@ -1495,14 +1490,6 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
         );
       })
       .then(function () {
-        // Same pattern as commitCreatePo: no Custom API or native "On
-        // Success" workflow to lean on (neither fires for widget-created
-        // records) — the bookkeeping that UpdatePR used to replicate on the
-        // Deluge side is done directly here instead: PO_Line_Items.Received_Qty,
-        // Main Warehouse stock, Batch_Details, and the PO's own Status.
-        return applyReceiveStock(selectedLines, draft.purchaseOrderRecordId);
-      })
-      .then(function () {
         // Books sync is best-effort, like the PO sync — finishes in the
         // background.
         syncPurchaseReceiveToBooks(receiveRecordId, draft.supplierId).catch(
@@ -1515,170 +1502,6 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
         );
         return { receiveRecordId: receiveRecordId };
       });
-  });
-}
-
-// Everything a receipt needs to update beyond the Purchase_Receive/
-// Receive_Items rows themselves: bumps each PO line's Received_Qty by ID
-// (no search needed — prepareReceivePoDraft already carries each line's own
-// PO_Line_Items record ID), adds the received quantity to Main Warehouse
-// stock, updates or creates the matching Batch_Details row, then re-derives
-// and writes the PO's own Status from the full, current line set.
-function applyReceiveStock(
-  lines: ReceiveLineDraftRow[],
-  purchaseOrderRecordId: string,
-): Promise<void> {
-  if (!lines.length) return Promise.resolve();
-
-  const productIds = lines.map(function (l) {
-    return l.productId;
-  });
-  const batchNumbers = lines
-    .map(function (l) {
-      return l.batchNo;
-    })
-    .filter(Boolean);
-
-  return Promise.all([
-    fetchFirstRowByKey(
-      CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
-      "Product_Master",
-      productIds,
-      productOf,
-    ),
-    fetchFirstRowByKey(
-      CONFIG.BATCH_DETAILS_REPORT,
-      "Batch_Number",
-      batchNumbers,
-      function (row) {
-        return display(row.Batch_Number);
-      },
-      true,
-    ),
-    fetchWarehouseByCode("WH-001"),
-  ]).then(function (results) {
-    const mainStock = results[0];
-    const batches = results[1];
-    const mainWarehouse = results[2];
-
-    const poLineWrites = lines.map(function (line) {
-      return updateRecord(CONFIG.PO_LINE_ITEMS_REPORT, line.poLineId, {
-        Received_Qty: roundQty(
-          line.receivedQuantitySoFar + line.receivableQuantity,
-        ),
-      });
-    });
-
-    const mainEdits = new Map<string, StockEdit>();
-    const batchEdits = new Map<string, StockEdit>();
-
-    lines.forEach(function (line) {
-      const main = stockEditFor(
-        mainEdits,
-        line.productId,
-        mainStock.get(line.productId),
-        function () {
-          return mainWarehouse
-            ? {
-                Warehouse_Code: mainWarehouse.code,
-                Warehouse: mainWarehouse.id,
-                Product_Master: line.productId,
-              }
-            : null;
-        },
-      );
-      if (main) {
-        const stockOnHand =
-          stockQty(main, "Stock_On_Hand") + line.receivableQuantity;
-        setStockQty(main, "Stock_On_Hand", stockOnHand);
-        setStockQty(
-          main,
-          "Available_Stocks",
-          stockOnHand -
-            stockQty(main, "Reserved_Stock") -
-            stockQty(main, "Committed_Stocks"),
-        );
-      }
-
-      if (!line.batchNo) return;
-      const existingBatch = batches.get(line.batchNo);
-      if (existingBatch) {
-        const edit = stockEditFor(
-          batchEdits,
-          display(existingBatch.ID),
-          existingBatch,
-          null,
-        )!;
-        setStockQty(
-          edit,
-          "Stock_On_Hand",
-          stockQty(edit, "Stock_On_Hand") + line.receivableQuantity,
-        );
-        return;
-      }
-      const key = "new:" + line.batchNo;
-      const existingEdit = batchEdits.get(key);
-      if (existingEdit) {
-        setStockQty(
-          existingEdit,
-          "Stock_On_Hand",
-          stockQty(existingEdit, "Stock_On_Hand") + line.receivableQuantity,
-        );
-        return;
-      }
-      const edit = newStockEdit({
-        Product_Master: line.productId,
-        Batch_Number: line.batchNo,
-        Expiry_Date: formatDateStringForZoho(line.expiryDate),
-        Committed_Stocks: 0,
-      });
-      setStockQty(edit, "Stock_On_Hand", line.receivableQuantity);
-      batchEdits.set(key, edit);
-    });
-
-    const mainWrites = writeStockEdits(
-      mainEdits,
-      CONFIG.MAIN_WAREHOUSE_STOCK_REPORT,
-      CONFIG.MAIN_WAREHOUSE_STOCK_FORM,
-    );
-    const batchWrites = writeStockEdits(
-      batchEdits,
-      CONFIG.BATCH_DETAILS_REPORT,
-      CONFIG.BATCH_DETAILS_FORM,
-    );
-
-    return Promise.all(
-      ([] as Promise<any>[]).concat(
-        poLineWrites,
-        Array.from(mainWrites.values()),
-        Array.from(batchWrites.values()),
-      ),
-    ).then(function () {
-      return updatePurchaseOrderStatus(purchaseOrderRecordId);
-    });
-  });
-}
-
-// Re-derives and writes the PO's own Status from its full, current line
-// set (not just the lines this receipt touched — a line already fully
-// received earlier still counts toward whether the whole PO is done).
-function updatePurchaseOrderStatus(
-  purchaseOrderRecordId: string,
-): Promise<void> {
-  return getRecords(
-    CONFIG.PO_LINE_ITEMS_REPORT,
-    `PO_Number == ${purchaseOrderRecordId}`,
-    1000,
-  ).then(function (rows) {
-    const lines = rows.map(function (row: any) {
-      return {
-        orderQuantity: parseFloat(display(row.Order_Qty)) || 0,
-        receivedQuantity: parseFloat(display(row.Received_Qty)) || 0,
-      };
-    });
-    return updateRecord(CONFIG.PURCHASE_ORDER_REPORT, purchaseOrderRecordId, {
-      Status: derivePoStatus(lines),
-    }).then(function () {});
   });
 }
 
