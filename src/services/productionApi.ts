@@ -1460,10 +1460,10 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
         );
       })
       .then(function () {
-        return processPurchaseReceive(receiveRecordId);
-      })
-      .then(function (result) {
-        // Best-effort, like the PO sync — finishes in the background.
+        // Same pattern as commitCreatePo: no Custom API replicating native
+        // bookkeeping — the native Purchase_Receive "On Success" workflow
+        // (Received_Qty, warehouse stock, batch) owns that now. Books sync
+        // is best-effort, like the PO sync — finishes in the background.
         syncPurchaseReceiveToBooks(receiveRecordId, draft.supplierId).catch(
           function (err: any) {
             console.warn(
@@ -1472,50 +1472,8 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
             );
           },
         );
-        return result;
+        return { receiveRecordId: receiveRecordId };
       });
-  });
-}
-
-// Published as "UpdatePR" in Microservices (function: ProcessPurchaseReceive).
-const PROCESS_PURCHASE_RECEIVE_API = {
-  api_name: "UpdatePR",
-  workspace_name: "info_divinafoodco",
-  public_key: "dq5NsNjaEPBpSQ4z9fgH9mp7x",
-};
-
-function processPurchaseReceive(receiveRecordId: string): Promise<any> {
-  if (!PROCESS_PURCHASE_RECEIVE_API.public_key) {
-    return Promise.reject(
-      new Error(
-        "ProcessPurchaseReceive Custom API isn't wired up yet — the receipt was recorded, but stock/MRP status won't update until this is configured.",
-      ),
-    );
-  }
-  return zohoData("invokeCustomApi", {
-    api_name: PROCESS_PURCHASE_RECEIVE_API.api_name,
-    workspace_name: PROCESS_PURCHASE_RECEIVE_API.workspace_name,
-    http_method: "POST",
-    content_type: "application/json",
-    payload: {
-      receive_id: receiveRecordId,
-    },
-    public_key: PROCESS_PURCHASE_RECEIVE_API.public_key,
-  }).then(function (resp: any) {
-    const result = resp && resp.result;
-    if (
-      !resp ||
-      resp.code !== 3000 ||
-      (result && result.status && result.status !== "success")
-    ) {
-      return Promise.reject(
-        new Error(
-          (result && result.message) ||
-            "Failed to process the purchase receive.",
-        ),
-      );
-    }
-    return resp;
   });
 }
 
