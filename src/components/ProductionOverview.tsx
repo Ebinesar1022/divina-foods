@@ -48,6 +48,7 @@ import PipelineStepper from "./PipelineStepper";
 import ActivityTimeline from "./ActivityTimeline";
 import StatusChip from "./StatusChip";
 import FoodProductionLoader from "./FoodProductionLoader";
+import CheckStockLoader from "./loaders/CheckStockLoader";
 import ModernSnackbar from "./common/ModernSnackbar";
 import { CAN_HOVER, PHONE, stackedTableSx } from "./common/responsive";
 import {
@@ -989,6 +990,11 @@ export default function ProductionOverview({
                     size="small"
                     onClick={handleCheckStock}
                     disabled={checkStockRunning || !mrpRecord}
+                    startIcon={
+                      checkStockRunning ? (
+                        <CircularProgress size={13} color="inherit" />
+                      ) : undefined
+                    }
                     sx={{
                       borderRadius: "8px",
                       textTransform: "none",
@@ -3002,6 +3008,32 @@ export default function ProductionOverview({
             Check Stock
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Shown only while the Check_stock_in_MRP Custom API is running —
+          success/still-short/warning are resolved afterward via the
+          snackbars and the Stock Still Short dialog above. */}
+      <Dialog
+        open={checkStockRunning}
+        disableEscapeKeyDown
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "22px",
+            overflow: "hidden",
+            boxShadow: "0 24px 60px rgba(15, 23, 42, 0.22)",
+            border: "1px solid rgba(255, 255, 255, 0.9)",
+            bgcolor: "transparent",
+            [PHONE]: {
+              m: 2,
+              width: "calc(100% - 32px)",
+              maxHeight: "calc(100% - 32px)",
+            },
+          },
+        }}
+      >
+        <CheckStockLoader />
       </Dialog>
 
       <ModernSnackbar
