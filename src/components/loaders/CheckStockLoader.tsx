@@ -283,30 +283,49 @@ export default function CheckStockLoader() {
             <rect x="20" y="94" width="272" height="7" rx="2" fill="url(#csSafetyBeam)" />
             <rect x="20" y="152" width="272" height="7" rx="2" fill="url(#csSafetyBeam)" />
 
-            {/* Upper shelf: three tracked items */}
+            {/* Upper shelf: three generic tracked items — no product names,
+                since whatever's actually short varies MRP to MRP. Each gets
+                a small barcode mark instead, just to read as "a tracked
+                SKU" rather than naming anything specific. */}
             <g transform="translate(40, 60)">
-              {/* Pizza Base crate */}
+              {/* Crate */}
               <rect x="0" y="4" width="54" height="30" rx="3" fill="#B45309" stroke="#78350F" strokeWidth="1" />
               <line x1="0" y1="14" x2="54" y2="14" stroke="#78350F" strokeWidth="1" />
-              <text x="27" y="27" textAnchor="middle" fill="#FEF3C7" fontSize="7.5" fontWeight="800">
-                PIZZA BASE
-              </text>
+              <g transform="translate(17, 20)">
+                <rect x="0" y="0" width="1.6" height="9" fill="#FEF3C7" />
+                <rect x="3.2" y="0" width="3" height="9" fill="#FEF3C7" />
+                <rect x="7.4" y="0" width="1.6" height="9" fill="#FEF3C7" />
+                <rect x="10.2" y="0" width="2.2" height="9" fill="#FEF3C7" />
+                <rect x="13.6" y="0" width="1.6" height="9" fill="#FEF3C7" />
+                <rect x="16.4" y="0" width="3" height="9" fill="#FEF3C7" />
+              </g>
 
-              {/* Mozzarella wheel */}
+              {/* Round container (cheese wheel / drum shape) */}
               <g transform="translate(86, 0)">
                 <ellipse cx="18" cy="24" rx="20" ry="12" fill="#FDE047" stroke="#EAB308" strokeWidth="1.5" />
                 <ellipse cx="18" cy="20" rx="20" ry="5" fill="#FEF08A" />
-                <text x="18" y="27" textAnchor="middle" fill="#78350F" fontSize="7" fontWeight="800">
-                  MOZZ
-                </text>
+                <g transform="translate(9, 20)">
+                  <rect x="0" y="0" width="1.4" height="8" fill="#78350F" />
+                  <rect x="2.8" y="0" width="2.6" height="8" fill="#78350F" />
+                  <rect x="6.6" y="0" width="1.4" height="8" fill="#78350F" />
+                  <rect x="9" y="0" width="2" height="8" fill="#78350F" />
+                  <rect x="12" y="0" width="1.4" height="8" fill="#78350F" />
+                  <rect x="14.6" y="0" width="2.6" height="8" fill="#78350F" />
+                  <rect x="18.6" y="0" width="1.4" height="8" fill="#78350F" />
+                </g>
               </g>
 
-              {/* Mushroom-AGS crate */}
+              {/* Sack / crate */}
               <g transform="translate(174, 0)">
                 <rect x="0" y="6" width="54" height="28" rx="3" fill="url(#csFlourSack)" stroke="#D97706" strokeWidth="1" />
-                <text x="27" y="24" textAnchor="middle" fill="#92400E" fontSize="7.5" fontWeight="800">
-                  MUSHROOM
-                </text>
+                <g transform="translate(17, 16)">
+                  <rect x="0" y="0" width="1.6" height="9" fill="#92400E" />
+                  <rect x="3.2" y="0" width="3" height="9" fill="#92400E" />
+                  <rect x="7.4" y="0" width="1.6" height="9" fill="#92400E" />
+                  <rect x="10.2" y="0" width="2.2" height="9" fill="#92400E" />
+                  <rect x="13.6" y="0" width="1.6" height="9" fill="#92400E" />
+                  <rect x="16.4" y="0" width="3" height="9" fill="#92400E" />
+                </g>
               </g>
             </g>
 
@@ -411,7 +430,7 @@ export default function CheckStockLoader() {
             <rect x="392" y="44" width="200" height="124" rx="10" fill="url(#csLedgerPanel)" stroke="#CBD5E1" strokeWidth="1.5" />
             <rect x="392" y="44" width="200" height="22" rx="10" fill="#0F172A" />
             <text x="492" y="59" textAnchor="middle" fill="#E2E8F0" fontSize="9" fontWeight="700" letterSpacing="0.03em">
-              MRP-089 · STOCK CHECK
+              ACTIVE MRP · STOCK CHECK
             </text>
 
             {/* Ledger rows lighting up in sequence */}

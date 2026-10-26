@@ -95,7 +95,9 @@ export default function ConsumptionEntryDialog({
     if (patch.producedQuantity !== undefined) {
       let produced = patch.producedQuantity;
       if (isNaN(produced) || produced < 0) produced = 0;
-      if (produced > row.targetQuantity) produced = row.targetQuantity;
+      // Produced Quantity is allowed to exceed Target Quantity (overrun
+      // production runs happen) — Scrap still floors at 0 rather than
+      // going negative in that case.
       row.producedQuantity = produced;
       row.scrapQuantity = roundQty(Math.max(0, row.targetQuantity - produced));
     }
@@ -283,7 +285,7 @@ export default function ConsumptionEntryDialog({
                             onChange={(e) =>
                               updateFinishedGood(index, { producedQuantity: parseFloat(e.target.value) })
                             }
-                            inputProps={{ min: 0, max: fg.targetQuantity, style: { textAlign: "right" } }}
+                            inputProps={{ min: 0, style: { textAlign: "right" } }}
                             sx={{ bgcolor: "#fff", borderRadius: "8px", width: 100 }}
                           />
                         </TableCell>
