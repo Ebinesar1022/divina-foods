@@ -2030,6 +2030,7 @@ function loadBomItemsByFinishedGood(
             productId: lookupId(r.Product),
             productName: display(r.Product),
             quantityRequired: parseFloat(display(r.Quantity_Required)) || 0,
+            convertedQty: parseFloat(display(r.Converted_Qty)) || 0,
             uomId: lookupId(r.UOM),
             uomName: display(r.UOM),
           });
@@ -2081,23 +2082,51 @@ function fetchStockOnHandBatch(
   );
 }
 
-// Explodes every finished good through its BOM × Target_Quantity, aggregates
-// duplicate raw materials across multiple finished-good lines, then compares
-// the aggregated requirement to current stock to work out what's short.
+// Product_Master.UOM (the UOM name) for a set of product record IDs, in one
+// request — the unit an MRP raw material line is planned and stocked in.
+function fetchProductUomsBatch(
+  productIds: string[],
+): Promise<Record<string, string>> {
+  return getRecordsByIds(CONFIG.PRODUCT_MASTER_REPORT, "ID", productIds).then(
+    function (rows) {
+      const uoms: Record<string, string> = {};
+      rows.forEach(function (r: any) {
+        uoms[display(r.ID)] = display(r.UOM);
+      });
+      return uoms;
+    },
+  );
+}
+
+// Explodes every finished good through its BOM, Converted_Qty × Target_Quantity
+// (matching the MRP form's own on-load script), aggregates duplicate raw
+// materials across multiple finished-good lines, then compares the
+// aggregated requirement to current stock to work out what's short. Each
+// line's UOM is the raw material's Product_Master UOM, the unit Converted_Qty
+// and Main Warehouse stock are both in; the BOM line's own UOM is only a
+// fallback for a product whose UOM isn't set.
 function computeRawMaterialNeeds(
   finishedGoods: FinishedGoodTargetRow[],
 ): Promise<RawMaterialNeedRow[]> {
   // Every finished good's BOM in two batched reads (BOM_Master, then
   // BOM_Items) instead of two per finished good.
   return loadBomItemsByFinishedGood(finishedGoods).then(function (bomByFg) {
-    return finishedGoods.map(function (fg) {
-      return (bomByFg[fg.id] || []).map(function (item) {
-        return {
-          productId: item.productId,
-          productName: item.productName,
-          uom: item.uomName,
-          requiredQuantity: roundQty(item.quantityRequired * fg.targetQuantity),
-        };
+    const lines = finishedGoods.map(function (fg) {
+      return bomByFg[fg.id] || [];
+    });
+    const productIds = ([] as BomItemRow[]).concat(...lines).map(function (item) {
+      return item.productId;
+    });
+    return fetchProductUomsBatch(productIds).then(function (uomByProduct) {
+      return finishedGoods.map(function (fg, i) {
+        return lines[i].map(function (item) {
+          return {
+            productId: item.productId,
+            productName: item.productName,
+            uom: uomByProduct[item.productId] || item.uomName,
+            requiredQuantity: roundQty(item.convertedQty * fg.targetQuantity),
+          };
+        });
       });
     });
   }).then(function (perFinishedGood) {

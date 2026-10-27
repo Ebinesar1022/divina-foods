@@ -48,6 +48,9 @@ const PRODUCT_MASTER = [
     ID: "101",
     Inventory_ID: "19451400000683038",
   },
+  { ID: "301", UOM: { ID: "401", display_value: "Kilogram" } },
+  { ID: "302", UOM: { ID: "402", display_value: "Ltr" } },
+  { ID: "303", UOM: { ID: "403", display_value: "Kilogram" } },
 ];
 
 const RAW_MATERIALS = [
@@ -146,6 +149,7 @@ const BOM_ITEMS = [
     BOM_ID: "1",
     Product: { ID: "301", display_value: "Salt" },
     Quantity_Required: "1",
+    Converted_Qty: "1",
     UOM: { ID: "401", display_value: "Kilogram" },
   },
   {
@@ -153,6 +157,7 @@ const BOM_ITEMS = [
     BOM_ID: "1",
     Product: { ID: "302", display_value: "Olive Oil" },
     Quantity_Required: "0.5",
+    Converted_Qty: "0.5",
     UOM: { ID: "402", display_value: "Ltr" },
   },
   {
@@ -160,6 +165,7 @@ const BOM_ITEMS = [
     BOM_ID: "1",
     Product: { ID: "303", display_value: "Yeast" },
     Quantity_Required: "1",
+    Converted_Qty: "1",
     UOM: { ID: "403", display_value: "Kilogram" },
   },
 ];

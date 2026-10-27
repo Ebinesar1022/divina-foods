@@ -263,6 +263,9 @@ export interface BomItemRow {
   productId: string; // raw material's Product_Master record ID
   productName: string;
   quantityRequired: number;
+  // Quantity_Required in the raw material's own Product_Master UOM; what the
+  // MRP multiplies by Target_Quantity.
+  convertedQty: number;
   uomId: string;
   uomName: string;
 }
