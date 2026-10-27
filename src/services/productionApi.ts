@@ -961,9 +961,11 @@ let paymentTermsPromise: Promise<PaymentTermOption[]> | null = null;
 let taxTypesPromise: Promise<TaxOption[]> | null = null;
 let employeesPromise: Promise<EmployeeOption[]> | null = null;
 
+// Active suppliers only ("In Active" ones can't take new POs), read with the
+// 1000-row page size so the list isn't cut off at the 200-row default.
 export function fetchSuppliers(): Promise<SupplierOption[]> {
   if (!suppliersPromise) {
-    suppliersPromise = getRecords(CONFIG.SUPPLIER_REPORT)
+    suppliersPromise = getRecords(CONFIG.SUPPLIER_REPORT, `Status == "Active"`, 1000)
       .then(function (rows) {
         return rows.map(function (r: any) {
           return {
