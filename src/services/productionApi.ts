@@ -31,6 +31,7 @@ import type {
   StartProductionDetails,
   SupplierOption,
   TaxOption,
+  UnitConversionOption,
 } from "../types";
 
 declare global {
@@ -95,6 +96,10 @@ export const CONFIG = {
   SUPPLIER_REPORT: "Supplier_Report",
   PAYMENT_TERM_REPORT: "Payment_Term_Report",
   TAX_MASTER_REPORT: "Tax_Master_Report",
+  // Confirmed against the app's .ds export (Divina_Foods_4.ds): the units a
+  // product can be bought in (Unit_Group → Unit_Conversion rows, synced
+  // from Books Unit Groups).
+  UNIT_CONVERSION_REPORT: "All_Unit_Conversions",
 
   // Confirmed against the app's .ds export (Divina_Foods_5.ds) —
   // Consumption_Entry's two grids (Finished_Good, Raw_Material_Consumptions)
@@ -1041,12 +1046,18 @@ function bumpPoSequence(
   });
 }
 
-// Batch-fetches Product_Master.Purchase_Price for a set of product record
-// IDs — used to prefill a PO line's Unit Price so the user doesn't have to
-// look it up and retype it every time (still fully editable afterward).
-function fetchPurchasePricesBatch(
+interface ProductPurchaseInfo {
+  purchasePrice: number; // per base unit
+  unitGroupId: string; // "" when the product has no Unit Group
+  defaultPurchaseConversionId: string;
+}
+
+// Batch-fetches what a PO line needs from Product_Master: Purchase_Price
+// (per base unit — prefills Unit Price, still editable) and the product's
+// Unit Group + default purchase unit (e.g. box).
+function fetchProductPurchaseInfoBatch(
   productIds: string[],
-): Promise<Record<string, number>> {
+): Promise<Record<string, ProductPurchaseInfo>> {
   const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
   if (!uniqueIds.length) return Promise.resolve({});
 
@@ -1058,19 +1069,78 @@ function fetchPurchasePricesBatch(
 
   return getRecords(CONFIG.PRODUCT_MASTER_REPORT, criteria).then(
     function (rows) {
-      const prices: Record<string, number> = {};
+      const info: Record<string, ProductPurchaseInfo> = {};
       rows.forEach(function (r: any) {
-        prices[display(r.ID)] = parseFloat(display(r.Purchase_Price)) || 0;
+        info[display(r.ID)] = {
+          purchasePrice: parseFloat(display(r.Purchase_Price)) || 0,
+          unitGroupId: lookupId(r.Unit_Group),
+          defaultPurchaseConversionId: lookupId(r.Default_Purchase_Conversion),
+        };
       });
-      return prices;
+      return info;
     },
   );
 }
 
+// Unit_Conversion rows for a set of Unit Groups, keyed by group ID — base
+// unit first, then by rate (kg, box, pallet …).
+function fetchUnitConversionsBatch(
+  unitGroupIds: string[],
+): Promise<Record<string, UnitConversionOption[]>> {
+  const uniqueIds = Array.from(new Set(unitGroupIds.filter(Boolean)));
+  if (!uniqueIds.length) return Promise.resolve({});
+
+  const criteria = uniqueIds
+    .map(function (id) {
+      return `Unit_Group == ${id}`;
+    })
+    .join(" || ");
+
+  return getRecords(CONFIG.UNIT_CONVERSION_REPORT, criteria).then(
+    function (rows) {
+      const byGroup: Record<string, UnitConversionOption[]> = {};
+      rows.forEach(function (r: any) {
+        const groupId = lookupId(r.Unit_Group);
+        // Filtered here too, so a criteria the report ignores can't mix
+        // another product's units into this one's list.
+        if (uniqueIds.indexOf(groupId) === -1) return;
+        const rate = parseFloat(display(r.Conversion_Rate)) || 1;
+        const isBase = String(r.Is_Base_Unit) === "true";
+        const unitName = display(r.Unit);
+        (byGroup[groupId] = byGroup[groupId] || []).push({
+          id: display(r.ID),
+          label: display(r.Display_Label) || unitName,
+          unitId: lookupId(r.Unit),
+          unitName: unitName,
+          rate: rate > 0 ? rate : 1,
+          isBase: isBase,
+        });
+      });
+      Object.keys(byGroup).forEach(function (groupId) {
+        byGroup[groupId].sort(function (a, b) {
+          if (a.isBase !== b.isBase) return a.isBase ? -1 : 1;
+          return a.rate - b.rate;
+        });
+      });
+      return byGroup;
+    },
+  );
+}
+
+// Smallest Order Qty, in a unit of `rate` base units, that covers
+// `neededBaseQty` — whole units for anything but the base unit (45 kg in
+// 10 kg boxes → 5 box).
+export function minOrderQtyFor(neededBaseQty: number, rate: number): number {
+  if (!rate || rate === 1) return roundQty(neededBaseQty);
+  return Math.ceil(roundQty(neededBaseQty / rate));
+}
+
 // Computes the draft; writes nothing to Zoho. selectedItems are the
-// Non_Stock_Items rows the user checked in the Procurement tab — Order
-// Quantity defaults to Needed Quantity (editable), Unit Price is prefilled
-// from the raw material's Product_Master.Purchase_Price when set (0 if
+// Non_Stock_Items rows the user checked in the Procurement tab — each line
+// starts in the product's default purchase unit (e.g. box) when it has a
+// Unit Group, Order Quantity defaults to the fewest of those units that
+// cover Needed Quantity (editable), Unit Price is prefilled from the raw
+// material's Product_Master.Purchase_Price × the unit's rate when set (0 if
 // that's empty, same as before — must have a value before submit, mirroring
 // the native form's own "must have Unit_Price" rule). Always editable
 // either way.
@@ -1083,16 +1153,26 @@ export function prepareCreatePoDraft(
       new Error("Select at least one item to create a Purchase Order."),
     );
   }
+  const productInfoPromise = fetchProductPurchaseInfoBatch(
+    selectedItems.map(function (item) {
+      return item.productId;
+    }),
+  );
+  const conversionsPromise = productInfoPromise.then(function (info) {
+    return fetchUnitConversionsBatch(
+      Object.keys(info).map(function (id) {
+        return info[id].unitGroupId;
+      }),
+    );
+  });
   return Promise.all([
     fetchSequenceMasterRow(),
-    fetchPurchasePricesBatch(
-      selectedItems.map(function (item) {
-        return item.productId;
-      }),
-    ),
+    productInfoPromise,
+    conversionsPromise,
   ]).then(function (results) {
     const sequenceRow = results[0];
-    const purchasePrices = results[1];
+    const productInfo = results[1];
+    const conversionsByGroup = results[2];
     return {
       poNumber: generatePoNumber(sequenceRow),
       poDate: new Date().toISOString().slice(0, 10),
@@ -1101,15 +1181,38 @@ export function prepareCreatePoDraft(
       paymentTermsId: "",
       expectedDeliveryDate: "",
       lines: selectedItems.map(function (item) {
+        const info = productInfo[item.productId];
+        const basePurchasePrice = info ? info.purchasePrice : 0;
+        const unitOptions =
+          info && info.unitGroupId
+            ? conversionsByGroup[info.unitGroupId] || []
+            : [];
+        // Preselect the product's default purchase unit (e.g. box), else
+        // its base unit. No Unit Group → ordered in the item's own unit.
+        const selected =
+          unitOptions.find(function (o) {
+            return !!info && o.id === info.defaultPurchaseConversionId;
+          }) ||
+          unitOptions.find(function (o) {
+            return o.isBase;
+          }) ||
+          null;
+        const rate = selected ? selected.rate : 1;
         return {
           nonStockItemId: item.id,
           productId: item.productId,
           productName: item.productName,
-          uomId: item.uomId,
-          uomName: item.uomName,
+          uomId: selected && selected.unitId ? selected.unitId : item.uomId,
+          uomName: selected ? selected.unitName : item.uomName,
+          baseUomName: item.uomName,
+          unitOptions: unitOptions,
+          unitConversionId: selected ? selected.id : "",
+          conversionRate: rate,
+          basePurchasePrice: basePurchasePrice,
+          // Needed Qty is in the base unit; Order Qty is in the chosen unit.
           neededQuantity: item.neededQuantity,
-          orderQuantity: item.neededQuantity,
-          unitPrice: purchasePrices[item.productId] || 0,
+          orderQuantity: minOrderQtyFor(item.neededQuantity, rate),
+          unitPrice: roundMoney(basePurchasePrice * rate),
           taxTypeId: "",
           taxPercentage: 0,
         };
@@ -1161,8 +1264,15 @@ export function commitCreatePo(
       Line_Total: entry.lineTotal,
       Tax_Percentage: roundQty(line.taxPercentage),
       Tax_Amount: entry.taxAmount,
+      // Order Qty × Conversion Rate = quantity in the base unit (2 box × 10
+      // = 20 kg). Rate is 1 when the product has no Unit Group.
+      Conversion_Rate: roundQty(line.conversionRate || 1),
+      Base_Qty: roundQty(line.orderQuantity * (line.conversionRate || 1)),
     };
     if (line.taxTypeId) row.Tax_Type = line.taxTypeId;
+    // Books reads this line's unit from Unit_Conversion (PO.SyncCreatorToBooks
+    // sends its Books_Unit_Conversion_ID).
+    if (line.unitConversionId) row.Unit_Conversion = line.unitConversionId;
     return row;
   });
   // With the subform's link name set in CONFIG, the lines go inline in the

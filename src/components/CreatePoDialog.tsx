@@ -27,6 +27,7 @@ import {
   fullScreenDialogPaperSx,
   stackedTableSx,
 } from "./common/responsive";
+import { minOrderQtyFor } from "../services/productionApi";
 import type { CreatePoDraft, PaymentTermOption, PoLineDraftRow, SupplierOption, TaxOption } from "../types";
 
 interface CreatePoDialogProps {
@@ -49,6 +50,20 @@ function lineTotalFor(line: PoLineDraftRow): number {
 
 function taxAmountFor(line: PoLineDraftRow): number {
   return (lineTotalFor(line) * line.taxPercentage) / 100;
+}
+
+// Order Qty in the base unit (2 box × 10 = 20 kg) — what Needed Qty is
+// compared against, since Needed Qty is always in the base unit.
+function baseQtyFor(line: PoLineDraftRow): number {
+  return line.orderQuantity * (line.conversionRate || 1);
+}
+
+function coversNeeded(line: PoLineDraftRow): boolean {
+  return !isNaN(line.orderQuantity) && baseQtyFor(line) >= line.neededQuantity - 0.0001;
+}
+
+function formatQty(value: number): string {
+  return String(Math.round(value * 10000) / 10000);
 }
 
 export default function CreatePoDialog({
@@ -76,6 +91,25 @@ export default function CreatePoDialog({
     if (patch.unitPrice !== undefined && (isNaN(row.unitPrice) || row.unitPrice < 0)) {
       row.unitPrice = 0;
     }
+    if (patch.unitConversionId !== undefined) {
+      // Switching unit (e.g. kg → box): same quantity re-expressed in the new
+      // unit (rounded up to whole units), and the price per new unit.
+      const prev = lines[index];
+      const option = prev.unitOptions.find((o) => o.id === patch.unitConversionId);
+      if (option) {
+        const prevRate = prev.conversionRate || 1;
+        const prevBaseQty = (isNaN(prev.orderQuantity) ? 0 : prev.orderQuantity) * prevRate;
+        row.conversionRate = option.rate;
+        row.uomId = option.unitId || prev.uomId;
+        row.uomName = option.unitName;
+        row.orderQuantity = Math.max(
+          minOrderQtyFor(prev.neededQuantity, option.rate),
+          minOrderQtyFor(prevBaseQty, option.rate),
+        );
+        const pricePerBaseUnit = prev.basePurchasePrice > 0 ? prev.basePurchasePrice : prev.unitPrice / prevRate;
+        row.unitPrice = Math.round(pricePerBaseUnit * option.rate * 100) / 100;
+      }
+    }
     if (patch.taxTypeId !== undefined) {
       // Auto-fill the rate from the selected tax type — still editable
       // afterward, same as the native form's Tax_Percentage field.
@@ -101,7 +135,7 @@ export default function CreatePoDialog({
     !!draft.expectedDeliveryDate &&
     !deliveryBeforePo &&
     draft.lines.every(
-      (l) => l.orderQuantity > 0 && l.orderQuantity >= l.neededQuantity && l.unitPrice > 0 && !!l.taxTypeId,
+      (l) => l.orderQuantity > 0 && coversNeeded(l) && l.unitPrice > 0 && !!l.taxTypeId,
     );
 
   return (
@@ -242,6 +276,7 @@ export default function CreatePoDialog({
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
                     <TableCell>Product</TableCell>
                     <TableCell align="right">Needed Qty</TableCell>
+                    <TableCell sx={{ minWidth: 140 }}>Unit</TableCell>
                     <TableCell align="right" sx={{ minWidth: 90 }}>
                       Order Qty
                     </TableCell>
@@ -261,17 +296,36 @@ export default function CreatePoDialog({
                   {draft.lines.map((line, index) => {
                     const lineTotal = lineTotalFor(line);
                     const taxAmount = taxAmountFor(line);
+                    const minOrderQty = minOrderQtyFor(line.neededQuantity, line.conversionRate || 1);
+                    const qtyInvalid = !coversNeeded(line);
+                    const inOtherUnit = (line.conversionRate || 1) !== 1;
                     return (
                       <TableRow key={line.nonStockItemId}>
-                        <TableCell>
-                          {line.productName}
-                          {line.uomName && (
-                            <Typography component="span" sx={{ fontSize: 12, color: "#94A3B8", ml: 0.5 }}>
-                              ({line.uomName})
-                            </Typography>
+                        <TableCell>{line.productName}</TableCell>
+                        <TableCell align="right" data-label="Needed Qty">
+                          {line.neededQuantity} {line.baseUomName}
+                        </TableCell>
+                        <TableCell data-label="Unit">
+                          {line.unitOptions.length ? (
+                            <TextField
+                              select
+                              size="small"
+                              fullWidth
+                              value={line.unitConversionId}
+                              disabled={committing}
+                              onChange={(e) => updateLine(index, { unitConversionId: e.target.value })}
+                              sx={{ bgcolor: "#fff", borderRadius: "8px" }}
+                            >
+                              {line.unitOptions.map((o) => (
+                                <MenuItem key={o.id} value={o.id}>
+                                  {o.label}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                          ) : (
+                            line.uomName || "—"
                           )}
                         </TableCell>
-                        <TableCell align="right" data-label="Needed Qty">{line.neededQuantity}</TableCell>
                         <TableCell align="right" data-label="Order Qty">
                           <TextField
                             type="number"
@@ -281,17 +335,19 @@ export default function CreatePoDialog({
                             onChange={(e) => updateLine(index, { orderQuantity: parseFloat(e.target.value) })}
                             onBlur={(e) => {
                               const value = parseFloat(e.target.value);
-                              if (isNaN(value) || value < line.neededQuantity) {
-                                updateLine(index, { orderQuantity: line.neededQuantity });
+                              if (isNaN(value) || value * (line.conversionRate || 1) < line.neededQuantity - 0.0001) {
+                                updateLine(index, { orderQuantity: minOrderQty });
                               }
                             }}
-                            error={isNaN(line.orderQuantity) || line.orderQuantity < line.neededQuantity}
+                            error={qtyInvalid}
                             helperText={
-                              isNaN(line.orderQuantity) || line.orderQuantity < line.neededQuantity
-                                ? `Min ${line.neededQuantity}`
-                                : " "
+                              qtyInvalid
+                                ? `Min ${minOrderQty}`
+                                : inOtherUnit
+                                  ? `= ${formatQty(baseQtyFor(line))} ${line.baseUomName}`
+                                  : " "
                             }
-                            inputProps={{ min: line.neededQuantity, style: { textAlign: "right" } }}
+                            inputProps={{ min: minOrderQty, style: { textAlign: "right" } }}
                             sx={{ bgcolor: "#fff", borderRadius: "8px", width: 90 }}
                           />
                         </TableCell>

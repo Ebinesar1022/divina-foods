@@ -48,7 +48,13 @@ const PRODUCT_MASTER = [
     ID: "101",
     Inventory_ID: "19451400000683038",
   },
-  { ID: "301", UOM: { ID: "401", display_value: "Kilogram" } },
+  {
+    ID: "301",
+    UOM: { ID: "401", display_value: "Kilogram" },
+    Purchase_Price: "2",
+    Unit_Group: { ID: "601", display_value: "Salt (Bag to KG)" },
+    Default_Purchase_Conversion: { ID: "702", display_value: "Bag (25 Kilogram)" },
+  },
   { ID: "302", UOM: { ID: "402", display_value: "Ltr" } },
   { ID: "303", UOM: { ID: "403", display_value: "Kilogram" } },
 ];
@@ -209,6 +215,29 @@ const SEQUENCE_MASTER = [
 const UOM_MASTER = [
   { ID: "401", UOM: "Kilogram" },
   { ID: "402", UOM: "Ltr" },
+  { ID: "404", UOM: "Bag" },
+];
+
+// Salt's Unit Group: base Kilogram, 1 Bag = 25 Kilogram.
+const UNIT_CONVERSIONS = [
+  {
+    ID: "701",
+    Unit_Group: { ID: "601", display_value: "Salt (Bag to KG)" },
+    Unit: { ID: "401", display_value: "Kilogram" },
+    Conversion_Rate: "1",
+    Books_Unit_Conversion_ID: "",
+    Is_Base_Unit: "true",
+    Display_Label: "Kilogram (base)",
+  },
+  {
+    ID: "702",
+    Unit_Group: { ID: "601", display_value: "Salt (Bag to KG)" },
+    Unit: { ID: "404", display_value: "Bag" },
+    Conversion_Rate: "25",
+    Books_Unit_Conversion_ID: "194514000000000001",
+    Is_Base_Unit: "false",
+    Display_Label: "Bag (25 Kilogram)",
+  },
 ];
 
 const WAREHOUSE_MASTER = [
@@ -246,6 +275,7 @@ const REPORT_DATA: Record<string, any[]> = {
   [CONFIG.SEQUENCE_MASTER_REPORT]: SEQUENCE_MASTER,
   [CONFIG.WAREHOUSE_REPORT]: WAREHOUSE_MASTER,
   [CONFIG.UOM_MASTER_REPORT]: UOM_MASTER,
+  [CONFIG.UNIT_CONVERSION_REPORT]: UNIT_CONVERSIONS,
   [CONFIG.EMPLOYEE_REPORT]: EMPLOYEES,
 };
 

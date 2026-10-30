@@ -102,12 +102,30 @@ export interface PurchaseOrderDetail {
 
 // ───────────── Create Purchase Order draft ─────────────
 
+// One Unit_Conversion row of a product's Unit Group (e.g. "kg (base)" × 1,
+// "box (10 kg)" × 10) — the units a PO line can be ordered in.
+export interface UnitConversionOption {
+  id: string;
+  label: string; // Display_Label, e.g. "box (10 kg)"
+  unitId: string; // UOM_Master record ID
+  unitName: string;
+  rate: number; // base units in 1 of this unit
+  isBase: boolean;
+}
+
 export interface PoLineDraftRow {
   nonStockItemId: string;
   productId: string;
   productName: string;
+  // The unit the line is ordered in (box, or the base unit) — Order Qty and
+  // Unit Price are both in this unit, same as Books.
   uomId: string;
   uomName: string;
+  baseUomName: string; // the product's base unit — Needed Qty is in this unit
+  unitOptions: UnitConversionOption[]; // empty when the product has no Unit Group
+  unitConversionId: string; // "" when the product has no Unit Group
+  conversionRate: number; // 1 for the base unit / no Unit Group
+  basePurchasePrice: number; // Product_Master.Purchase_Price, per base unit
   neededQuantity: number;
   orderQuantity: number;
   unitPrice: number;
