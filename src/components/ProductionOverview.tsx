@@ -219,12 +219,18 @@ interface OverviewData {
   finishedGoodsForTarget: FinishedGoodTargetRow[];
 }
 
+// The first load makes many sequential Zoho calls; on a slow phone it can
+// legitimately take a while, so this only catches a call that never answers.
+const INITIAL_LOAD_TIMEOUT_MS = 60000;
+
 export default function ProductionOverview({
   productionTargetId,
 }: {
   productionTargetId: string;
 }) {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [data, setData] = useState<OverviewData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -328,7 +334,31 @@ export default function ProductionOverview({
 
   useEffect(() => {
     setLoading(true);
-    fetchProductionOverview(productionTargetId).then(function (result) {
+    setLoadError("");
+    // A failed or never-answering Zoho call used to leave the loader spinning
+    // forever with nothing to go on (seen in the Creator iPhone app) — a
+    // failure or a time-out now shows its reason with a Try again button.
+    let settled = false;
+    const timeoutId = window.setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      setLoadError(
+        "Zoho Creator didn't respond within " +
+          INITIAL_LOAD_TIMEOUT_MS / 1000 +
+          " seconds.",
+      );
+      setLoading(false);
+    }, INITIAL_LOAD_TIMEOUT_MS);
+    // Started inside .then so an error thrown synchronously (e.g. a missing
+    // ZOHO.CREATOR.DATA) lands in the .catch below instead of escaping it.
+    Promise.resolve()
+      .then(function () {
+        return fetchProductionOverview(productionTargetId);
+      })
+      .then(function (result) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
       setData(result);
       setLoading(false);
       // Land on the tab where this record's next action actually lives
@@ -353,8 +383,18 @@ export default function ProductionOverview({
           },
         );
       }
+    }).catch(function (err: any) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      setLoadError(describeError(err));
+      setLoading(false);
     });
-  }, [productionTargetId]);
+    return function () {
+      settled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [productionTargetId, loadAttempt]);
 
   // Stable reference (rather than an inline arrow at the call site) so
   // ProjectHeader's React.memo actually skips re-rendering it when nothing
@@ -880,6 +920,37 @@ export default function ProductionOverview({
           text="Loading Production Overview…"
           subtext="Fetching recipe formulations, stock levels & stage progression"
         />
+      </Box>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "60vh",
+          gap: 1.5,
+          textAlign: "center",
+          px: 3,
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          Couldn't load the Production Overview
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520, wordBreak: "break-word" }}>
+          {loadError}
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => setLoadAttempt((n) => n + 1)}
+          sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700 }}
+        >
+          Try again
+        </Button>
       </Box>
     );
   }
