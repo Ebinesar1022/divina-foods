@@ -235,10 +235,39 @@ function formatEmployeeName(nameField: any): string {
 // tripping the cap. It's the same limiter as the POS widget's ZQ helper.
 // A call that still comes back 2955 was never started on the server, so
 // it's safe to retry it after a short pause.
-const MAX_IN_FLIGHT = 4;
+// iPhone/iPad (incl. iPadOS, which reports itself as a Mac): on the first
+// open in the Creator iOS app, the first reads got no answer at all — no
+// 2955, just silence — and with every queue slot held by an unanswered call
+// the page loaded forever (a manual retry then loaded fine). One call at a
+// time there, and unanswered reads are retried (see READ_TIMEOUT_MS).
+const IS_IOS =
+  typeof navigator !== "undefined" &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+const MAX_IN_FLIGHT = IS_IOS ? 1 : 4;
 const CAP_RETRIES = 3;
+// A read that hasn't answered by then is sent again, up to READ_RETRIES
+// times, and then fails (naming its report) instead of holding its queue
+// slot forever. Reads are safe to repeat. Writes are never timed out or
+// repeated: a slow save may still land on the server, and sending it again
+// would create a duplicate.
+const READ_TIMEOUT_MS = 10000;
+const READ_RETRIES = 2;
 let inFlight = 0;
 const queued: Array<() => void> = [];
+const pendingCalls: Record<number, string> = {};
+let nextCallId = 0;
+
+// The calls still waiting on Zoho — shown when the page gives up loading.
+export function describePendingZohoCalls(): string {
+  const running = Object.keys(pendingCalls).map(function (id) {
+    return pendingCalls[Number(id)];
+  });
+  const parts: string[] = [];
+  if (running.length) parts.push("waiting on " + running.join(", "));
+  if (queued.length) parts.push(queued.length + " more queued");
+  return parts.join("; ");
+}
 
 function startQueued(): void {
   while (inFlight < MAX_IN_FLIGHT && queued.length) {
@@ -278,13 +307,66 @@ function callWithCapRetry<T>(
     );
 }
 
-function zohoCall<T>(call: () => Promise<T>): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  label: string,
+  timeoutMs: number,
+): Promise<T> {
+  return new Promise<T>(function (resolve, reject) {
+    const timer = setTimeout(function () {
+      reject({
+        code: "TIMEOUT",
+        isTimeout: true,
+        message:
+          label + " didn't answer within " + timeoutMs / 1000 + " seconds.",
+      });
+    }, timeoutMs);
+    promise.then(
+      function (value) {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      function (err) {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+// Runs the call; when timeoutMs is set, a call with no answer by then is sent
+// again (a late answer to the abandoned attempt is ignored).
+function callWithTimeoutRetry<T>(
+  call: () => Promise<T>,
+  label: string,
+  timeoutMs: number | undefined,
+  retriesLeft: number,
+): Promise<T> {
+  const running = callWithCapRetry(call, 0);
+  if (!timeoutMs) return running;
+  return withTimeout(running, label, timeoutMs).catch(function (err) {
+    if (err && err.isTimeout && retriesLeft > 0) {
+      console.warn(label + " got no answer — sending it again.");
+      return callWithTimeoutRetry(call, label, timeoutMs, retriesLeft - 1);
+    }
+    throw err;
+  });
+}
+
+function zohoCall<T>(
+  call: () => Promise<T>,
+  label: string,
+  timeoutMs?: number,
+): Promise<T> {
   return new Promise<T>(function (resolve, reject) {
     queued.push(function () {
       inFlight++;
-      callWithCapRetry(call, 0)
+      const callId = nextCallId++;
+      pendingCalls[callId] = label;
+      callWithTimeoutRetry(call, label, timeoutMs, READ_RETRIES)
         .then(resolve, reject)
         .then(function () {
+          delete pendingCalls[callId];
           inFlight--;
           startQueued();
         });
@@ -295,9 +377,14 @@ function zohoCall<T>(call: () => Promise<T>): Promise<T> {
 
 // window.ZOHO.CREATOR.DATA.<method>(params), through the queue above.
 function zohoData(method: string, params: Record<string, any>): Promise<any> {
-  return zohoCall(function () {
-    return window.ZOHO.CREATOR.DATA[method](params);
-  });
+  const target = params.report_name || params.form_name || params.api_name;
+  return zohoCall(
+    function () {
+      return window.ZOHO.CREATOR.DATA[method](params);
+    },
+    method + (target ? " " + target : ""),
+    method === "getRecords" ? READ_TIMEOUT_MS : undefined,
+  );
 }
 
 // Runs `task` for every item at once; the request queue above keeps the
@@ -331,6 +418,9 @@ function getRecords(
       ) {
         return [];
       }
+      // An unanswered read isn't "no rows" — surface it instead of
+      // rendering a page built on missing data.
+      if (err && err.isTimeout) throw err;
       console.error("getRecords failed for " + reportName, err);
       return [];
     });

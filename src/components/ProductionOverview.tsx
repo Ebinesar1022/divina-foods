@@ -71,6 +71,7 @@ import {
   triggerTransferOrderForProduction,
   fetchBatchAllocationsForProductionTarget,
   describeError,
+  describePendingZohoCalls,
   goBackToProductionTargets,
   openInParentWindow,
   uploadBatchAllocationPdf,
@@ -219,9 +220,11 @@ interface OverviewData {
   finishedGoodsForTarget: FinishedGoodTargetRow[];
 }
 
-// The first load makes many sequential Zoho calls; on a slow phone it can
-// legitimately take a while, so this only catches a call that never answers.
-const INITIAL_LOAD_TIMEOUT_MS = 60000;
+// The first load makes many Zoho calls (one at a time on iPhone, where an
+// unanswered read is also retried), so on a slow phone it can legitimately
+// take a while. Unanswered reads already time out on their own — this is
+// only the backstop.
+const INITIAL_LOAD_TIMEOUT_MS = 90000;
 
 export default function ProductionOverview({
   productionTargetId,
@@ -342,10 +345,12 @@ export default function ProductionOverview({
     const timeoutId = window.setTimeout(function () {
       if (settled) return;
       settled = true;
+      const pending = describePendingZohoCalls();
       setLoadError(
         "Zoho Creator didn't respond within " +
           INITIAL_LOAD_TIMEOUT_MS / 1000 +
-          " seconds.",
+          " seconds." +
+          (pending ? " (" + pending + ")" : ""),
       );
       setLoading(false);
     }, INITIAL_LOAD_TIMEOUT_MS);
