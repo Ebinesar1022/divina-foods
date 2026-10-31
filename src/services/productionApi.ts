@@ -393,12 +393,53 @@ function runAll<T, R>(items: T[], task: (item: T) => Promise<R>): Promise<R[]> {
   return Promise.all(items.map(task));
 }
 
+// Creator's "this report has 0 matching rows" answers (resolved or rejected,
+// depending on the SDK build) — the only failures that really mean "none".
+function isNoRecordsResponse(value: any): boolean {
+  if (!value) return false;
+  const code = String(value.code);
+  if (code === "3100" || code === "9280") return true;
+  const text = value.description || value.message || "";
+  return /no (records?|data)\b/i.test(String(text));
+}
+
 // Generic fetch — every read on this page goes through this one function.
+// Lenient: any failure reads as "no rows" (an unanswered read still
+// throws). Use getRecordsStrict where an empty answer changes what the user
+// is offered to do.
 function getRecords(
   reportName: string,
   criteria?: string,
   maxRecords = 200,
 ): Promise<any[]> {
+  return fetchReport(reportName, criteria, maxRecords, false);
+}
+
+// Strict: only a real "no rows" answer reads as empty — any other failure
+// throws. A failed MRP read used to come back as "no MRP" (offering to
+// create it again) and hid the target's Purchase Orders, which seen on
+// iPhone right after creating a PO.
+function getRecordsStrict(
+  reportName: string,
+  criteria?: string,
+  maxRecords = 200,
+): Promise<any[]> {
+  return fetchReport(reportName, criteria, maxRecords, true);
+}
+
+function fetchReport(
+  reportName: string,
+  criteria: string | undefined,
+  maxRecords: number,
+  strict: boolean,
+): Promise<any[]> {
+  function failed(detail: any): Error {
+    const error = new Error(
+      "Couldn't read " + reportName + ": " + (describeError(detail) || "no response") + ".",
+    );
+    (error as any).isReadFailure = true;
+    return error;
+  }
   return zohoData("getRecords", {
     app_name: CONFIG.APP_NAME,
     report_name: reportName,
@@ -407,20 +448,18 @@ function getRecords(
     max_records: maxRecords,
   })
     .then(function (resp: any) {
-      if (!resp || resp.code !== 3000 || !resp.data) return [];
-      return resp.data;
+      if (resp && resp.code === 3000) return resp.data || [];
+      if (!strict || isNoRecordsResponse(resp)) return [];
+      throw failed(resp);
     })
     .catch(function (err: any) {
       // Creator throws a rejected promise (not code 3000) when a report has 0 rows.
-      if (
-        err &&
-        (err.code === 9280 || /no records? found/i.test(err.message || ""))
-      ) {
-        return [];
-      }
+      if (err && err.isReadFailure) throw err;
+      if (isNoRecordsResponse(err)) return [];
       // An unanswered read isn't "no rows" — surface it instead of
       // rendering a page built on missing data.
       if (err && err.isTimeout) throw err;
+      if (strict) throw failed(err);
       console.error("getRecords failed for " + reportName, err);
       return [];
     });
@@ -955,7 +994,7 @@ export function fetchProductionTarget(
   const criteria = isRecordId
     ? `ID == ${trimmedId}`
     : `Production_Target_ID == "${trimmedId}"`;
-  return getRecords(CONFIG.PRODUCTION_TARGET_REPORT, criteria).then(
+  return getRecordsStrict(CONFIG.PRODUCTION_TARGET_REPORT, criteria).then(
     function (rows) {
       if (rows.length) return mapProductionTargetRow(rows[0]);
       if (!isRecordId) return null;
@@ -966,12 +1005,12 @@ export function fetchProductionTarget(
       // action passes that MRP row's own ID, which will never match a
       // Production_Targets row. Retry treating the ID as an MRP record and
       // follow its Production_Target lookup to the real target.
-      return getRecords(CONFIG.MRP_REPORT, `ID == ${trimmedId}`).then(
+      return getRecordsStrict(CONFIG.MRP_REPORT, `ID == ${trimmedId}`).then(
         function (mrpRows) {
           if (!mrpRows.length) return null;
           const targetRecordId = lookupId(mrpRows[0].Production_Target);
           if (!targetRecordId) return null;
-          return getRecords(
+          return getRecordsStrict(
             CONFIG.PRODUCTION_TARGET_REPORT,
             `ID == ${targetRecordId}`,
           ).then(function (targetRows) {
@@ -995,7 +1034,7 @@ export function fetchMrpRecord(
   productionTargetRecordId: string,
 ): Promise<MrpRow | null> {
   const criteria = `Production_Target == ${productionTargetRecordId}`;
-  return getRecords(CONFIG.MRP_REPORT, criteria).then(function (rows) {
+  return getRecordsStrict(CONFIG.MRP_REPORT, criteria).then(function (rows) {
     if (!rows.length) return null;
     const r = rows[0];
     return {
@@ -1030,7 +1069,7 @@ export function fetchNonStockItemsForMrp(
 ): Promise<NonStockItemRow[]> {
   if (!mrpRecordId) return Promise.resolve([]);
   const criteria = `MRP_ID == ${mrpRecordId}`;
-  return getRecords(CONFIG.NON_STOCK_ITEMS_REPORT, criteria).then(
+  return getRecordsStrict(CONFIG.NON_STOCK_ITEMS_REPORT, criteria).then(
     function (rows) {
       return rows.map(function (r: any) {
         return {
@@ -1474,7 +1513,7 @@ export function fetchPurchaseOrdersForMrp(
 ): Promise<PurchaseOrderDetail[]> {
   if (!mrpRecordId) return Promise.resolve([]);
   const criteria = `MRP_ID == ${mrpRecordId}`;
-  return getRecords(CONFIG.PURCHASE_ORDER_REPORT, criteria).then(
+  return getRecordsStrict(CONFIG.PURCHASE_ORDER_REPORT, criteria).then(
     function (rows) {
       // Every PO's lines in one batched read, grouped back by PO.
       return getRecordsByIds(
