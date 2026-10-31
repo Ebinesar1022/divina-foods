@@ -233,7 +233,6 @@ export default function ProductionOverview({
 }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [refreshError, setRefreshError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [data, setData] = useState<OverviewData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
@@ -440,34 +439,6 @@ export default function ProductionOverview({
     setCommitError("");
   }
 
-  // Re-reads the page after a save. The save already succeeded, so a failed
-  // re-read must never surface as a failed save — the user would just save
-  // it again (a duplicate PO/MRP/receipt). It's retried once, and if it still
-  // fails the page keeps what it shows and offers a reload instead.
-  // Resolves to the fresh data, or null when it couldn't be read.
-  function refreshAfterSave(): Promise<OverviewData | null> {
-    setRefreshError("");
-    return fetchProductionOverview(productionTargetId)
-      .catch(function () {
-        return new Promise<void>(function (resolve) {
-          setTimeout(resolve, 1500);
-        }).then(function () {
-          return fetchProductionOverview(productionTargetId);
-        });
-      })
-      .catch(function (err: any) {
-        console.error("Failed to refresh the Production Overview after saving.", err);
-        setRefreshError(describeError(err) || "The page couldn't be refreshed.");
-        return null;
-      });
-  }
-
-  function handleReloadAfterFailedRefresh() {
-    refreshAfterSave().then(function (result) {
-      if (result) setData(result);
-    });
-  }
-
   function handleConfirmCreate() {
     if (!mrpDraft) return;
     if (committingRef.current) return;
@@ -478,13 +449,8 @@ export default function ProductionOverview({
     const committedNotes = notes;
     commitMrpDraft(committedDraft, committedNotes)
       .then(function () {
-        // Saved — close the dialog before re-reading (see refreshAfterSave).
-        setMrpDialogOpen(false);
-        setMrpDraft(null);
-        setSuccessMessage(`${committedDraft.mrpId} created successfully.`);
-        return refreshAfterSave().then(
+        return fetchProductionOverview(productionTargetId).then(
           function (result) {
-            if (!result) return;
             // If Creator report indexing has slight latency for child tables,
             // ensure the freshly committed draft data is immediately available for the report view
             const mrpDetails = result.mrpDetails;
@@ -509,6 +475,11 @@ export default function ProductionOverview({
             }
           },
         );
+      })
+      .then(function () {
+        setMrpDialogOpen(false);
+        setMrpDraft(null);
+        setSuccessMessage(`${committedDraft.mrpId} created successfully.`);
       })
       .catch(function (err: any) {
         setCommitError(
@@ -578,31 +549,24 @@ export default function ProductionOverview({
             );
           },
         );
-        // Started — close the dialog before re-reading, so a failed read
-        // can't look like a failed start (starting again would allocate
-        // the batches twice).
-        setPoDialogOpen(false);
-        setSuccessMessage("Production started successfully.");
         // Read the FEFO_Batch_Allocation record AllocateAndCommitBatch just
         // wrote, rather than trying to parse its own response — that's also
         // what makes this breakdown survive a page reload later.
         return fetchBatchAllocationsForProductionTarget(
           productionTargetRecordId,
-        )
-          .then(
-            function (allocations) {
-              setBatchAllocations(allocations);
-            },
-            function (err: any) {
-              console.error("Failed to read the batch allocation after starting production.", err);
-            },
-          )
-          .then(function () {
-            return refreshAfterSave();
-          })
-          .then(function (result) {
-            if (result) setData(result);
-          });
+        );
+      })
+      .then(function (allocations) {
+        setBatchAllocations(allocations);
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            setData(result);
+          },
+        );
+      })
+      .then(function () {
+        setPoDialogOpen(false);
+        setSuccessMessage("Production started successfully.");
       })
       .catch(function (err: any) {
         setPoCommitError(
@@ -791,15 +755,17 @@ export default function ProductionOverview({
     setCreatePoCommitError("");
     commitCreatePo(createPoDraft)
       .then(function () {
-        // Saved — close the dialog before re-reading, so a slow or failed
-        // re-read can't look like a failed save.
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            setData(result);
+          },
+        );
+      })
+      .then(function () {
         setCreatePoDialogOpen(false);
         setCreatePoDraft(null);
         setSelectedNonStockItemIds([]);
         setSuccessMessage("Purchase Order created successfully.");
-        return refreshAfterSave().then(function (result) {
-          if (result) setData(result);
-        });
       })
       .catch(function (err: any) {
         setCreatePoCommitError(
@@ -900,26 +866,28 @@ export default function ProductionOverview({
     setReceivePoCommitError("");
     commitReceivePo(receivePoDraft)
       .then(function () {
-        // Saved — close the dialog before re-reading (see refreshAfterSave).
+        return fetchProductionOverview(productionTargetId).then(
+          function (result) {
+            setData(result);
+            // Every PO for this MRP is now fully received — procurement for
+            // this run is done, so this is the natural moment to prompt a
+            // fresh stock check rather than leaving the user to remember to
+            // click it themselves.
+            const records = result.procurementRecords || [];
+            const allReceived =
+              records.length > 0 &&
+              records.every((po) => po.status === "Received");
+            if (allReceived) {
+              setPostReceiveCheckPromptOpen(true);
+            }
+          },
+        );
+      })
+      .then(function () {
         setReceivePoDialogOpen(false);
         setReceivingPo(null);
         setReceivePoDraft(null);
         setSuccessMessage("Purchase Order receipt recorded successfully.");
-        return refreshAfterSave().then(function (result) {
-          if (!result) return;
-          setData(result);
-          // Every PO for this MRP is now fully received — procurement for
-          // this run is done, so this is the natural moment to prompt a
-          // fresh stock check rather than leaving the user to remember to
-          // click it themselves.
-          const records = result.procurementRecords || [];
-          const allReceived =
-            records.length > 0 &&
-            records.every((po) => po.status === "Received");
-          if (allReceived) {
-            setPostReceiveCheckPromptOpen(true);
-          }
-        });
       })
       .catch(function (err: any) {
         setReceivePoCommitError(
@@ -3163,26 +3131,6 @@ export default function ProductionOverview({
         onClose={() => setSuccessMessage("")}
         severity="success"
         message={successMessage}
-      />
-
-      <ModernSnackbar
-        open={!!refreshError}
-        onClose={() => setRefreshError("")}
-        severity="warning"
-        autoHideDuration={null}
-        message={
-          "Saved — but the page couldn't refresh, so it may be out of date. " +
-          refreshError
-        }
-        action={
-          <Button
-            size="small"
-            onClick={handleReloadAfterFailedRefresh}
-            sx={{ textTransform: "none", fontWeight: 700 }}
-          >
-            Reload
-          </Button>
-        }
       />
     </Box>
   );
