@@ -633,6 +633,23 @@ export default function ProductionOverview({
         setConsumptionCommitError("");
         setSuccessMessage("Production completed successfully.");
 
+        // Show the result right away: the full overview re-read below makes
+        // many Zoho calls (one at a time on iPhone) and used to leave the
+        // page — and its Complete Production button — on "In Progress" for
+        // several seconds after the dialog closed.
+        setData(function (prev) {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            record: prev.record
+              ? { ...prev.record, status: "Completed" }
+              : prev.record,
+            consumptionEntries: (prev.consumptionEntries || []).concat([
+              newEntry,
+            ]),
+          };
+        });
+
         return fetchProductionOverview(productionTargetId)
           .then(function (result) {
             // Same reasoning as Create MRP's commit: if Creator report
@@ -643,31 +660,22 @@ export default function ProductionOverview({
               result.consumptionEntries && result.consumptionEntries.length
                 ? result.consumptionEntries
                 : [newEntry];
-            setData({ ...result, consumptionEntries: entries });
+            // The save already set the target to Completed; a re-read that
+            // still says otherwise is stale and must not bring the Complete
+            // Production button back (completing twice consumes stock twice).
+            const record =
+              result.record && result.record.status !== "Completed"
+                ? { ...result.record, status: "Completed" as const }
+                : result.record;
+            setData({ ...result, record: record, consumptionEntries: entries });
           })
           .catch(function (refreshErr: any) {
-            // The commit already succeeded, so keep the UI responsive even if
-            // the refresh path fails temporarily. We still update the current
-            // page with the confirmed entry so the user is not left looking at
-            // stale data.
+            // The commit already succeeded and the page already shows it
+            // (above), so a failed re-read just leaves that in place.
             console.error(
               "Failed to refresh production overview after completing production.",
               refreshErr,
             );
-            setData(function (prev) {
-              if (!prev) return prev;
-              const nextEntries =
-                prev.consumptionEntries && prev.consumptionEntries.length
-                  ? prev.consumptionEntries
-                  : [newEntry];
-              return {
-                ...prev,
-                record: prev.record
-                  ? { ...prev.record, status: "Completed" }
-                  : prev.record,
-                consumptionEntries: nextEntries,
-              };
-            });
           });
       })
       .then(function () {
