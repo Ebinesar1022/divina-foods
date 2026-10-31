@@ -289,7 +289,6 @@ export default function CreatePoDialog({
                       Tax %
                     </TableCell>
                     <TableCell align="right">Tax Amt</TableCell>
-                    <TableCell align="right">Total</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -393,9 +392,6 @@ export default function CreatePoDialog({
                           />
                         </TableCell>
                         <TableCell align="right" data-label="Tax Amt">{taxAmount.toFixed(2)}</TableCell>
-                        <TableCell align="right" data-label="Total" sx={{ fontWeight: 600 }}>
-                          {(lineTotal + taxAmount).toFixed(2)}
-                        </TableCell>
                       </TableRow>
                     );
                   })}
