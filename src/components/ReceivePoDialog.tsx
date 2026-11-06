@@ -100,7 +100,12 @@ export default function ReceivePoDialog({
   const canSubmit =
     !!draft &&
     selectedCount > 0 &&
-    draft.lines.every((l) => l.receivableQuantity <= 0 || (l.batchNo.trim() && l.expiryDate));
+    draft.lines.every(
+      (l) =>
+        l.receivableQuantity <= 0 ||
+        !l.batchTracked ||
+        (l.batchNo.trim() && l.expiryDate)
+    );
 
   return (
     <Dialog
@@ -240,8 +245,12 @@ export default function ReceivePoDialog({
                     <TableCell align="right" sx={{ minWidth: 110 }}>
                       Receiving Now
                     </TableCell>
-                    <TableCell sx={{ minWidth: 130 }}>Batch No</TableCell>
-                    <TableCell sx={{ minWidth: 150 }}>Expiry Date</TableCell>
+                    <TableCell sx={{ minWidth: 130 }}>
+                      Batch No <span style={{ color: "#DC2626" }}>*</span>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 150 }}>
+                      Expiry Date <span style={{ color: "#DC2626" }}>*</span>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -280,9 +289,16 @@ export default function ReceivePoDialog({
                       <TableCell data-label="Batch No">
                         <TextField
                           size="small"
-                          placeholder="Batch No"
+                          placeholder={
+                            !line.batchTracked
+                              ? "Not tracked"
+                              : line.receivableQuantity > 0
+                                ? "Batch No *"
+                                : "Batch No"
+                          }
+                          error={line.batchTracked && line.receivableQuantity > 0 && !line.batchNo.trim()}
                           value={line.batchNo}
-                          disabled={committing || line.receivableQuantity <= 0}
+                          disabled={committing || line.receivableQuantity <= 0 || !line.batchTracked}
                           onChange={(e) => updateLine(index, { batchNo: e.target.value })}
                           sx={{ bgcolor: "#fff", borderRadius: "8px", width: 120 }}
                         />
@@ -291,8 +307,9 @@ export default function ReceivePoDialog({
                         <TextField
                           type="date"
                           size="small"
+                          error={line.batchTracked && line.receivableQuantity > 0 && !line.expiryDate}
                           value={line.expiryDate}
-                          disabled={committing || line.receivableQuantity <= 0}
+                          disabled={committing || line.receivableQuantity <= 0 || !line.batchTracked}
                           onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
                           InputLabelProps={{ shrink: true }}
                           inputProps={{ min: today }}

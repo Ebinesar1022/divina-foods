@@ -3559,7 +3559,8 @@ function BatchAllocationGroupRow({
 function BatchChip({ line }: { line: BatchAllocationLine }) {
   const label =
     line.batchNumber ||
-    (line.batchId ? `Batch #${line.batchId.slice(-6)}` : "Batch");
+    // No batch at all = an untracked item (bags, boxes): quantity only.
+    (line.batchId ? `Batch #${line.batchId.slice(-6)}` : "No batch");
   return (
     <Box
       sx={{

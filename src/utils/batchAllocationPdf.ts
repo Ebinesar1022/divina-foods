@@ -546,7 +546,7 @@ export function createBatchAllocationPdf(params: {
           const expiry: RowMeta["expiry"] =
             daysLeft < 0 ? "expired" : daysLeft <= EXPIRY_WARN_DAYS ? "soon" : "ok";
           row.push(
-            line.batchNumber || (line.batchId ? `#${line.batchId.slice(-6)}` : "—"),
+            line.batchNumber || (line.batchId ? `#${line.batchId.slice(-6)}` : "No batch"),
             formatDateForPdf(line.expiryDate),
             formatQty(line.batchQty),
             formatQty(line.remainingQty),

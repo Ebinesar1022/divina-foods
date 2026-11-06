@@ -1562,9 +1562,24 @@ export function prepareReceivePoDraft(
   return Promise.all([
     fetchSequenceMasterRow(),
     fetchDefaultWarehouseId(),
+    getRecordsByIds(
+      CONFIG.PRODUCT_MASTER_REPORT,
+      "ID",
+      pendingLines.map(function (line) {
+        return line.productId;
+      }),
+    ),
   ]).then(function (results) {
     const sequenceRow = results[0];
     const warehouseId = results[1];
+    // Only an explicit false untracks a line — an empty/unsynced
+    // Batch_Tracked is treated as tracked, same as before this flag existed.
+    const untrackedProductIds: Record<string, boolean> = {};
+    results[2].forEach(function (p: any) {
+      if (display(p.Batch_Tracked).toLowerCase() === "false") {
+        untrackedProductIds[display(p.ID)] = true;
+      }
+    });
 
     return {
       receiveNo: generateReceiveNo(sequenceRow),
@@ -1586,7 +1601,8 @@ export function prepareReceivePoDraft(
           receivedQuantitySoFar: line.receivedQuantity,
           pendingQuantity: pending,
           receivableQuantity: pending,
-          batchNo: "", // required on Receive_Items — filled in by the user in the dialog
+          batchTracked: !untrackedProductIds[line.productId],
+          batchNo: "", // required on Receive_Items for tracked lines — filled in by the user in the dialog
           expiryDate: "",
         };
       }),
@@ -1613,19 +1629,23 @@ export function commitReceivePo(draft: ReceivePoDraft): Promise<any> {
   // read; they run alongside the header write unless the lines go inline.
   const rowsPromise = runAll(selectedLines, function (line) {
     return resolveUomMasterId(line.uomName).then(function (uomMasterId) {
-      return {
+      const row: Record<string, any> = {
         Product_Name: line.productId,
         UOM: uomMasterId,
         Ordered_Qty: line.orderedQuantity,
         Received_Qty: line.receivedQuantitySoFar,
         Receivable_Qty: line.receivableQuantity,
         Pending_Qty: roundQty(line.pendingQuantity - line.receivableQuantity),
-        // Both mandatory on Receive_Items now — ProcessPurchaseReceive
-        // (UpdatePR) reads them straight off each line to create/update
-        // the matching Batch_Details row for whatever just arrived.
-        Batch_No: line.batchNo,
-        Expiry_Date: formatDateStringForZoho(line.expiryDate),
-      } as Record<string, any>;
+      };
+      // Tracked lines only — ProcessPurchaseReceive (UpdatePR) reads these
+      // off each line to create/update the matching Batch_Details row.
+      // Untracked items (bags, boxes) are quantity-only: leaving them off
+      // keeps the Books sync from sending batches Books would reject.
+      if (line.batchTracked) {
+        row.Batch_No = line.batchNo;
+        row.Expiry_Date = formatDateStringForZoho(line.expiryDate);
+      }
+      return row;
     });
   });
   // Header-level rollups across the lines actually being received this

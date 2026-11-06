@@ -157,8 +157,11 @@ export interface ReceiveLineDraftRow {
   receivedQuantitySoFar: number;
   pendingQuantity: number;
   receivableQuantity: number;
-  batchNo: string; // required on Receive_Items — the lot code this receipt belongs to
-  expiryDate: string; // "YYYY-MM-DD" from a native <input type="date">, required on Receive_Items
+  // Product_Master.Batch_Tracked (synced from Books' track_batch_number).
+  // false = bags/boxes etc.: no batch/expiry captured, quantity only.
+  batchTracked: boolean;
+  batchNo: string; // required on Receive_Items for tracked lines — the lot code this receipt belongs to
+  expiryDate: string; // "YYYY-MM-DD" from a native <input type="date">, required for tracked lines
 }
 
 export interface ReceivePoDraft {
