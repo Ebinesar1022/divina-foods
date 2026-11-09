@@ -2837,13 +2837,11 @@ export function commitMrpDraft(
 
     // The stock reservation and Non_Stock_Items touch different forms, so
     // they run together once the MRP's own lines are in.
+    // The target's status is set as soon as the lines exist, before the
+    // reservation/Non_Stock_Items writes: the MRP's own "Created or Edited"
+    // workflow can set it on the header insert, and a failure in a later
+    // step must not leave that value in place.
     return Promise.all(lineWrites)
-      .then(function () {
-        return Promise.all([
-          reserveMainWarehouseStockForMrp(draft),
-          writeNonStockItems(),
-        ]);
-      })
       .then(function () {
         return updateRecord(
           CONFIG.PRODUCTION_TARGET_REPORT,
@@ -2852,6 +2850,12 @@ export function commitMrpDraft(
             Status: productionTargetStatus,
           },
         );
+      })
+      .then(function () {
+        return Promise.all([
+          reserveMainWarehouseStockForMrp(draft),
+          writeNonStockItems(),
+        ]);
       })
       .then(function () {
         return bumpMrpSequence(draft.sequenceRowId, draft.sequenceMrpNo);
