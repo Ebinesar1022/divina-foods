@@ -185,6 +185,16 @@ function lookupId(value: any): string {
   return String(value);
 }
 
+// The Status picklist text has varied between "Needs Purchase" and "Need
+// Purchase" in Creator; the widget's shortfall checks, colours and counts all
+// key off the first, so both spellings are read as it.
+function normalizeShortfallStatus(value: string): string {
+  const text = (value || "").trim();
+  if (/^needs?\s+purchase$/i.test(text)) return "Needs Purchase";
+  if (/^stock\s+available$/i.test(text)) return "Stock Available";
+  return text;
+}
+
 // Rounds a computed quantity to 4 decimal places before it's ever written
 // to Zoho. BOM math (quantityRequired * targetQuantity, then summed across
 // finished goods) routinely lands on IEEE754 noise like 0.30000000000000004
@@ -1043,7 +1053,7 @@ export function fetchNonStockItemsForMrp(
           stockRequired: parseFloat(display(r.Stock_Required)) || 0,
           allocateQuantity: parseFloat(display(r.Allocate_Quantity)) || 0,
           neededQuantity: parseFloat(display(r.Needed_Quantity)) || 0,
-          status: (display(r.Status) ||
+          status: (normalizeShortfallStatus(display(r.Status)) ||
             "Needs Purchase") as NonStockItemRow["status"],
         };
       });
@@ -2929,7 +2939,7 @@ export function fetchRawMaterialsForMrp(
             parseFloat(display(r.Allocate_Quantity || r.Allocated_Qty)) || 0,
           neededQuantity:
             parseFloat(display(r.Needed_Quantity || r.Needed_Qty)) || 0,
-          status: (display(r.Status) ||
+          status: (normalizeShortfallStatus(display(r.Status)) ||
             "Stock Available") as RawMaterialNeedRow["status"],
         };
       });

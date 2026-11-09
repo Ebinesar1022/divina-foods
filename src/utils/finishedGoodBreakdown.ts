@@ -54,6 +54,76 @@ function sameMaterial(
   return !!nameKey(a.productName) && nameKey(a.productName) === nameKey(b.productName);
 }
 
+// The per-unit quantity the MRP multiplies by the target: Converted_Qty (in
+// the raw material's own UOM) when set, else the BOM's Quantity_Required.
+function bomQuantity(item: BomItemRow): number {
+  return item.convertedQty > 0 ? item.convertedQty : item.quantityRequired;
+}
+
+function materialKey(m: { productId?: string; productName?: string }): string {
+  return m.productId || nameKey(m.productName);
+}
+
+// Hands each stored Raw_Materials row to the finished good it was made for.
+// Every finished good expects one line per BOM item (BOM quantity x target);
+// a row goes to the first finished good, in the order listed, that still
+// expects that material at that quantity. The rows were written finished
+// good by finished good, so equal quantities resolve in the right order.
+// Lines of one finished good for the same material are merged into one row.
+// Returns null when any row can't be placed, so the combined view is shown
+// instead of a split that contradicts the MRP.
+function buildSectionsFromPerFinishedGoodRows(
+  finishedGoods: FinishedGoodTargetRow[],
+  bomByFinishedGood: Record<string, BomItemRow[]>,
+  rawMaterials: RawMaterialNeedRow[],
+): FinishedGoodMaterialSection[] | null {
+  const expected: Array<Array<{ item: BomItemRow; quantities: number[]; used: boolean }>> = [];
+  for (const fg of finishedGoods) {
+    const bom = bomByFinishedGood[fg.id];
+    if (!bom || !bom.length) return null;
+    expected.push(
+      bom.map((item) => ({
+        item,
+        // Either quantity may be what the MRP stored.
+        quantities: [
+          roundQty(bomQuantity(item) * fg.targetQuantity),
+          roundQty(item.quantityRequired * fg.targetQuantity),
+        ],
+        used: false,
+      })),
+    );
+  }
+
+  const perFg: RawMaterialNeedRow[][] = finishedGoods.map(() => []);
+  for (const rm of rawMaterials) {
+    let placed = false;
+    for (let i = 0; i < finishedGoods.length && !placed; i++) {
+      const line = expected[i].find(
+        (e) =>
+          !e.used &&
+          sameMaterial(rm, e.item) &&
+          e.quantities.some((q) => Math.abs(q - rm.stockRequired) <= QTY_TOLERANCE),
+      );
+      if (!line) continue;
+      line.used = true;
+      placed = true;
+      const existing = perFg[i].find((m) => materialKey(m) === materialKey(rm));
+      if (existing) {
+        existing.stockRequired = roundQty(existing.stockRequired + rm.stockRequired);
+        existing.allocateQuantity = roundQty(existing.allocateQuantity + rm.allocateQuantity);
+        existing.neededQuantity = roundQty(existing.neededQuantity + rm.neededQuantity);
+        existing.status =
+          existing.neededQuantity > 0 ? "Needs Purchase" : "Stock Available";
+      } else {
+        perFg[i].push({ ...rm });
+      }
+    }
+    if (!placed) return null;
+  }
+
+  return finishedGoods.map((fg, i) => ({ finishedGood: fg, materials: perFg[i] }));
+}
+
 // Splits the combined raw materials into one section per finished good.
 // Returns null whenever the result can't be trusted to match what the MRP
 // stored (no BOM for a finished good, a material the MRP doesn't know about,
@@ -69,6 +139,20 @@ export function buildFinishedGoodSections(
     return null;
   }
 
+  // Some MRPs store one Raw_Materials row per finished good per material (so
+  // the same material appears several times) instead of one combined row.
+  // Those rows are matched back to their finished goods directly.
+  const keys = new Set<string>();
+  let hasRepeatedMaterial = false;
+  for (const rm of rawMaterials) {
+    const key = rm.productId || nameKey(rm.productName);
+    if (keys.has(key)) hasRepeatedMaterial = true;
+    keys.add(key);
+  }
+  if (hasRepeatedMaterial) {
+    return buildSectionsFromPerFinishedGoodRows(finishedGoods, bomByFinishedGood, rawMaterials);
+  }
+
   const required = new Map<RawMaterialNeedRow, number[]>();
   rawMaterials.forEach((rm) => required.set(rm, finishedGoods.map(() => 0)));
 
@@ -80,7 +164,7 @@ export function buildFinishedGoodSections(
       const rm = rawMaterials.find((r) => sameMaterial(r, item));
       if (!rm) return null;
       const perFg = required.get(rm)!;
-      perFg[i] = roundQty(perFg[i] + item.quantityRequired * fg.targetQuantity);
+      perFg[i] = roundQty(perFg[i] + bomQuantity(item) * fg.targetQuantity);
     }
   }
 
