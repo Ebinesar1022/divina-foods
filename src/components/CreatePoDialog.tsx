@@ -288,6 +288,7 @@ export default function CreatePoDialog({
                   <TableRow sx={{ "& th": { fontWeight: 700, bgcolor: "#F1F5F9" } }}>
                     <TableCell>Product</TableCell>
                     <TableCell align="right">Needed Qty</TableCell>
+                    <TableCell align="right">Available (Main WH)</TableCell>
                     <TableCell sx={{ minWidth: 140 }}>Unit</TableCell>
                     <TableCell align="right" sx={{ minWidth: 90 }}>
                       Order Qty
@@ -315,6 +316,11 @@ export default function CreatePoDialog({
                         <TableCell>{line.productName}</TableCell>
                         <TableCell align="right" data-label="Needed Qty">
                           {line.neededQuantity} {line.baseUomName}
+                        </TableCell>
+                        <TableCell align="right" data-label="Available (Main WH)">
+                          {line.availableQuantity === null
+                            ? "—"
+                            : `${line.availableQuantity} ${line.baseUomName}`}
                         </TableCell>
                         <TableCell data-label="Unit">
                           {line.unitOptions.length ? (

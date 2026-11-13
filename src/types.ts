@@ -128,6 +128,9 @@ export interface PoLineDraftRow {
   conversionRate: number; // 1 for the base unit / no Unit Group
   basePurchasePrice: number; // Product_Master.Purchase_Price, per base unit
   neededQuantity: number;
+  // Main Warehouse Available_Stocks in the base unit; null when the stock
+  // read failed (the column then shows a dash instead of a misleading 0).
+  availableQuantity: number | null;
   orderQuantity: number;
   unitPrice: number;
   taxTypeId: string; // "" = no tax on this line
@@ -155,6 +158,10 @@ export interface ReceiveLineDraftRow {
   productName: string;
   uomId: string;
   uomName: string;
+  // Product's base unit and its Main Warehouse Available_Stocks (in that
+  // unit); null when the stock read failed.
+  baseUomName: string;
+  availableQuantity: number | null;
   orderedQuantity: number;
   receivedQuantitySoFar: number;
   pendingQuantity: number;

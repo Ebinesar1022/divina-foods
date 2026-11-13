@@ -242,6 +242,7 @@ export default function ReceivePoDialog({
                     <TableCell align="right">Ordered</TableCell>
                     <TableCell align="right">Received</TableCell>
                     <TableCell align="right">Pending</TableCell>
+                    <TableCell align="right">Available (Main WH)</TableCell>
                     <TableCell align="right" sx={{ minWidth: 110 }}>
                       Receiving Now
                     </TableCell>
@@ -275,6 +276,11 @@ export default function ReceivePoDialog({
                       <TableCell align="right" data-label="Ordered">{line.orderedQuantity}</TableCell>
                       <TableCell align="right" data-label="Received">{line.receivedQuantitySoFar}</TableCell>
                       <TableCell align="right" data-label="Pending">{line.pendingQuantity}</TableCell>
+                      <TableCell align="right" data-label="Available (Main WH)">
+                        {line.availableQuantity === null
+                          ? "—"
+                          : `${line.availableQuantity} ${line.baseUomName}`}
+                      </TableCell>
                       <TableCell align="right" data-label="Receiving Now">
                         <TextField
                           type="number"

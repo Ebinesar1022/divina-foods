@@ -1284,12 +1284,22 @@ export function prepareCreatePoDraft(
     fetchSuppliers().catch(function () {
       return [] as SupplierOption[];
     }),
+    // Main Warehouse stock for the Available column. Informational only, so
+    // a failed read must not block the PO — the column shows a dash.
+    fetchStockOnHandBatch(
+      selectedItems.map(function (item) {
+        return item.productId;
+      }),
+    ).catch(function () {
+      return null as Record<string, number> | null;
+    }),
   ]).then(function (results) {
     const sequenceRow = results[0];
     const productInfo = results[1];
     const conversionsByGroup = results[2];
     const taxOptions = results[3];
     const supplierOptions = results[4];
+    const availableByProduct = results[5];
 
     // A PO has one supplier: prefill it only when every selected product
     // that has a preferred vendor agrees on the same one. Otherwise leave it
@@ -1362,6 +1372,9 @@ export function prepareCreatePoDraft(
           basePurchasePrice: basePurchasePrice,
           // Needed Qty is in the base unit; Order Qty is in the chosen unit.
           neededQuantity: item.neededQuantity,
+          availableQuantity: availableByProduct
+            ? roundQty(availableByProduct[item.productId] || 0)
+            : null,
           orderQuantity: minOrderQtyFor(item.neededQuantity, rate),
           unitPrice: roundMoney(basePurchasePrice * rate),
           taxTypeId: preferredTax ? preferredTax.id : "",
@@ -1630,16 +1643,28 @@ export function prepareReceivePoDraft(
         return line.productId;
       }),
     ),
+    // Main Warehouse stock for the Available column. Informational only, so
+    // a failed read must not block the receipt — the column shows a dash.
+    fetchStockOnHandBatch(
+      pendingLines.map(function (line) {
+        return line.productId;
+      }),
+    ).catch(function () {
+      return null as Record<string, number> | null;
+    }),
   ]).then(function (results) {
     const sequenceRow = results[0];
     const warehouseId = results[1];
+    const availableByProduct = results[3];
     // Only an explicit false untracks a line — an empty/unsynced
     // Batch_Tracked is treated as tracked, same as before this flag existed.
     const untrackedProductIds: Record<string, boolean> = {};
+    const baseUomByProduct: Record<string, string> = {};
     results[2].forEach(function (p: any) {
       if (display(p.Batch_Tracked).toLowerCase() === "false") {
         untrackedProductIds[display(p.ID)] = true;
       }
+      baseUomByProduct[display(p.ID)] = display(p.UOM);
     });
 
     return {
@@ -1658,6 +1683,10 @@ export function prepareReceivePoDraft(
           productName: line.productName,
           uomId: "", // resolved just before commit, see commitReceivePo
           uomName: line.uomName,
+          baseUomName: baseUomByProduct[line.productId] || line.uomName,
+          availableQuantity: availableByProduct
+            ? roundQty(availableByProduct[line.productId] || 0)
+            : null,
           orderedQuantity: line.orderQuantity,
           receivedQuantitySoFar: line.receivedQuantity,
           pendingQuantity: pending,
