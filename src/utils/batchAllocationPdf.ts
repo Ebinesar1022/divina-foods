@@ -549,7 +549,9 @@ export function createBatchAllocationPdf(params: {
             line.batchNumber || (line.batchId ? `#${line.batchId.slice(-6)}` : "No batch"),
             formatDateForPdf(line.expiryDate),
             formatQty(line.batchQty),
-            formatQty(line.remainingQty),
+            // Untracked items (no batch) have no batch stock to run down, so
+            // the stored remainder is meaningless (it can even be negative).
+            line.batchId || line.batchNumber ? formatQty(line.remainingQty) : "-",
             "",
           );
           rowMeta.push({ groupEnd: li === lines.length - 1, expiry });
