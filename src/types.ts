@@ -56,6 +56,7 @@ export interface NonStockItemRow {
 export interface SupplierOption {
   id: string;
   name: string;
+  paymentTermsId: string; // Supplier's Payment_Terms lookup, "" when none
 }
 
 export interface PaymentTermOption {
@@ -137,7 +138,8 @@ export interface CreatePoDraft {
   poNumber: string;
   poDate: string; // "YYYY-MM-DD"
   mrpRecordId: string;
-  supplierId: string;
+  supplierId: string; // prefilled from the products' preferred vendor
+  supplierHint: string; // why the supplier wasn't prefilled, "" otherwise
   paymentTermsId: string;
   expectedDeliveryDate: string; // "YYYY-MM-DD"
   lines: PoLineDraftRow[];

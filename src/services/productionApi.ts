@@ -1076,9 +1076,11 @@ export function fetchSuppliers(): Promise<SupplierOption[]> {
           return {
             id: display(r.ID),
             name:
+              display(r.Company_Name) ||
               formatEmployeeName(r.Supplier_Name) ||
               display(r.Supplier_Code) ||
               "Unnamed",
+            paymentTermsId: lookupId(r.Payment_Terms),
           };
         });
       })
@@ -1150,6 +1152,8 @@ interface ProductPurchaseInfo {
   purchasePrice: number; // per base unit
   unitGroupId: string; // "" when the product has no Unit Group
   defaultPurchaseConversionId: string;
+  preferredVendorId: string; // "" when the product has none
+  taxable: boolean; // Product_Master.Taxable — GST when true, BAS Excluded when false
 }
 
 // Batch-fetches what a PO line needs from Product_Master: Purchase_Price
@@ -1175,6 +1179,8 @@ function fetchProductPurchaseInfoBatch(
           purchasePrice: parseFloat(display(r.Purchase_Price)) || 0,
           unitGroupId: lookupId(r.Unit_Group),
           defaultPurchaseConversionId: lookupId(r.Default_Purchase_Conversion),
+          preferredVendorId: lookupId(r.Preferred_Vendor),
+          taxable: display(r.Taxable).toLowerCase() === "yes",
         };
       });
       return info;
@@ -1269,16 +1275,54 @@ export function prepareCreatePoDraft(
     fetchSequenceMasterRow(),
     productInfoPromise,
     conversionsPromise,
+    // Tax options supply the GST / BAS Excluded default per product. A failed
+    // read just means no tax prefill — the user still picks one per line.
+    fetchTaxTypes().catch(function () {
+      return [] as TaxOption[];
+    }),
+    // Suppliers supply the payment term prefill; a failed read just leaves it blank.
+    fetchSuppliers().catch(function () {
+      return [] as SupplierOption[];
+    }),
   ]).then(function (results) {
     const sequenceRow = results[0];
     const productInfo = results[1];
     const conversionsByGroup = results[2];
+    const taxOptions = results[3];
+    const supplierOptions = results[4];
+
+    // A PO has one supplier: prefill it only when every selected product
+    // that has a preferred vendor agrees on the same one. Otherwise leave it
+    // blank for the user to choose.
+    const vendorIds = Array.from(
+      new Set(
+        selectedItems
+          .map(function (item) {
+            const info = productInfo[item.productId];
+            return info ? info.preferredVendorId : "";
+          })
+          .filter(Boolean),
+      ),
+    );
+    const supplierId = vendorIds.length === 1 ? vendorIds[0] : "";
+    const preferredSupplier = supplierOptions.find(function (s) {
+      return s.id === supplierId;
+    });
+    const paymentTermsId = preferredSupplier ? preferredSupplier.paymentTermsId : "";
+    const supplierHint =
+      vendorIds.length > 1
+        ? "Selected products have different preferred vendors — choose one."
+        : vendorIds.length === 0
+          ? "No preferred vendor on these products — choose a supplier."
+          : "";
+
     return {
       poNumber: generatePoNumber(sequenceRow),
       poDate: new Date().toISOString().slice(0, 10),
       mrpRecordId: mrpRecordId,
-      supplierId: "",
-      paymentTermsId: "",
+      supplierId: supplierId,
+      supplierHint: supplierHint,
+      paymentTermsId: paymentTermsId,
       expectedDeliveryDate: "",
       lines: selectedItems.map(function (item) {
         const info = productInfo[item.productId];
@@ -1298,6 +1342,13 @@ export function prepareCreatePoDraft(
           }) ||
           null;
         const rate = selected ? selected.rate : 1;
+        // Taxable products default to GST, the rest to BAS Excluded. Matched
+        // by Tax_Master name; no match just leaves the line for the user.
+        const preferredTax = info
+          ? taxOptions.find(function (t) {
+              return t.name.trim().toLowerCase() === (info.taxable ? "gst" : "bas excluded");
+            })
+          : undefined;
         return {
           nonStockItemId: item.id,
           productId: item.productId,
@@ -1313,8 +1364,8 @@ export function prepareCreatePoDraft(
           neededQuantity: item.neededQuantity,
           orderQuantity: minOrderQtyFor(item.neededQuantity, rate),
           unitPrice: roundMoney(basePurchasePrice * rate),
-          taxTypeId: "",
-          taxPercentage: 0,
+          taxTypeId: preferredTax ? preferredTax.id : "",
+          taxPercentage: preferredTax ? preferredTax.rate : 0,
         };
       }),
       sequenceRowId: sequenceRow.ID,

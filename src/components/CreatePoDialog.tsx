@@ -220,11 +220,23 @@ export default function CreatePoDialog({
                 isOptionEqualToValue={(option, value) => option.id === value.id}
                 value={suppliers.find((s) => s.id === draft.supplierId) || null}
                 onChange={(_e, newValue) =>
-                  onDraftChange({ ...draft, supplierId: newValue ? newValue.id : "" })
+                  onDraftChange({
+                    ...draft,
+                    supplierId: newValue ? newValue.id : "",
+                    // Follow the supplier's payment term; keep the current one
+                    // if the supplier has none (or the field is cleared).
+                    paymentTermsId:
+                      newValue && newValue.paymentTermsId ? newValue.paymentTermsId : draft.paymentTermsId,
+                  })
                 }
                 disabled={committing}
                 renderInput={(params) => (
-                  <TextField {...params} label="Supplier" sx={{ bgcolor: "#fff", borderRadius: "10px" }} />
+                  <TextField
+                    {...params}
+                    label="Supplier"
+                    helperText={draft.supplierId ? "" : draft.supplierHint}
+                    sx={{ bgcolor: "#fff", borderRadius: "10px" }}
+                  />
                 )}
               />
               <Autocomplete
